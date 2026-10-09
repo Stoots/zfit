@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -677,6 +678,25 @@ const ExerciseDatabaseManager = () => {
 
       {/* Workout Presets Section */}
       <WorkoutPresetsManager />
+
+      <section className="flex flex-wrap items-center justify-between gap-4 border-y py-5">
+        <div>
+          <h2 className="text-xl font-semibold">
+            {t('trainingPrograms.title', 'Training Programs')}
+          </h2>
+          <p className="mt-1 text-muted-foreground">
+            {t(
+              'trainingPrograms.entryHelp',
+              'Organize your Workout Plans into goal-bearing phases and dated weeks.'
+            )}
+          </p>
+        </div>
+        <Button asChild variant="outline" className="min-h-11">
+          <Link to="/training-programs">
+            {t('trainingPrograms.open', 'Open Training Programs')}
+          </Link>
+        </Button>
+      </section>
 
       {/* Workout Plans Section */}
       <WorkoutPlansManager />

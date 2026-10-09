@@ -70,6 +70,10 @@ BEGIN
     'workout_plan_assignment_sets',
     'workout_plan_template_assignments',
     'workout_plan_templates',
+    'training_programs',
+    'training_program_phases',
+    'training_program_weeks',
+    'training_program_sessions',
     'workout_preset_exercise_sets',
     'workout_preset_exercises',
     'workout_presets',
@@ -611,6 +615,12 @@ USING (
 SELECT create_owner_policy('api_key', 'reference_id');
 SELECT create_owner_policy('user_oidc_links');
 SELECT create_owner_policy('sparky_chat_history');
+
+-- Training Program structure and Planned Sessions are never delegated.
+SELECT create_owner_policy('training_programs');
+SELECT create_owner_policy('training_program_phases');
+SELECT create_owner_policy('training_program_weeks');
+SELECT create_owner_policy('training_program_sessions');
 
 -- Profiles: delegates can read (with any meaningful permission) but only owner can write.
 -- Delegates do not need to modify another user's profile to manage their diary.

@@ -341,21 +341,12 @@ async function deleteWorkoutPlanTemplate(
     );
   }
   try {
-    // Delete future associated exercise entries, and decouple past ones via ON DELETE SET NULL
-    log(
-      'info',
-      `deleteWorkoutPlanTemplate service - Deleting future associated exercise entries for template ${templateId}`
-    );
     const today = await resolveTemplateStartDay(userId);
-    await exerciseRepository.deleteExerciseEntriesByTemplateId(
-      templateId,
-      userId,
-      today
-    );
     const deleted =
       await workoutPlanTemplateRepository.deleteWorkoutPlanTemplate(
         templateId,
-        userId
+        userId,
+        today
       );
     if (!deleted) {
       throw new Error(
@@ -371,9 +362,7 @@ async function deleteWorkoutPlanTemplate(
       `Error deleting workout plan template ${templateId} for user ${userId}: ${message}`,
       error
     );
-    throw new Error('Failed to delete workout plan template.', {
-      cause: error,
-    });
+    throw error;
   }
 }
 
