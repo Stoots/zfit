@@ -1,6 +1,6 @@
 # AGENTS.md
 
-_Last updated: 2026-10-07_
+_Last updated: 2026-10-08_
 
 SparkyFitness Server is the backend API package for the SparkyFitness monorepo. Use this file as the primary guide for work inside `SparkyFitnessServer/`.
 
@@ -61,6 +61,7 @@ pnpm exec eslint routes/v2/foodRoutes.ts services/foodCoreService.ts
 - `services/backgroundJobScheduler.ts` - starts every scheduled background job at startup, including the demo reset; provider syncs are listed in `services/providerSyncScheduler.ts`; `SPARKY_FITNESS_DISABLE_SCHEDULED_JOBS=true` skips them all
 - `auth.ts` - Better Auth configuration, plugins, session behavior, SSO provider syncing
 - `routes/` - primary HTTP route surface
+- `routes/trainingProgramRoutes.ts` - owner-only `/api/training-programs` CRUD for the full phase/week/Planned Session structure, validated by `services/trainingProgramService.ts` and atomically persisted by `models/trainingProgramRepository.ts`. Reuses `workout_plan_templates`; fixed calendar-day dates and stable child IDs. Persisted real-auth coverage: `tests/trainingPrograms.integration.test.ts`.
 - `routes/v2/` - newer typed route surface; pair these changes with `schemas/`
 - `routes/v2/openFoodFactsContributionRoutes.ts` - owner-only single-food preview and explicit photo-backed publication; background contributions are disabled for this release
 - `routes/v2/symptomRoutes.ts` - generic symptom tracking (`symptoms` permission): definitions (`/custom`), the pick-list library (`/options`), entries and episodes (`/entries`, `/entries/ongoing`, `/entries/:id/end`, `/entries/:id/severity`), photos, and symptom-free days. Logic lives in `services/symptomService.ts` over `models/symptomRepository.ts` and `models/symptomOptionRepository.ts`; the request/response contract is `../shared/src/schemas/api/Symptoms.api.zod.ts`
@@ -253,6 +254,7 @@ When searching, ignore noisy/generated directories unless you explicitly need th
   inspect `db/migrations/`, `db/rls_policies.sql`, `db/poolManager.ts`, `utils/applyRlsPolicies.ts`, and the permission middleware/helpers
 - Public v2 contract issue:
   inspect the matching file in `routes/v2/` plus the related Zod schema in `schemas/`
+- Training Program authoring/scheduling (#2): `routes/trainingProgramRoutes.ts`, `services/trainingProgramService.ts`, `models/trainingProgramRepository.ts`, shared `TrainingPrograms.api.zod.ts`. All four `training_program_*` tables are owner-only; standalone Workout Plans remain independent.
 - Food, barcode, or external provider issue:
   inspect the relevant `integrations/*` code, then the matching service and repository files
 - Open Food Facts publication:
