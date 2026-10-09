@@ -1,3 +1,4 @@
+import { deleteExerciseEntriesByTemplateId } from './exerciseTemplate.js';
 import type { PoolClient } from 'pg';
 import { getClient } from '../db/poolManager.js';
 import { log } from '../config/logging.js';
@@ -476,16 +477,48 @@ async function updateWorkoutPlanTemplate(
 
 async function deleteWorkoutPlanTemplate(
   templateId: string | number,
-  userId: string
+  userId: string,
+  today?: string
 ): Promise<WorkoutPlanTemplateRow | null> {
-  const client = await getClient(userId); // User-specific operation
+  const client: PoolClient = await getClient(userId);
   try {
+    await client.query('BEGIN');
+    // Lock before checking references; session saves take a conflicting key-share lock.
+    const locked = await client.query(
+      'SELECT id FROM workout_plan_templates WHERE id = $1 AND user_id = $2 FOR UPDATE',
+      [templateId, userId]
+    );
+    if (!locked.rowCount) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+    const references = await client.query(
+      'SELECT 1 FROM training_program_sessions WHERE workout_plan_id = $1 AND user_id = $2 LIMIT 1',
+      [templateId, userId]
+    );
+    if (references.rowCount) {
+      throw Object.assign(
+        new Error(
+          'Remove this Workout Plan from your Training Program sessions before deleting it.'
+        ),
+        { status: 409 }
+      );
+    }
+    if (today)
+      await deleteExerciseEntriesByTemplateId(
+        templateId,
+        userId,
+        today,
+        client
+      );
     const result = await client.query(
       'DELETE FROM workout_plan_templates WHERE id = $1 AND user_id = $2 RETURNING *',
       [templateId, userId]
     );
+    await client.query('COMMIT');
     return result.rows[0] ?? null;
   } catch (error) {
+    await client.query('ROLLBACK');
     log(
       'error',
       `Error deleting workout plan template ${templateId}: ${(error as Error).message}`,

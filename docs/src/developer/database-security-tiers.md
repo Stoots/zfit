@@ -36,6 +36,10 @@ These tables contain highly sensitive credentials, API keys, SSO tokens, 2FA rec
 | `account` | Auth credentials and email accounts | Owner-Only | Owner-Only |
 | `sparky_chat_history` | AI Assistant chat messages and history | Owner-Only | Owner-Only |
 | `user_ignored_updates` | Records of skipped release updates | Owner-Only | Owner-Only |
+| `training_programs` | Multi-week goal-bearing Training Programs with a fixed date range | Owner-Only | Owner-Only |
+| `training_program_phases` | Ordered Program Phases with goals | Owner-Only | Owner-Only |
+| `training_program_weeks` | Ordered dated weeks within Program Phases | Owner-Only | Owner-Only |
+| `training_program_sessions` | Fixed-date Planned Sessions referencing the owner's Workout Plans | Owner-Only | Owner-Only |
 | `admin_activity_logs` | Admin action audits | Admin-Only | Admin-Only |
 | `ai_service_settings` | User-defined custom assistant configurations | Owner-Only | Owner-Only (Public configs readable by all) |
 | `cycle_settings` | Cycle & pregnancy hub settings (mode, cycle parameters, birth control, conditions) | Owner-Only | Owner-Only |

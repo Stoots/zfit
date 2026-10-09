@@ -106,6 +106,16 @@ Quick reference of all tables by domain and purpose. For detailed security tier,
 | `workout_plan_assignment_sets` | Sets within assigned workout plans |
 | `workout_feedback` | Session / per-exercise workout feedback (difficulty, pain flag and note) behind adaptive suggestions |
 
+### Training Programs (Tier 1: Owner-Only)
+| Table | Purpose |
+|-------|---------|
+| `training_programs` | Goal and inclusive fixed date range for a multi-week Program |
+| `training_program_phases` | Ordered goal-bearing Program Phases |
+| `training_program_weeks` | Chronological, nonoverlapping weeks within phases |
+| `training_program_sessions` | Dated Planned Sessions referencing existing Workout Plans |
+
+All four tables use `create_owner_policy` and composite foreign keys preserve owner identity throughout the hierarchy. `training_program_sessions(workout_plan_id, user_id)` references `workout_plan_templates(id, user_id)`; a Program cannot use another user's plan. Deleting a referenced Workout Plan is refused with HTTP 409 before diary cleanup; remove the references first. Program deletion cascades through its hierarchy but leaves Workout Plans intact.
+
 ### Measurements & Health (Tier 1/3: Owner-Only or Delegate-Write)
 | Table | Purpose |
 |-------|---------|

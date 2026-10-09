@@ -218,3 +218,8 @@ export * from "./utils/weightRamp.ts";
 export * from "./utils/workoutFeedbackForm.ts";
 export * from "./utils/adaptiveCoaching.ts";
 export * from "./constants/corosSportTypes.ts";
+export * from "./schemas/api/TrainingPrograms.api.zod.ts";
+export * from "./schemas/database/TrainingPrograms.zod.ts";
+export * from "./schemas/database/TrainingProgramPhases.zod.ts";
+export * from "./schemas/database/TrainingProgramWeeks.zod.ts";
+export * from "./schemas/database/TrainingProgramSessions.zod.ts";

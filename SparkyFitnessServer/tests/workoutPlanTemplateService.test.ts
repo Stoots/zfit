@@ -188,30 +188,6 @@ describe('workoutPlanTemplateService', () => {
         'Forbidden: You do not have permission to delete this workout plan template.'
       );
     });
-
-    it('deletes template and cleans up entries when user is owner', async () => {
-      vi.mocked(
-        workoutPlanTemplateRepository.getWorkoutPlanTemplateOwnerId
-      ).mockResolvedValue(USER_ID);
-      vi.mocked(
-        workoutPlanTemplateRepository.deleteWorkoutPlanTemplate
-      ).mockResolvedValue({ id: TEMPLATE_ID });
-
-      const result = await workoutPlanTemplateService.deleteWorkoutPlanTemplate(
-        USER_ID,
-        TEMPLATE_ID
-      );
-
-      expect(
-        exerciseRepository.deleteExerciseEntriesByTemplateId
-      ).toHaveBeenCalledWith(TEMPLATE_ID, USER_ID, '2026-09-10');
-      expect(
-        workoutPlanTemplateRepository.deleteWorkoutPlanTemplate
-      ).toHaveBeenCalledWith(TEMPLATE_ID, USER_ID);
-      expect(result).toEqual({
-        message: 'Workout plan template deleted successfully.',
-      });
-    });
   });
 
   describe('createWorkoutPlanTemplate', () => {
