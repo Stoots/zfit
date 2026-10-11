@@ -1150,8 +1150,11 @@ async function deleteExerciseAndDependencies(
     client.release();
   }
 }
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function findExerciseByNameAndUserId(name: any, userId: any) {
+async function findExerciseByNameAndUserId(
+  name: unknown,
+  userId: unknown,
+  options?: { visibleOnly?: boolean }
+) {
   const client = await getClient(userId);
   try {
     const result = await client.query(
@@ -1159,7 +1162,9 @@ async function findExerciseByNameAndUserId(name: any, userId: any) {
               primary_muscles, secondary_muscles, instructions, category, images,
               calories_per_hour, description, user_id, is_custom, shared_with_public,
               modality, created_at, updated_at
-       FROM exercises WHERE name = public.normalize_exercise_name_initial($1) AND (user_id = $2 OR shared_with_public = TRUE)`,
+       FROM exercises WHERE name = public.normalize_exercise_name_initial($1) AND (user_id = $2 OR shared_with_public = TRUE)
+       ${options?.visibleOnly ? 'AND is_quick_exercise = FALSE' : ''}
+       ORDER BY (user_id = $2) DESC, created_at ASC, id ASC`,
       [name, userId]
     );
     const exercise = result.rows[0];

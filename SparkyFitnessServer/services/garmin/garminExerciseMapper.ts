@@ -196,8 +196,8 @@ export async function getOrCreateGarminExercise(
   const { primary: primaryMuscles, secondary: secondaryMuscles } =
     mapGarminCategoryToMuscles(rawCategory);
 
-  // Match prior title-case aliases before uppercase legacy imports. An owned
-  // uppercase provider alias is renamed to its readable display name.
+  // Preserve title-case then uppercase lookup precedence when aliases coexist.
+  // Rename only an owned uppercase legacy alias to its readable display name.
   const legacyName = formattedName
     .toLowerCase()
     .split(' ')
@@ -205,19 +205,10 @@ export async function getOrCreateGarminExercise(
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
   let exercise = await exerciseRepository.findExerciseByNameAndUserId(
-    formattedName,
+    legacyName,
     userId
   );
-  // Older Garmin imports title-cased enum labels. Retain that lookup only;
-  // never use its lossy casing for a new name or rename an existing exercise.
-  if (!exercise) {
-    if (legacyName !== formattedName) {
-      exercise = await exerciseRepository.findExerciseByNameAndUserId(
-        legacyName,
-        userId
-      );
-    }
-  }
+
   if (!exercise) {
     const uppercaseName = formattedName.toUpperCase();
     if (uppercaseName !== formattedName) {
@@ -232,6 +223,12 @@ export async function getOrCreateGarminExercise(
         exercise.name = formattedName;
       }
     }
+  }
+  if (!exercise && formattedName !== legacyName) {
+    exercise = await exerciseRepository.findExerciseByNameAndUserId(
+      formattedName,
+      userId
+    );
   }
 
   if (exercise) {

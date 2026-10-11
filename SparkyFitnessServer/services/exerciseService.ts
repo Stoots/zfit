@@ -1786,9 +1786,10 @@ async function importExercisesFromCSV(
         }
         const existingExercise = await exerciseDb.findExerciseByNameAndUserId(
           exerciseName,
-          authenticatedUserId
+          authenticatedUserId,
+          { visibleOnly: true }
         );
-        if (existingExercise) {
+        if (existingExercise?.user_id === authenticatedUserId) {
           await exerciseDb.updateExercise(
             existingExercise.id,
             authenticatedUserId,

@@ -368,7 +368,7 @@ Example: `20240315103000_add_exercise_tracking.sql`
 
 Invoker-rights `BEFORE INSERT OR UPDATE OF` triggers enforce the rule at the existing library and diary persistence boundaries. They do not grant permissions or bypass RLS. No new tables, columns, Zod contracts, sharing rules or security tiers are introduced; existing web/mobile API responses carry the stored names. Plan/preset exercise labels continue to read the library through their existing joins.
 
-Exact name-based repository lookups normalize the incoming initial character without changing the rest of their matching rules or user scope. Garmin retains matching-only fallbacks for older title-cased/uppercase provider names without rewriting the matched exercise; newly authored provider labels retain acronym/proper-name casing. Provider IDs and raw detail payloads are unchanged.
+Exact name-based repository lookups normalize the incoming initial character without changing user scope. CSV library import opts into `findExerciseByNameAndUserId(..., { visibleOnly: true })`, excluding `is_quick_exercise` records just like library search; history/provider callers retain access to hidden records by default. Garmin preserves established matching precedence: legacy title-case first, uppercase second, decoded provider casing last. These are matching-only spellings, never renames or merges; newly authored provider labels retain acronym/proper-name casing. Provider IDs and raw detail payloads are unchanged.
 
 #### Disposable rehearsal and rollback
 

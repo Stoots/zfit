@@ -10,6 +10,7 @@ import { toolOpts } from './helpers/toolExecutionOptions.js';
 import errorHandler from '../middleware/errorHandler.js';
 import exerciseRepository from '../models/exercise.js';
 import exerciseEntryRepository from '../models/exerciseEntry.js';
+import exercisePresetEntryRepository from '../models/exercisePresetEntryRepository.js';
 import { getOrCreateGarminExercise } from '../services/garmin/garminExerciseMapper.js';
 import { buildExerciseTools } from '../ai/tools/exerciseTools.js';
 
@@ -454,6 +455,55 @@ describe.runIf(optedIn)(
       });
     });
 
+    it('retains Garmin title-case alias precedence and all coexisting exercise identities', async () => {
+      const title = await exerciseRepository.createExercise({
+        user_id: other,
+        name: 'Leg Curl',
+        source: 'garmin',
+        source_id: 'title-alias',
+        category: 'strength',
+        primary_muscles: ['hamstrings'],
+        description: 'Established movement A',
+        is_custom: true,
+        shared_with_public: false,
+      });
+      const uppercase = await exerciseRepository.createExercise({
+        user_id: other,
+        name: 'LEG CURL',
+        source: 'garmin',
+        source_id: 'uppercase-alias',
+        category: 'strength',
+        primary_muscles: ['hamstrings'],
+        description: 'Distinct movement B',
+        is_custom: true,
+        shared_with_public: false,
+      });
+      const db = await getClient(other);
+      try {
+        const before = (
+          await db.query(
+            'SELECT * FROM exercises WHERE id = ANY($1::uuid[]) ORDER BY id',
+            [[title.id, uppercase.id]]
+          )
+        ).rows;
+        for (const rawName of ['LEG_CURL', 'leg_curl', 'LEG CURL']) {
+          expect(
+            (await getOrCreateGarminExercise(other, rawName, 'LEG_CURL')).id
+          ).toBe(title.id);
+        }
+        expect(
+          (
+            await db.query(
+              'SELECT * FROM exercises WHERE id = ANY($1::uuid[]) ORDER BY id',
+              [[title.id, uppercase.id]]
+            )
+          ).rows
+        ).toEqual(before);
+      } finally {
+        db.release();
+      }
+    });
+
     it('persists AI tool create/log output and library JSON import names without overwriting substring matches', async () => {
       const tool = buildExerciseTools(owner, 'UTC').sparky_manage_exercise;
       const created = await tool.execute!(
@@ -566,6 +616,212 @@ describe.runIf(optedIn)(
         name: 'Csv McGill curl long variant',
         description: existing.description,
       });
+    });
+
+    it('imports a visible CSV movement without updating its hidden exact-name counterpart', async () => {
+      const hidden = await create('hidden CSV McGill TRX row');
+      const hide = await request(app)
+        .delete(`/api/exercises/${hidden.id}?mode=hide`)
+        .set('Authorization', `Bearer ${token}`);
+      expect(hide.status, JSON.stringify(hide.body)).toBe(200);
+      expect(hide.body).toMatchObject({ status: 'hidden' });
+      const searchPath =
+        '/api/exercises/search?searchTerm=hidden%20CSV%20McGill%20TRX%20row';
+      expect(await get(searchPath)).toEqual([]);
+      // History/provider lookups must still see hidden exercises by default.
+      expect(
+        await exerciseRepository.findExerciseByNameAndUserId(
+          'hidden CSV McGill TRX row',
+          owner
+        )
+      ).toMatchObject({ id: hidden.id, description: hidden.description });
+      const db = await getClient(owner);
+      try {
+        const before = (
+          await db.query('SELECT * FROM exercises WHERE id=$1', [hidden.id])
+        ).rows[0];
+        expect(before.is_quick_exercise).toBe(true);
+        const csv =
+          'name,primary_muscles,category,calories_per_hour,description\nhidden CSV McGill TRX row,back,strength,180,Visible imported metadata\n';
+        const first = await request(app)
+          .post('/api/exercises/import')
+          .set('Authorization', `Bearer ${token}`)
+          .attach('file', Buffer.from(csv), 'visible-exercise.csv');
+        expect(first.status, JSON.stringify(first.body)).toBe(201);
+        expect(first.body).toMatchObject({ created: 1, updated: 0, failed: 0 });
+        const visible = await get(searchPath);
+        expect(visible).toEqual([
+          expect.objectContaining({
+            name: 'Hidden CSV McGill TRX row',
+            description: 'Visible imported metadata',
+            calories_per_hour: 180,
+          }),
+        ]);
+        expect(visible[0].id).not.toBe(hidden.id);
+        const repeated = await request(app)
+          .post('/api/exercises/import')
+          .set('Authorization', `Bearer ${token}`)
+          .attach('file', Buffer.from(csv), 'visible-exercise.csv');
+        expect(repeated.status, JSON.stringify(repeated.body)).toBe(201);
+        expect(repeated.body).toMatchObject({
+          created: 0,
+          updated: 1,
+          failed: 0,
+        });
+        expect(await get(searchPath)).toEqual([
+          expect.objectContaining({ id: visible[0].id }),
+        ]);
+        expect(
+          (await db.query('SELECT * FROM exercises WHERE id=$1', [hidden.id]))
+            .rows[0]
+        ).toEqual(before);
+      } finally {
+        db.release();
+      }
+    });
+
+    it('imports an owned copy instead of updating another user’s shared exact-name exercise', async () => {
+      const name = 'shared CSV cable row';
+      const shared = await request(app)
+        .post('/api/exercises')
+        .set('Authorization', `Bearer ${otherToken}`)
+        .field(
+          'exerciseData',
+          JSON.stringify({
+            name,
+            category: 'strength',
+            modality: 'weight_reps',
+            calories_per_hour: 200,
+            description: 'Other owner description',
+            is_custom: true,
+            shared_with_public: true,
+            source: 'manual',
+          })
+        );
+      expect(shared.status, JSON.stringify(shared.body)).toBe(201);
+
+      const csv =
+        'name,primary_muscles,category,description\nshared CSV cable row,back,strength,Owner import description\n';
+      const first = await request(app)
+        .post('/api/exercises/import')
+        .set('Authorization', `Bearer ${token}`)
+        .attach('file', Buffer.from(csv), 'shared-exercise.csv');
+      expect(first.status, JSON.stringify(first.body)).toBe(201);
+      expect(first.body).toMatchObject({ created: 1, updated: 0, failed: 0 });
+
+      const own = await exerciseRepository.findExerciseByNameAndUserId(
+        name,
+        owner
+      );
+      expect(own).toMatchObject({
+        user_id: owner,
+        description: 'Owner import description',
+      });
+      expect(own.id).not.toBe(shared.body.id);
+
+      const otherDb = await getClient(other, other);
+      try {
+        expect(
+          (
+            await otherDb.query(
+              'SELECT description FROM public.exercises WHERE id=$1',
+              [shared.body.id]
+            )
+          ).rows
+        ).toEqual([{ description: 'Other owner description' }]);
+      } finally {
+        otherDb.release();
+      }
+
+      const repeated = await request(app)
+        .post('/api/exercises/import')
+        .set('Authorization', `Bearer ${token}`)
+        .attach('file', Buffer.from(csv), 'shared-exercise.csv');
+      expect(repeated.status, JSON.stringify(repeated.body)).toBe(201);
+      expect(repeated.body).toMatchObject({
+        created: 0,
+        updated: 1,
+        failed: 0,
+      });
+      expect(
+        await exerciseRepository.findExerciseByNameAndUserId(name, owner)
+      ).toMatchObject({
+        id: own.id,
+        user_id: owner,
+        description: 'Owner import description',
+      });
+    });
+
+    it('preserves the legacy by-date row and preset-child fields', async () => {
+      const exercise = await create('Legacy response exercise');
+      const entryDate = '2025-10-04';
+      const preset =
+        await exercisePresetEntryRepository.createExercisePresetEntry(
+          owner,
+          { name: 'Legacy preset response', entry_date: entryDate },
+          owner
+        );
+      const child = await exerciseEntryRepository.createExerciseEntry(
+        owner,
+        {
+          exercise_id: exercise.id,
+          exercise_name: 'Legacy preset child snapshot',
+          entry_date: entryDate,
+          duration_minutes: 3,
+          calories_burned: 20,
+          sort_order: 4,
+          sets: [],
+        },
+        owner,
+        'Manual',
+        preset.id,
+        { skipDuplicateCheck: true }
+      );
+      const individual = await exerciseEntryRepository.createExerciseEntry(
+        owner,
+        {
+          exercise_id: exercise.id,
+          exercise_name: 'Legacy individual snapshot',
+          entry_date: entryDate,
+          duration_minutes: 5,
+          calories_burned: 30,
+          sort_order: 9,
+          sets: [],
+        },
+        owner,
+        'Manual',
+        null,
+        { skipDuplicateCheck: true }
+      );
+
+      const diary = await get(
+        `/api/exercise-entries/by-date?selectedDate=${entryDate}`
+      );
+      const individualRow = diary.find(
+        (row: { id: string }) => row.id === individual.id
+      );
+      expect(individualRow).toMatchObject({
+        name: 'Legacy individual snapshot',
+        sort_order: 9,
+        user_id: owner,
+        created_by_user_id: owner,
+        updated_at: expect.any(String),
+      });
+      const presetRow = diary.find(
+        (row: { id: string }) => row.id === preset.id
+      );
+      expect(presetRow.exercises).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: child.id,
+            name: 'Legacy preset child snapshot',
+            sort_order: 4,
+            user_id: owner,
+            created_by_user_id: owner,
+            updated_at: expect.any(String),
+          }),
+        ])
+      );
     });
   }
 );
