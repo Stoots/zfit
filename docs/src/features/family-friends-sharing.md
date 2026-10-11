@@ -49,7 +49,7 @@ Certain tables contain private user data that is **never** accessible to any fam
 - OIDC SSO Connections (`user_oidc_links` table)
 - Personal AI Assistant Chat History (`sparky_chat_history` table)
 - Personal Fasting Preferences and auto-calculation configuration (`user_fasting_preferences` table)
-- Training Programs, Program Phases, weeks and Planned Sessions (`training_programs`, `training_program_phases`, `training_program_weeks`, `training_program_sessions`) — owner-only, even with **Manage Diary**, **View Reports** or exercise-library access. Switch to your own profile to author or view them. Standalone Workout Plan sharing remains unchanged.
+- Training Programs, Program Phases, weeks and Planned Sessions (`training_programs`, `training_program_phases`, `training_program_weeks`, `training_program_sessions`) — owner-only, even with **Manage Diary**, **View Reports** or exercise-library access. This includes per-Program optionality, omitted history and late completion links. Switch to your own profile to author or view them. Standalone Workout Plan optionality follows the existing plan-sharing rules and never grants Program access.
 - Cycle & Pregnancy hub data (`cycle_settings`, `cycle_daily_entries`, `cycles`, `user_cycle_display_preferences`, `cycle_test_entries`, `pregnancies`, `pregnancy_kick_sessions`, `pregnancy_contractions`, `pregnancy_photos`, `pregnancy_checklist_state`, `health_appointments` tables) — this reproductive-health data is **never** shared or delegated, even with `can_view_reports`. It is strictly owner-only. Bump photo _files_ are owner-only too: they are excluded from the public uploads URLs and can only be fetched through an authenticated request by their owner.
 
 ### 2. Tier 2: Read-Only Profile & Settings Data

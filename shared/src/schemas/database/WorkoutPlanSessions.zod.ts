@@ -7,6 +7,7 @@ export const workoutPlanSessionsSchema = z.object({
   name: z.string(),
   day_of_week: z.number().int().min(0).max(6).nullable(),
   sort_order: z.number().int().nonnegative(),
+  is_optional: z.boolean(),
   created_at: z.date(),
   updated_at: z.date(),
 });

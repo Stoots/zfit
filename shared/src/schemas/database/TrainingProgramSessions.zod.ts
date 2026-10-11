@@ -10,6 +10,7 @@ export const trainingProgramSessionsSchema = z.object({
   scheduled_date: z.iso.date(),
   effective_date: z.iso.date(),
   status: z.enum(["planned", "completed", "missed"]),
+  is_optional: z.boolean(),
   outcome_at: z.date().nullable(),
   completed_workout: trainingProgramWorkoutSchema.nullable(),
   workout_plan_name_snapshot: z.string().nullable(),

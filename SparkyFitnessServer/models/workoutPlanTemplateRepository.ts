@@ -56,6 +56,7 @@ function invalid(message: string): never {
 const planSelect = `SELECT t.*, COALESCE((
   SELECT jsonb_agg(jsonb_build_object(
     'id', s.id, 'name', s.name, 'day_of_week', s.day_of_week, 'sort_order', s.sort_order,
+    'is_optional', s.is_optional,
     'assignments', COALESCE((
       SELECT jsonb_agg(jsonb_build_object(
         'id', a.id, 'workout_session_id', a.workout_session_id, 'sort_order', COALESCE(a.sort_order, 0),
@@ -296,7 +297,7 @@ async function saveSessions(
     const sessionId = session.id ?? randomUUID();
     if (session.id) {
       await client.query(
-        'UPDATE workout_plan_sessions SET name = $4, day_of_week = $5, sort_order = $6 WHERE id = $1 AND template_id = $2 AND user_id = $3',
+        'UPDATE workout_plan_sessions SET name = $4, day_of_week = $5, sort_order = $6, is_optional = $7 WHERE id = $1 AND template_id = $2 AND user_id = $3',
         [
           sessionId,
           planId,
@@ -304,11 +305,12 @@ async function saveSessions(
           session.name,
           session.day_of_week,
           session.sort_order,
+          session.is_optional,
         ]
       );
     } else {
       await client.query(
-        'INSERT INTO workout_plan_sessions (id, template_id, user_id, name, day_of_week, sort_order) VALUES ($1,$2,$3,$4,$5,$6)',
+        'INSERT INTO workout_plan_sessions (id, template_id, user_id, name, day_of_week, sort_order, is_optional) VALUES ($1,$2,$3,$4,$5,$6,$7)',
         [
           sessionId,
           planId,
@@ -316,6 +318,7 @@ async function saveSessions(
           session.name,
           session.day_of_week,
           session.sort_order,
+          session.is_optional,
         ]
       );
     }

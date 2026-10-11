@@ -106,7 +106,11 @@ export function getDuePlanSessions(
     )
   );
   if (plan.next_session) dueIds.add(plan.next_session.id);
-  return plan.sessions.filter((session) => dueIds.has(session.id));
+  return plan.sessions
+    .filter((session) => dueIds.has(session.id))
+    .map((session) =>
+      plan.next_session?.id === session.id ? plan.next_session : session
+    );
 }
 
 export interface WatchScheduledWorkout {
@@ -119,6 +123,7 @@ export interface WatchScheduledWorkout {
 
 export interface ScheduledWorkoutLabels {
   scheduledToday: string;
+  optional?: string;
   sessionOf: (current: number, total: number) => string;
 }
 
@@ -140,13 +145,17 @@ export function scheduledWorkoutsForWatch(
         presetId: `session:${session.id}`,
         name: session.name,
         planName: plan.plan_name,
-        caption:
+        caption: [
+          session.is_optional ? (labels.optional ?? 'Optional') : null,
           plan.schedule_type === 'sequential'
             ? labels.sessionOf(
                 plan.sequence_position?.current ?? 1,
                 plan.sequence_position?.total ?? plan.sessions.length
               )
             : labels.scheduledToday,
+        ]
+          .filter(Boolean)
+          .join(' · '),
       });
     }
   }

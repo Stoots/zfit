@@ -284,6 +284,7 @@ describe('PresetSearchScreen', () => {
       id,
       name: 'A',
       day_of_week: 1,
+      is_optional: false,
       sort_order: index,
       assignments: [
         {
@@ -332,6 +333,7 @@ describe('PresetSearchScreen', () => {
                   workout_session_id,
                   effective_date: '2026-10-12',
                   status: 'planned',
+                  is_optional: false,
                   sort_order: index,
                 })),
               },

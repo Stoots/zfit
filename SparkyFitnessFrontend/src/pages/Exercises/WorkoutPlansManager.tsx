@@ -383,6 +383,11 @@ const WorkoutPlansManager = () => {
               <span className="font-semibold text-sm">
                 {activePlan.next_session.name}
               </span>
+              {activePlan.next_session.is_optional && (
+                <Badge variant="outline">
+                  {t('trainingPrograms.optional', 'Optional')}
+                </Badge>
+              )}
               {activePlan.sequence_position && (
                 <span className="text-xs text-muted-foreground font-medium">
                   ({activePlan.sequence_position.current} of{' '}

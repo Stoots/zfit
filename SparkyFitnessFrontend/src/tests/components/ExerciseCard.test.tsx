@@ -108,6 +108,7 @@ function fixture(): WorkoutPlanTemplate {
         id: firstId,
         name: 'A',
         day_of_week: null,
+        is_optional: false,
         sort_order: 0,
         assignments: [
           {
@@ -123,6 +124,7 @@ function fixture(): WorkoutPlanTemplate {
         id: laterId,
         name: 'A',
         day_of_week: null,
+        is_optional: false,
         sort_order: 1,
         assignments: [
           {
@@ -156,6 +158,7 @@ beforeEach(() => {
     id: 'standalone',
     name: 'Solo',
     day_of_week: 1,
+    is_optional: false,
     sort_order: 0,
     assignments: [
       { id: 900, exercise_id: 'exercise', sets: [{ set_number: 1, reps: 8 }] },
@@ -183,6 +186,7 @@ beforeEach(() => {
                   workout_plan_id: 17,
                   workout_session_id: firstId,
                   status: 'planned',
+                  is_optional: false,
                   effective_date: '2026-10-12',
                 },
                 {
@@ -190,6 +194,7 @@ beforeEach(() => {
                   workout_plan_id: 17,
                   workout_session_id: laterId,
                   status: 'planned',
+                  is_optional: false,
                   effective_date: '2026-10-12',
                 },
               ],

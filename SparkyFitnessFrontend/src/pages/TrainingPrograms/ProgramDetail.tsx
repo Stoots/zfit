@@ -149,6 +149,11 @@ export default function ProgramDetail({
                               session.status
                             )}
                           </Badge>
+                          {session.is_optional && (
+                            <Badge variant="outline">
+                              {t('trainingPrograms.optional', 'Optional')}
+                            </Badge>
+                          )}
                         </div>
                       </div>
                       <div className="min-w-0 space-y-2">

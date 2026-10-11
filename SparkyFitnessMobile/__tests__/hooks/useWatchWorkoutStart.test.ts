@@ -56,6 +56,7 @@ function session(id: string, assignmentId: number, count: number) {
     id,
     name: 'A',
     day_of_week: 1,
+    is_optional: false,
     sort_order: assignmentId,
     assignments: [
       {

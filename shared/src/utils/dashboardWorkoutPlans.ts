@@ -16,13 +16,13 @@ type ProgramPreview<T extends CandidatePlan> = T & {
 };
 
 export interface DashboardWorkoutPlans<T extends CandidatePlan> {
-  /** The earliest required pending Program workout, with exact session binding. */
+  /** The earliest pending Program workout, with exact session binding. */
   programPlan: ProgramPreview<T> | undefined;
   /** Eligible plans not referenced by any Program, in their existing order. */
   standalonePlans: T[];
 }
 
-/** Split eligible plans into the next required Program workout and standalone
+/** Split eligible plans into the next pending Program workout and standalone
  * plans. Effective dates and authored traversal order determine precedence.
  * Program-linked plans never appear as standalone plans, even when their
  * sessions are finished. */

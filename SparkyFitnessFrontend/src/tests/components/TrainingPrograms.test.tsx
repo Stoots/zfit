@@ -80,6 +80,7 @@ function serverResponse(
         sort_order: w,
         sessions: week.sessions.map((session, s) => ({
           ...session,
+          is_optional: session.is_optional ?? false,
           id: session.id ?? uuid(),
           sort_order: s,
           workout_plan_id: 17,
@@ -195,6 +196,7 @@ beforeEach(() => {
           id: workoutSessionId,
           name: 'A',
           day_of_week: null,
+          is_optional: false,
           sort_order: 0,
           assignments: [
             {
@@ -212,6 +214,7 @@ beforeEach(() => {
           id: laterWorkoutSessionId,
           name: 'A',
           day_of_week: null,
+          is_optional: false,
           sort_order: 1,
           assignments: [
             {
@@ -549,10 +552,21 @@ it('renders cumulative repeated misses beside unchanged completion history after
   ).not.toBeInTheDocument();
 });
 
-it.each(['preset', 'individual'] as const)(
-  'lets the athlete choose and confirm a %s diary workout and shows completion',
-  async (type) => {
+it.each([
+  { type: 'preset', omitted: false },
+  { type: 'individual', omitted: false },
+  { type: 'preset', omitted: true },
+  { type: 'individual', omitted: true },
+] as const)(
+  'links a $type diary workout after omission=$omitted without changing required dates',
+  async ({ type, omitted }) => {
     stored = scheduleFixture();
+    if (omitted) {
+      const session = stored.phases[0]!.weeks[0]!.sessions[0]!;
+      session.is_optional = true;
+      session.status = 'omitted';
+      session.outcome_at = '2026-10-26T00:00:00.000Z';
+    }
     const workoutId = uuid();
     const candidate: ExerciseSessionResponse =
       type === 'preset'
@@ -613,6 +627,24 @@ it.each(['preset', 'individual'] as const)(
         return response;
       });
     await openStored();
+    if (omitted) {
+      expect(
+        within(sessionRow('First run')).getByText('Omitted')
+      ).toBeInTheDocument();
+      expect(
+        within(sessionRow('First run')).getByText('Optional')
+      ).toBeInTheDocument();
+      expect(
+        within(sessionRow('First run')).queryByRole('button', {
+          name: 'Mark missed',
+        })
+      ).not.toBeInTheDocument();
+      expect(
+        within(sessionRow('First run')).queryByRole('button', {
+          name: 'Start Workout',
+        })
+      ).not.toBeInTheDocument();
+    }
     fireEvent.click(
       within(sessionRow('First run')).getByRole('button', {
         name: 'Link completed workout',
@@ -746,4 +778,49 @@ it('refuses a missing exact binding rather than starting the first available ses
     'selected Workout Session is unavailable'
   );
   expect(playbackState).toBeUndefined();
+});
+
+it('inherits library optionality for new sessions but preserves an edited stored override', async () => {
+  const plans = await getWorkoutPlanTemplates();
+  plans[0]!.sessions[0]!.is_optional = true;
+  jest.mocked(getWorkoutPlanTemplates).mockResolvedValue(plans);
+  mount();
+  await startProgram();
+  const phase = addPhase('Base', 'Endurance', 1);
+  expect(phase.getByLabelText('Optional')).toBeChecked();
+  fireEvent.click(phase.getByLabelText('Optional'));
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Save Training Program' })
+  );
+  await screen.findByRole('heading', { name: 'Autumn 10K' });
+  expect(stored!.phases[0]!.weeks[0]!.sessions[0]!.is_optional).toBe(false);
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Edit Training Program' })
+  );
+  await screen.findByLabelText('Workout Session');
+  expect(screen.getByLabelText('Optional')).not.toBeChecked();
+  fill('Workout Session', laterWorkoutSessionId);
+  expect(screen.getByLabelText('Optional')).not.toBeChecked();
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Save Training Program' })
+  );
+  await screen.findByRole('heading', { name: 'Autumn 10K' });
+  expect(stored!.phases[0]!.weeks[0]!.sessions[0]!.is_optional).toBe(false);
+});
+
+it('does not offer a missed outcome for a planned optional session', async () => {
+  stored = scheduleFixture();
+  stored.phases[0]!.weeks[0]!.sessions[0]!.is_optional = true;
+  await openStored();
+  const optional = within(sessionRow('First run'));
+  expect(optional.getByText('Optional')).toBeInTheDocument();
+  expect(
+    optional.queryByRole('button', { name: 'Mark missed' })
+  ).not.toBeInTheDocument();
+  expect(
+    optional.getByRole('button', { name: 'Link completed workout' })
+  ).toBeInTheDocument();
+  expect(
+    within(sessionRow('Strength')).getByRole('button', { name: 'Mark missed' })
+  ).toBeInTheDocument();
 });

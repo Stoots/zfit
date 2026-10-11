@@ -19,6 +19,7 @@ function planPayload(plan: Partial<WorkoutPlanDraft>) {
       id: session.id,
       name: session.name,
       day_of_week: session.day_of_week,
+      is_optional: session.is_optional,
       sort_order: session.sort_order,
       assignments: session.assignments.map((a) => ({
         id:

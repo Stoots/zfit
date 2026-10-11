@@ -13,6 +13,7 @@ function session(
     id,
     name: 'A',
     day_of_week: null,
+    is_optional: false,
     sort_order: assignmentId,
     assignments: [
       {

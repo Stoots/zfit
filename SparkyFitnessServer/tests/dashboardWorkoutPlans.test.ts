@@ -14,6 +14,7 @@ const plan = {
     {
       id: sessionA,
       name: 'A',
+      is_optional: true,
       assignments: [
         {
           id: 101,
@@ -27,6 +28,7 @@ const plan = {
     {
       id: sessionB,
       name: 'A',
+      is_optional: false,
       assignments: [
         {
           id: 102,
@@ -57,7 +59,8 @@ function program(
   sessions: {
     workout_session_id: string;
     effective_date: string;
-    status?: 'planned' | 'missed' | 'completed';
+    status?: 'planned' | 'missed' | 'omitted';
+    is_optional?: boolean;
   }[]
 ) {
   return trainingProgramSchema.parse({
@@ -95,8 +98,9 @@ function program(
               workout_plan_name: 'Plan',
               sort_order: index,
               status: session.status ?? 'planned',
+              is_optional: session.is_optional ?? false,
               outcome_at:
-                session.status === 'missed'
+                session.status === 'missed' || session.status === 'omitted'
                   ? '2026-10-11T12:00:00Z'
                   : null,
               completed_workout: null,
@@ -159,6 +163,48 @@ describe('Program dashboard session binding', () => {
     expect(cards.standalonePlans.map((card) => card.id)).toEqual([20]);
   });
 
+  it('offers a planned optional session in authored same-day order', () => {
+    const authored = program([
+      {
+        workout_session_id: sessionA,
+        effective_date: '2026-10-11',
+        is_optional: true,
+      },
+      { workout_session_id: sessionB, effective_date: '2026-10-11' },
+    ]);
+    const [optional, required] = authored.phases[0]!.weeks[0]!.sessions;
+    const selected = selectDashboardWorkoutPlans(
+      [plan, standalone],
+      [authored]
+    );
+
+    expect(selected.programPlan).toMatchObject({
+      training_program_session_id: optional!.id,
+      next_session: { id: sessionA },
+    });
+    expect(selected.programPlan?.training_program_session_id).not.toBe(
+      required!.id
+    );
+  });
+
+  it('skips an omitted optional session and selects the next required exact binding', () => {
+    const authored = program([
+      {
+        workout_session_id: sessionB,
+        effective_date: '2026-10-11',
+        is_optional: true,
+        status: 'omitted',
+      },
+      { workout_session_id: sessionA, effective_date: '2026-10-12' },
+    ]);
+    const selected = selectDashboardWorkoutPlans(
+      [plan, standalone],
+      [authored]
+    );
+
+    expect(selected.programPlan?.next_session.id).toBe(sessionA);
+    expect(selected.standalonePlans.map((item) => item.id)).toEqual([20]);
+  });
 
   it('never substitutes the current or first session for an unresolved exact Program binding', () => {
     const cards = selectDashboardWorkoutPlans(

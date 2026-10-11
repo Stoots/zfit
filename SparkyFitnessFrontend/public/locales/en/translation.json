@@ -1,5 +1,8 @@
 {
   "trainingPrograms": {
+    "optional": "Optional",
+    "optionalHelp": "Unfinished optional sessions become Omitted after their scheduled day, without moving required workouts.",
+    "omittedAfterDay": "Automatically omitted after its effective scheduled day in your timezone.",
     "title": "Training Programs",
     "intro": "Work toward a goal over multiple weeks. Organize phases and schedule exact Workout Sessions from your Workout Plans.",
     "entryHelp": "Organize your Workout Plans into goal-bearing phases and dated weeks.",
@@ -21,7 +24,7 @@
     "fixedDates": "Fixed dates",
     "autoShift": "Auto-shift after a miss",
     "autoShiftOn": "Auto-shift enabled",
-    "shiftHelp": "Off by default. Each new miss moves later still-planned sessions forward one calendar day, even beyond the authored week or Program. Same-day, missed and completed sessions stay unchanged.",
+    "shiftHelp": "Off by default. Each new required miss moves later still-planned sessions forward one calendar day, even beyond the authored week or Program. Same-day, omitted, missed and completed sessions stay unchanged. Optional omission never shifts dates.",
     "fixedOutcomeHelp": "Fixed dates: recording a miss leaves all other dates unchanged.",
     "historyHelp": "Recorded sessions and their containing weeks/phases cannot be removed. Their names, authored dates and Workout Sessions are locked. Future authored date edits reset that session’s shifted date; other edits preserve the resulting schedule.",
     "scheduleEnd": "Resulting schedule ends:",
@@ -29,7 +32,8 @@
     "state": {
       "planned": "Planned",
       "completed": "Completed",
-      "missed": "Missed"
+      "missed": "Missed",
+      "omitted": "Omitted"
     },
     "linkedWorkout": "Linked workout:",
     "recordedAt": "Recorded:",

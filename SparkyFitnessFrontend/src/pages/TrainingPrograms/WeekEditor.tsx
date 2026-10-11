@@ -131,6 +131,7 @@ export default function WeekEditor({
               {
                 name: '',
                 scheduled_date: current.start_date,
+                is_optional: false,
                 workout_session_id: null,
               },
             ],

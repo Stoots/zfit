@@ -79,18 +79,18 @@ const WorkoutPlanBanner: React.FC<WorkoutPlanBannerProps> = ({
                   'Session {{current}} of {{total}}',
                   {
                     current: plan.sequence_position?.current ?? 1,
-                    total: plan.sequence_position?.total ?? plan.sessions.length,
+                    total:
+                      plan.sequence_position?.total ?? plan.sessions.length,
                   }
                 )
               : t('exerciseSummary.scheduledToday', 'Scheduled Today')}
-            {plan.schedule_type === 'sequential' &&
-              plan.sequence_position && (
-                <Text className="text-text-muted font-normal">
-                  {' '}
-                  ({plan.sequence_position.current}/
-                  {plan.sequence_position.total})
-                </Text>
-              )}
+            {plan.schedule_type === 'sequential' && plan.sequence_position && (
+              <Text className="text-text-muted font-normal">
+                {' '}
+                ({plan.sequence_position.current}/{plan.sequence_position.total}
+                )
+              </Text>
+            )}
           </Text>
         </View>
       </View>

@@ -545,6 +545,9 @@ const PresetSearchScreen: React.FC<PresetSearchScreenProps> = ({
               <View className="flex-1">
                 <Text className="text-text-primary text-base font-medium">
                   {session.name}
+                  {session.is_optional
+                    ? ` · ${t('trainingPrograms.optional', 'Optional')}`
+                    : ''}
                 </Text>
                 <Text
                   className="text-sm mt-0.5"

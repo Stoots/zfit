@@ -15,6 +15,7 @@ const sessionInput = z.strictObject({
   name: title,
   scheduled_date: day,
   workout_session_id: z.uuid(),
+  is_optional: z.boolean().optional(),
 });
 const weekInput = z.strictObject({
   id: childId,
@@ -128,12 +129,13 @@ export type TrainingProgramOutcomeInput = z.infer<
 const session = sessionInput
   .extend({
     id: z.uuid(),
+    is_optional: z.boolean(),
     sort_order: z.number().int().nonnegative(),
     workout_session_name: z.string(),
     workout_plan_id: z.number().int().positive(),
     workout_plan_name: z.string(),
     effective_date: day,
-    status: z.enum(["planned", "completed", "missed"]),
+    status: z.enum(["planned", "completed", "missed", "omitted"]),
     outcome_at: z.iso.datetime().nullable(),
     completed_workout: trainingProgramWorkoutSchema.nullable(),
   })

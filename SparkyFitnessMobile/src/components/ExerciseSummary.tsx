@@ -8,6 +8,7 @@ import {
 } from '@workspace/shared';
 import Icon from './Icon';
 import WorkoutPlanBanner from './WorkoutPlanBanner';
+import ProgramSessionHistory from './ProgramSessionHistory';
 import SwipeableExerciseRow from './SwipeableExerciseRow';
 import type { GetImageSource } from '../hooks/useExerciseImageSource';
 import {
@@ -52,10 +53,8 @@ const ExerciseSummary: React.FC<ExerciseSummaryProps> = ({
   const accentPrimary = useCSSVariable('--color-accent-primary') as string;
   const { plans: activePlans } = useActiveWorkoutPlans(entryDate);
   const { plans: candidates } = useWorkoutPlanCandidates(entryDate);
-  const {
-    data: trainingPrograms,
-    isError: programsFailed,
-  } = useTrainingPrograms();
+  const { data: trainingPrograms, isError: programsFailed } =
+    useTrainingPrograms();
   const { programPlan, standalonePlans } = useMemo(() => {
     const loggedIds = getLoggedAssignmentIds(exerciseEntries);
     const activeEligible = getUncompletedActivePlans(activePlans, loggedIds);
@@ -96,6 +95,9 @@ const ExerciseSummary: React.FC<ExerciseSummaryProps> = ({
         ))}
       </View>
     ) : null;
+  const programHistory = trainingPrograms && (
+    <ProgramSessionHistory programs={trainingPrograms} entryDate={entryDate} />
+  );
 
   if (exerciseEntries.length === 0) {
     const emptyContent = (
@@ -106,6 +108,7 @@ const ExerciseSummary: React.FC<ExerciseSummaryProps> = ({
     return (
       <View>
         {planBanners}
+        {programHistory}
         {onAddExercise ? (
           <Pressable
             onPress={onAddExercise}
@@ -129,6 +132,7 @@ const ExerciseSummary: React.FC<ExerciseSummaryProps> = ({
   return (
     <View>
       {planBanners}
+      {programHistory}
       <View className="bg-surface rounded-xl p-4 mb-2 shadow-sm overflow-hidden">
         <View className="flex-row items-center gap-2 mb-2">
           <Icon name="exercise" size={18} color={accentPrimary} />

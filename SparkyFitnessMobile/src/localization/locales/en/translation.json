@@ -1,4 +1,22 @@
 {
+  "trainingPrograms": {
+    "history": "Training Program history",
+    "optional": "Optional",
+    "linkCompleted": "Link completed workout",
+    "linkHelp": "Choose a workout you actually completed from your diary. Linking records completion without moving any dates.",
+    "workoutDate": "Diary workout date",
+    "workoutDatePlaceholder": "YYYY-MM-DD",
+    "validWorkoutDate": "Enter a valid diary date.",
+    "loadingWorkouts": "Loading diary workouts…",
+    "noWorkouts": "No diary workouts on this date. Choose another date or log your completed workout first.",
+    "completedWorkout": "Completed diary workout",
+    "confirmCompletion": "Confirm completion",
+    "state": {
+      "omitted": "Omitted",
+      "completed": "Completed",
+      "missed": "Missed"
+    }
+  },
   "muscles": {
     "abdominals": "Abdominals",
     "abductors": "Abductors",

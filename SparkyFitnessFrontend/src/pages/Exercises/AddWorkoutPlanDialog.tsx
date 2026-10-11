@@ -76,6 +76,7 @@ const AddWorkoutPlanDialog = ({
     sessions,
     setSessionName,
     setSessionDay,
+    setSessionOptional,
     addSession,
     removeSession,
     moveSession,
@@ -476,6 +477,21 @@ const AddWorkoutPlanDialog = ({
                               }
                               className="w-44 sm:w-60 bg-background/90"
                             />
+                            <div className="flex min-h-11 items-center gap-2">
+                              <Checkbox
+                                id={`session-optional-${session.id}`}
+                                checked={session.is_optional}
+                                onCheckedChange={(checked) =>
+                                  setSessionOptional(
+                                    session.id,
+                                    checked === true
+                                  )
+                                }
+                              />
+                              <Label htmlFor={`session-optional-${session.id}`}>
+                                {t('trainingPrograms.optional', 'Optional')}
+                              </Label>
+                            </div>
                             {scheduleType === 'weekly' && (
                               <div>
                                 <Label

@@ -9,6 +9,7 @@ import {
   beforeAll,
   afterAll,
   beforeEach,
+  afterEach,
   describe,
   it,
   expect,
@@ -20,6 +21,7 @@ import {
   type TrainingProgramInput,
   workoutPlanResponseSchema,
   presetSessionResponseSchema,
+  selectDashboardWorkoutPlans,
   type WorkoutPlanCreateRequest,
   type WorkoutPlanResponse,
 } from '@workspace/shared';
@@ -110,6 +112,7 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
             name: session.name,
             scheduled_date: session.scheduled_date,
             workout_session_id: session.workout_session_id,
+            is_optional: session.is_optional,
           })),
         })),
       })),
@@ -198,6 +201,7 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
         name: session.name,
         day_of_week: session.day_of_week,
         sort_order: session.sort_order,
+        is_optional: session.is_optional,
         assignments: session.assignments.map((assignment) => ({
           id: assignment.id,
           exercise_id: assignment.exercise_id,
@@ -312,6 +316,12 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
     outsiderToken = accounts[2]!.token!;
     const db = await getSystemClient();
     try {
+      // Only synthetic harness accounts: keep authentication valid while the
+      // real-timer clock traverses future athlete-calendar/DST boundaries.
+      await db.query(
+        'UPDATE "session" SET expires_at = $2 WHERE user_id = ANY($1::uuid[])',
+        [[owner, other, outsider], '2099-12-31T00:00:00Z']
+      );
       planId = (
         await db.query(
           'INSERT INTO workout_plan_templates(user_id, plan_name, is_active) VALUES ($1,$2,false) RETURNING id',
@@ -3251,5 +3261,547 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
       null
     );
   });
+  describe('optional Workout Session outcomes', () => {
+    beforeEach(async () => {
+      const db = await getSystemClient();
+      try {
+        await db.query(
+          `INSERT INTO user_preferences(user_id, timezone) VALUES ($1, 'America/New_York')
+           ON CONFLICT (user_id) DO UPDATE SET timezone = EXCLUDED.timezone`,
+          [owner]
+        );
+      } finally {
+        db.release();
+      }
+      vi.setSystemTime(new Date('2026-10-25T12:00:00Z'));
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
 
+    async function schedule(
+      dates: string[],
+      optional: boolean[],
+      autoShift = false,
+      sessionId = workoutSessionId
+    ) {
+      const input = body();
+      input.start_date = dates[0]!;
+      input.end_date = dates.at(-1)!;
+      input.auto_shift = autoShift;
+      input.phases = [
+        {
+          name: 'Optional progression',
+          goal: 'Keep required progression independent of accessory work',
+          weeks: [
+            {
+              start_date: input.start_date,
+              end_date: input.end_date,
+              sessions: dates.map((date, index) => ({
+                name: index === 0 ? 'C strength' : 'Conditioning',
+                scheduled_date: date,
+                workout_session_id: sessionId,
+                is_optional: optional[index]!,
+              })),
+            },
+          ],
+        },
+      ];
+      const response = await request(app)
+        .post('/api/training-programs')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send(input);
+      expect(response.status).toBe(201);
+      program = trainingProgramSchema.parse(response.body);
+      return program;
+    }
+
+    async function persistedSchedule(): Promise<
+      {
+        id: string;
+        scheduled_date: string;
+        effective_date: string;
+        is_optional: boolean;
+        status: string;
+        outcome_at: Date | null;
+        exercise_entry_id: string | null;
+        exercise_preset_entry_id: string | null;
+      }[]
+    > {
+      const db = await getSystemClient();
+      try {
+        return (
+          await db.query(
+            `SELECT id, scheduled_date::text, effective_date::text, is_optional, status,
+             outcome_at, exercise_entry_id, exercise_preset_entry_id
+           FROM training_program_sessions WHERE program_id = $1 ORDER BY id`,
+            [program.id]
+          )
+        ).rows;
+      } finally {
+        db.release();
+      }
+    }
+
+    it.each([
+      [
+        'athlete midnight',
+        '2026-10-25',
+        '2026-10-26T03:59:59.999Z',
+        '2026-10-26T04:00:00.000Z',
+      ],
+      [
+        'spring DST 23-hour day',
+        '2027-03-14',
+        '2027-03-15T03:59:59.999Z',
+        '2027-03-15T04:00:00.000Z',
+      ],
+      [
+        'fall DST 25-hour day',
+        '2026-11-01',
+        '2026-11-02T04:59:59.999Z',
+        '2026-11-02T05:00:00.000Z',
+      ],
+    ])(
+      'omits only after %s in the athlete timezone without app-open effects',
+      async (_label, date, before, boundary) => {
+        vi.setSystemTime(new Date(before));
+        await schedule([date!], [true], true);
+        expect(sessions(program)[0]).toMatchObject({
+          is_optional: true,
+          status: 'planned',
+          outcome_at: null,
+        });
+        const stored = await persistedSchedule();
+        expect(sessions(await reload())[0]!.status).toBe('planned');
+        vi.setSystemTime(new Date(boundary));
+        const omitted = await reload();
+        expect(sessions(omitted)[0]).toMatchObject({
+          status: 'omitted',
+          is_optional: true,
+          scheduled_date: date,
+          effective_date: date,
+          outcome_at: boundary,
+        });
+        vi.setSystemTime(new Date(Date.parse(boundary!) + 3 * 86400000));
+        const later = await reload();
+        expect(later).toEqual(omitted);
+        expect((await update(editable(later))).status).toBe(200);
+        expect(sessions(await reload())).toEqual(sessions(omitted));
+        expect(await persistedSchedule()).toEqual(stored);
+      }
+    );
+
+    it('uses UTC fallback without an athlete timezone preference', async () => {
+      const db = await getSystemClient();
+      try {
+        await db.query('DELETE FROM user_preferences WHERE user_id = $1', [
+          owner,
+        ]);
+      } finally {
+        db.release();
+      }
+      vi.setSystemTime(new Date('2026-10-25T23:59:59.999Z'));
+      await schedule(['2026-10-25'], [true]);
+      expect(sessions(program)[0]!.status).toBe('planned');
+      vi.setSystemTime(new Date('2026-10-26T00:00:00.000Z'));
+      expect(sessions(await reload())[0]).toMatchObject({
+        status: 'omitted',
+        outcome_at: '2026-10-26T00:00:00.000Z',
+      });
+      expect((await persistedSchedule())[0]).toMatchObject({
+        status: 'planned',
+        outcome_at: null,
+        effective_date: '2026-10-25',
+      });
+    });
+
+    it('persists explicit optionality, inherits only on creation and preserves existing overrides', async () => {
+      const plan = await createPlan({
+        plan_name: 'Structured optionality',
+        schedule_type: 'sequential',
+        entry_mode: 'prompt',
+        sessions: [
+          {
+            name: 'C',
+            day_of_week: null,
+            sort_order: 0,
+            is_optional: true,
+            assignments: [],
+          },
+          {
+            name: 'Optional in name only',
+            day_of_week: null,
+            sort_order: 1,
+            assignments: [],
+          },
+        ],
+      });
+      expect(
+        (await reloadPlan(plan.id)).sessions.map((item) => item.is_optional)
+      ).toEqual([true, false]);
+      const input = body();
+      const original = input.phases[0]!.weeks[0]!.sessions[0]!;
+      original.workout_session_id = plan.sessions[0]!.id;
+      input.phases[0]!.weeks[0]!.sessions.push({
+        ...original,
+        name: 'Explicit required',
+        is_optional: false,
+      });
+      input.phases[0]!.weeks[0]!.sessions[1]!.workout_session_id =
+        plan.sessions[1]!.id;
+      const response = await request(app)
+        .post('/api/training-programs')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send(input);
+      expect(response.status).toBe(201);
+      program = trainingProgramSchema.parse(response.body);
+      expect(sessions(program).map((item) => item.is_optional)).toEqual([
+        true,
+        false,
+        false,
+        false,
+      ]);
+      const edit = editable(program);
+      delete edit.phases[0]!.weeks[0]!.sessions[0]!.is_optional;
+      edit.phases[0]!.weeks[0]!.sessions[0]!.workout_session_id =
+        plan.sessions[1]!.id;
+      edit.phases[0]!.weeks[0]!.sessions[1]!.is_optional = true;
+      expect((await update(edit)).status).toBe(200);
+      const saved = await reload();
+      expect(sessions(saved).map((item) => item.is_optional)).toEqual([
+        true,
+        true,
+        false,
+        false,
+      ]);
+      expect(
+        (await persistedSchedule())
+          .map((item) => item.is_optional)
+          .filter(Boolean)
+      ).toHaveLength(2);
+      expect(
+        (await outcome(sessions(saved)[0]!.id, { status: 'missed' })).status
+      ).toBe(409);
+    });
+
+    it('keeps same-day optional strength before conditioning and skips omitted history without shifts or required misses', async () => {
+      await schedule(
+        ['2026-10-25', '2026-10-25', '2026-10-30'],
+        [true, false, false],
+        true
+      );
+      const cards = () => [
+        { id: planId, sessions: [{ id: workoutSessionId, assignments: [] }] },
+      ];
+      expect(
+        selectDashboardWorkoutPlans(cards(), [program]).programPlan
+          ?.training_program_session_id
+      ).toBe(sessions(program)[0]!.id);
+      const stored = await persistedSchedule();
+      vi.setSystemTime(new Date('2026-10-26T04:00:00Z'));
+      const loaded = await reload();
+      expect(
+        sessions(loaded).map((item) => [item.status, item.effective_date])
+      ).toEqual([
+        ['omitted', '2026-10-25'],
+        ['planned', '2026-10-25'],
+        ['planned', '2026-10-30'],
+      ]);
+      expect(
+        selectDashboardWorkoutPlans(cards(), [loaded]).programPlan
+          ?.training_program_session_id
+      ).toBe(sessions(loaded)[1]!.id);
+      expect(
+        (await outcome(sessions(loaded)[0]!.id, { status: 'missed' })).status
+      ).toBe(409);
+      expect(await persistedSchedule()).toEqual(stored);
+      expect(loaded.schedule_end_date).toBe('2026-10-30');
+    });
+
+    it('uses effective dates after required misses and excludes expired optional workouts from later required shifts', async () => {
+      await schedule(
+        ['2026-10-25', '2026-10-26', '2026-10-28', '2026-10-29'],
+        [false, true, false, false],
+        true
+      );
+      expect(
+        (await outcome(sessions(program)[0]!.id, { status: 'missed' })).status
+      ).toBe(200);
+      vi.setSystemTime(new Date('2026-10-27T12:00:00Z'));
+      const shifted = await reload();
+      expect(sessions(shifted)[1]).toMatchObject({
+        scheduled_date: '2026-10-26',
+        effective_date: '2026-10-27',
+        status: 'planned',
+      });
+      vi.setSystemTime(new Date('2026-10-28T04:00:00Z'));
+      expect(sessions(await reload())[1]!.status).toBe('omitted');
+      vi.setSystemTime(new Date('2026-10-29T04:00:00Z'));
+      expect(
+        (await outcome(sessions(shifted)[2]!.id, { status: 'missed' })).status
+      ).toBe(200);
+      const final = await reload();
+      expect(
+        sessions(final).map((item) => [item.status, item.effective_date])
+      ).toEqual([
+        ['missed', '2026-10-25'],
+        ['omitted', '2026-10-27'],
+        ['missed', '2026-10-29'],
+        ['planned', '2026-10-31'],
+      ]);
+      expect(
+        (await persistedSchedule()).find(
+          (item) => item.id === sessions(final)[1]!.id
+        )
+      ).toMatchObject({
+        status: 'planned',
+        effective_date: '2026-10-27',
+        is_optional: true,
+      });
+    });
+
+    it('does not shift an optional session already omitted before a late required miss', async () => {
+      await schedule(
+        ['2026-10-25', '2026-10-27', '2026-10-30'],
+        [false, true, false],
+        true
+      );
+      vi.setSystemTime(new Date('2026-10-28T04:00:00Z'));
+      const before = await reload();
+      const [missed, omitted, future] = sessions(before);
+      expect([missed!.status, omitted!.status, future!.status]).toEqual([
+        'planned',
+        'omitted',
+        'planned',
+      ]);
+
+      expect((await outcome(missed!.id, { status: 'missed' })).status).toBe(
+        200
+      );
+      const after = await reload();
+      expect(
+        sessions(after).map((session) => [
+          session.status,
+          session.effective_date,
+        ])
+      ).toEqual([
+        ['missed', '2026-10-25'],
+        ['omitted', '2026-10-27'],
+        ['planned', '2026-10-31'],
+      ]);
+      expect(
+        (await persistedSchedule()).find(
+          (session) => session.id === omitted!.id
+        )
+      ).toMatchObject({
+        is_optional: true,
+        status: 'planned',
+        effective_date: '2026-10-27',
+        outcome_at: null,
+      });
+    });
+
+    it('retains authored deload absence across omission reads and aggregate updates', async () => {
+      const input = body();
+      input.phases[0]!.weeks[0]!.sessions[0]!.is_optional = true;
+      expect((await update(input)).status).toBe(200);
+      vi.setSystemTime(new Date('2026-11-08T05:00:00Z'));
+      const saved = await reload();
+      const identities = sessions(saved).map((item) => item.id);
+      expect(saved.phases[1]!.weeks[0]!.sessions).toHaveLength(1);
+      expect(saved.phases[1]!.weeks[0]!.sessions[0]!.is_optional).toBe(false);
+      for (let repeat = 0; repeat < 2; repeat++) {
+        expect((await update(editable(await reload()))).status).toBe(200);
+        expect(sessions(await reload()).map((item) => item.id)).toEqual(
+          identities
+        );
+      }
+      expect(await persistedSchedule()).toHaveLength(3);
+    });
+
+    it.each(['preset', 'individual'] as const)(
+      'late-links an omitted optional %s workout once and rejects other users, delegates and reused links',
+      async (type) => {
+        await schedule(['2026-10-25', '2026-10-30'], [true, false], true);
+        vi.setSystemTime(new Date('2026-10-27T12:00:00Z'));
+        const first = sessions(await reload())[0]!;
+        expect(first.status).toBe('omitted');
+        const workout = await diaryWorkout(type);
+        expect(
+          (
+            await outcome(
+              first.id,
+              { status: 'completed', workout },
+              outsiderToken
+            )
+          ).status
+        ).toBe(404);
+        expect(
+          (
+            await request(app)
+              .post(
+                `/api/training-programs/${program.id}/sessions/${first.id}/outcome`
+              )
+              .set('Authorization', `Bearer ${otherToken}`)
+              .set('x-on-behalf-of-user-id', owner)
+              .send({ status: 'completed', workout })
+          ).status
+        ).toBe(403);
+        expect(
+          (
+            await outcome(first.id, {
+              status: 'completed',
+              workout: await diaryWorkout(type, other),
+            })
+          ).status
+        ).toBe(404);
+        expect(sessions(await reload())[0]).toEqual(first);
+        const linked = await outcome(first.id, {
+          status: 'completed',
+          workout,
+        });
+        expect(linked.status).toBe(200);
+        const saved = trainingProgramSchema.parse(linked.body);
+        expect(sessions(saved)[0]).toMatchObject({
+          status: 'completed',
+          is_optional: true,
+          completed_workout: workout,
+        });
+        expect(
+          (await outcome(first.id, { status: 'completed', workout })).body
+        ).toEqual(saved);
+        expect(
+          (
+            await outcome(sessions(saved)[1]!.id, {
+              status: 'completed',
+              workout,
+            })
+          ).status
+        ).toBe(409);
+        expect(
+          (
+            await outcome(first.id, {
+              status: 'completed',
+              workout: await diaryWorkout(type),
+            })
+          ).status
+        ).toBe(409);
+        expect((await outcome(first.id, { status: 'missed' })).status).toBe(
+          409
+        );
+        const persisted = (await persistedSchedule()).find(
+          (item) => item.id === first.id
+        );
+        expect(persisted).toMatchObject({
+          status: 'completed',
+          [type === 'preset'
+            ? 'exercise_preset_entry_id'
+            : 'exercise_entry_id']: workout.id,
+        });
+        expect(sessions(await reload())[1]!.effective_date).toBe('2026-10-30');
+      }
+    );
+
+    it('keeps required outcomes final and frozen late-completion prescriptions independent of library edits', async () => {
+      const exerciseId = await seedExercise();
+      const plan = await createPlan({
+        plan_name: 'Optional historical prescription',
+        schedule_type: 'sequential',
+        entry_mode: 'prompt',
+        sessions: [
+          {
+            name: 'C',
+            day_of_week: null,
+            sort_order: 0,
+            is_optional: true,
+            assignments: [
+              {
+                exercise_id: exerciseId,
+                sort_order: 0,
+                sets: prescribedSets(2),
+              },
+            ],
+          },
+        ],
+      });
+      await schedule(
+        ['2026-10-25', '2026-10-26', '2026-10-30'],
+        [true, false, false],
+        false,
+        plan.sessions[0]!.id
+      );
+      const first = sessions(program)[0]!;
+      const started = await startSession(
+        first.workout_session_id,
+        first.effective_date
+      );
+      expect(started.status).toBe(201);
+      const diary = presetSessionResponseSchema.parse(started.body.session);
+      const historical = await diaryPrescription(
+        plan.sessions[0]!.assignments[0]!.id,
+        first.effective_date
+      );
+      vi.setSystemTime(new Date('2026-10-27T12:00:00Z'));
+      expect(sessions(await reload())[0]!.status).toBe('omitted');
+      expect(
+        (
+          await outcome(first.id, {
+            status: 'completed',
+            workout: { type: 'preset', id: diary.id },
+          })
+        ).status
+      ).toBe(200);
+      const requiredMiss = sessions(program)[1]!;
+      const requiredComplete = sessions(program)[2]!;
+      expect(
+        (await outcome(requiredMiss.id, { status: 'missed' })).status
+      ).toBe(200);
+      const workout = await diaryWorkout('individual');
+      expect(
+        (await outcome(requiredComplete.id, { status: 'completed', workout }))
+          .status
+      ).toBe(200);
+      expect(
+        (
+          await outcome(requiredMiss.id, {
+            status: 'completed',
+            workout: await diaryWorkout('individual'),
+          })
+        ).status
+      ).toBe(409);
+      expect(
+        (await outcome(requiredComplete.id, { status: 'missed' })).status
+      ).toBe(409);
+      const saved = await reload();
+      const edit = planInput(await reloadPlan(plan.id));
+      edit.sessions[0]!.assignments[0]!.sets = prescribedSets(4);
+      expect(
+        (
+          await request(app)
+            .put(`/api/workout-plan-templates/${plan.id}`)
+            .set('Authorization', `Bearer ${ownerToken}`)
+            .send(edit)
+        ).status
+      ).toBe(200);
+      expect(
+        await diaryPrescription(
+          plan.sessions[0]!.assignments[0]!.id,
+          first.effective_date
+        )
+      ).toEqual(historical);
+      const diaryHistory = await request(app)
+        .get(`/api/exercise-preset-entries/${diary.id}`)
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(diaryHistory.status).toBe(200);
+      expect(
+        presetSessionResponseSchema.parse(diaryHistory.body).activity_details
+      ).toEqual(diary.activity_details);
+      expect(await reload()).toEqual(saved);
+      const rewrite = editable(saved);
+      rewrite.phases[0]!.weeks[0]!.sessions[1]!.is_optional = true;
+      expect((await update(rewrite)).status).toBe(409);
+      expect(await reload()).toEqual(saved);
+    });
+  });
 });

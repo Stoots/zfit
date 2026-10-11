@@ -20,6 +20,7 @@ const newSession = (): WorkoutPlanSession => ({
   id: generateClientId(),
   name: 'Session',
   day_of_week: null,
+  is_optional: false,
   sort_order: 0,
   assignments: [],
 });
@@ -95,6 +96,8 @@ export function useWorkoutPlanAssignments(
     changeSession(id, (s) => ({ ...s, name }));
   const setSessionDay = (id: string, day: number | null) =>
     changeSession(id, (s) => ({ ...s, day_of_week: day }));
+  const setSessionOptional = (id: string, is_optional: boolean) =>
+    changeSession(id, (s) => ({ ...s, is_optional }));
   const addSession = () =>
     setSessions((prev) => [
       ...prev,
@@ -295,6 +298,7 @@ export function useWorkoutPlanAssignments(
     assignments,
     setSessionName,
     setSessionDay,
+    setSessionOptional,
     addSession,
     removeSession,
     moveSession,

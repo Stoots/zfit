@@ -92,6 +92,12 @@ export const workoutPlanSessionItemSchema = z
     name: z.string().min(1).max(200),
     day_of_week: z.number().int().min(0).max(6).nullable().default(null),
     sort_order: z.number().int().min(0).optional(),
+    is_optional: z
+      .boolean()
+      .default(false)
+      .describe(
+        'Explicit optionality; Program bindings omit unfinished optional work after its effective day'
+      ),
     assignments: z.array(workoutPlanAssignmentItemSchema),
   })
   .strict();
@@ -99,7 +105,7 @@ export const workoutPlanSessionItemSchema = z
 export const workoutPlanSessionsInputSchema = z
   .union([z.array(workoutPlanSessionItemSchema), z.string()])
   .describe(
-    'Nested Workout Sessions as an array or JSON string: [{id?,name,day_of_week:null|0..6,sort_order?,assignments:[{id?,exercise_id?|exercise_name?|workout_preset_id?|preset_name?,sets?,preset_snapshot?}]}]. Repeated names do not group sessions.'
+    'Nested Workout Sessions as an array or JSON string: [{id?,name,day_of_week:null|0..6,sort_order?,is_optional?,assignments:[{id?,exercise_id?|exercise_name?|workout_preset_id?|preset_name?,sets?,preset_snapshot?}]}]. Repeated names do not group sessions; optionality is never inferred from names.'
   );
 
 export type WorkoutPlanSessionItemInput = z.infer<

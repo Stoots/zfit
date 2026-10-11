@@ -61,6 +61,7 @@ function fixture(): WorkoutPlanTemplate {
         id: firstId,
         name: 'A',
         day_of_week: null,
+        is_optional: false,
         sort_order: 0,
         assignments: [
           {
@@ -76,6 +77,7 @@ function fixture(): WorkoutPlanTemplate {
         id: secondId,
         name: 'A',
         day_of_week: null,
+        is_optional: false,
         sort_order: 1,
         assignments: [
           {
@@ -252,6 +254,7 @@ it('creates repeated-label sessions without sending editor UUIDs as persisted id
   act(() => {
     result.current.setSessionName(first.id, 'A');
     result.current.setSessionName(second.id, 'A');
+    result.current.setSessionOptional(second.id, true);
     result.current.handleAddExerciseOrPreset(preset, 'preset', first.id);
     result.current.handleAddExerciseOrPreset(preset, 'preset', second.id);
   });
@@ -267,6 +270,10 @@ it('creates repeated-label sessions without sending editor UUIDs as persisted id
   const payload = workoutPlanCreateRequestSchema.parse(
     JSON.parse(request.body)
   );
+  expect(payload.sessions.map((session) => session.is_optional)).toEqual([
+    false,
+    true,
+  ]);
   expect(
     payload.sessions.map((session) => [
       session.id,
@@ -305,6 +312,7 @@ it('creates repeated-label sessions without sending editor UUIDs as persisted id
 it('preserves loaded session and assignment identities while adding and reordering a new session on update', async () => {
   jest.mocked(apiCall).mockResolvedValue({ id: 17 });
   const original = fixture();
+  original.sessions[1]!.is_optional = true;
   const { result } = renderHook(() => useWorkoutPlanAssignments(original));
   act(() => result.current.addSession());
   const added = result.current.sessions[2];
@@ -329,6 +337,11 @@ it('preserves loaded session and assignment identities while adding and reorderi
   );
   if (!payload.sessions)
     throw new Error('Plan update must contain the authored sessions.');
+  expect(payload.sessions.map((session) => session.is_optional)).toEqual([
+    false,
+    true,
+    false,
+  ]);
   expect(
     payload.sessions.map((session) => [
       session.id,

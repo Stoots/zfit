@@ -78,6 +78,7 @@ export interface WorkoutPlanSession {
   id: string;
   name: string;
   day_of_week: number | null;
+  is_optional: boolean;
   sort_order: number;
   assignments: WorkoutPlanAssignment[];
 }

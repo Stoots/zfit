@@ -126,6 +126,16 @@ Quick reference of all tables by domain and purpose. For detailed security tier,
 
 All four tables use `create_owner_policy` and composite foreign keys preserve owner identity throughout the hierarchy. `training_program_sessions(workout_session_id, user_id)` references `workout_plan_sessions(id, user_id)`; a Program cannot use another user's session. The session's plan ID/name are derived display-only API fields. Removing a Program-referenced session/plan or a diary-linked assignment is refused with HTTP 409, atomically. Program deletion cascades through its hierarchy but leaves Workout Plans and their prescriptions intact.
 
+Migration `20261011120000_optional_workout_sessions.sql` adds required-by-default
+`is_optional` flags to the existing library and Program session tables. It does
+not alter ownership policies, existing identities, prescriptions or outcomes.
+New Program bindings inherit library optionality unless overridden; existing
+bindings retain their own stored flag. An uncompleted optional session past its
+effective athlete-local day is projected as `omitted`, with `outcome_at` derived
+from the next local midnight. The database retains its underlying `planned`
+status until an explicit completion link; no scheduler, diary write or automatic
+miss is involved. Required completed/missed history remains immutable.
+
 ### Measurements & Health (Tier 1/3: Owner-Only or Delegate-Write)
 
 | Table                     | Purpose                                                                                                                                                                                |

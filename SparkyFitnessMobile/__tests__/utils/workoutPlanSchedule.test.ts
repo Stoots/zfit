@@ -27,6 +27,7 @@ function session(id: string, assignmentId: number): WorkoutPlanSession {
     id,
     name: 'A',
     day_of_week: 1,
+    is_optional: false,
     sort_order: assignmentId,
     assignments: [
       {
@@ -199,6 +200,7 @@ it('relays the exact Program session rather than standalone current progression'
                   workout_session_id: secondId,
                   effective_date: '2026-10-12',
                   status: 'planned',
+                  is_optional: false,
                 },
               ],
             },
@@ -241,6 +243,7 @@ it('sends only the fixed earliest same-day Program session token', () => {
                   workout_session_id: secondId,
                   effective_date: '2026-10-12',
                   status: 'planned',
+                  is_optional: false,
                   sort_order: 0,
                 },
                 {
@@ -248,6 +251,7 @@ it('sends only the fixed earliest same-day Program session token', () => {
                   workout_session_id: firstId,
                   effective_date: '2026-10-12',
                   status: 'planned',
+                  is_optional: false,
                   sort_order: 1,
                 },
                 {
@@ -255,6 +259,7 @@ it('sends only the fixed earliest same-day Program session token', () => {
                   workout_session_id: firstId,
                   effective_date: '2026-10-19',
                   status: 'planned',
+                  is_optional: false,
                   sort_order: 0,
                 },
               ],
@@ -310,6 +315,7 @@ it('includes only owner-consistent inactive Program-bound library plans and pres
                   workout_session_id: firstId,
                   effective_date: '2026-10-12',
                   status: 'planned',
+                  is_optional: false,
                 },
               ],
             },
@@ -343,12 +349,14 @@ it('suppresses completed earliest Program sessions without promoting a later Pro
                   workout_session_id: firstId,
                   effective_date: '2026-10-12',
                   status: 'planned',
+                  is_optional: false,
                 },
                 {
                   workout_plan_id: 1,
                   workout_session_id: secondId,
                   effective_date: '2026-10-19',
                   status: 'planned',
+                  is_optional: false,
                 },
               ],
             },
@@ -365,5 +373,7 @@ it('suppresses completed earliest Program sessions without promoting a later Pro
   const entries = [
     { id: 9, exercises: [{ workout_plan_assignment_id: 1 }] },
   ] as unknown as ExerciseSessionResponse[];
-  expect(scheduledWorkoutsForWatch(dashboardPlans, entries, labels)).toEqual([]);
+  expect(scheduledWorkoutsForWatch(dashboardPlans, entries, labels)).toEqual(
+    []
+  );
 });

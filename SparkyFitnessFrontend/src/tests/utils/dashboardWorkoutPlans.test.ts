@@ -15,6 +15,7 @@ const plan = (id: string): WorkoutPlanTemplate => ({
       id: `workout-${id}`,
       name: 'A',
       day_of_week: null,
+      is_optional: false,
       sort_order: 0,
       assignments: [
         {
@@ -31,6 +32,7 @@ const plan = (id: string): WorkoutPlanTemplate => ({
       id: `later-${id}`,
       name: 'A',
       day_of_week: null,
+      is_optional: false,
       sort_order: 1,
       assignments: [
         {
@@ -58,6 +60,7 @@ const session = (
   workout_plan_name: String(planId),
   workout_session_id: `workout-${planId}`,
   workout_session_name: 'A',
+  is_optional: false,
   scheduled_date: scheduledDate,
   effective_date: date,
   status,
@@ -107,13 +110,36 @@ describe('dashboard next workout selection', () => {
     ).toEqual(['2']);
   });
 
-  it('keeps authored same-day precedence and unrelated plans in their existing order', () => {
+  it('offers same-day optional sessions in authored order and skips omitted optionals', () => {
+    const plans = ['1', '2'].map(plan);
+    const sameDayOptional = {
+      ...session(2, '2026-10-12'),
+      is_optional: true,
+    };
+    const sameDay = selectDashboardWorkoutPlans(plans, [
+      program([sameDayOptional, session(1, '2026-10-12')]),
+    ]);
+    expect(sameDay.programPlan?.id).toBe('2');
+    expect(sameDay.programPlan?.training_program_session_id).toBe(
+      sameDayOptional.id
+    );
+
+    const omitted = {
+      ...session(2, '2026-10-10', 'omitted'),
+      is_optional: true,
+    };
+    const afterOmission = selectDashboardWorkoutPlans(plans, [
+      program([omitted, session(1, '2026-10-12')]),
+    ]);
+    expect(afterOmission.programPlan?.id).toBe('1');
+  });
+
+  it('keeps unrelated plans in their existing order', () => {
     const plans = ['9', '1', '8', '2', '3'].map(plan);
-    const programs = [
+    const result = selectDashboardWorkoutPlans(plans, [
       program([session(2, '2026-10-12'), session(1, '2026-10-12')]),
       program([session(3, '2026-10-12')]),
-    ];
-    const result = selectDashboardWorkoutPlans(plans, programs);
+    ]);
     expect(result.programPlan?.id).toBe('2');
     expect(result.standalonePlans.map((p) => p.id)).toEqual(['9', '8']);
     expect(selectDashboardWorkoutPlans(plans, [])).toEqual({

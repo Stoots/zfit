@@ -81,6 +81,7 @@ export const workoutPlanSessionInputSchema = z.object({
   name: z.string().trim().min(1).max(200),
   day_of_week: z.number().int().min(0).max(6).nullable(),
   sort_order: z.number().int().nonnegative(),
+  is_optional: z.boolean().default(false),
   assignments: z.array(workoutPlanAssignmentInputSchema),
 });
 const planFields = {

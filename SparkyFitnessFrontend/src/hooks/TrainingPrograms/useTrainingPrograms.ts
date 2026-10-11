@@ -21,6 +21,8 @@ export function useTrainingProgramsList(userId?: string, enabled = true) {
     queryKey: trainingProgramKeys.list(userId),
     queryFn: getTrainingPrograms,
     enabled: enabled && !!userId,
+    staleTime: 0,
+    refetchInterval: 60_000,
   });
 }
 
@@ -42,6 +44,8 @@ export function useTrainingPrograms(
     queryKey: trainingProgramKeys.detail(userId, id),
     queryFn: () => getTrainingProgram(id!),
     enabled: enabled && !!id,
+    staleTime: 0,
+    refetchInterval: 60_000,
   });
   const plans = useQuery({
     queryKey: [...workoutPlanKeys.lists(), 'owned', userId],

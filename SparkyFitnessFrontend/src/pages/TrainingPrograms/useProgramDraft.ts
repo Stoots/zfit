@@ -48,6 +48,7 @@ function initialDraft(initial?: TrainingProgram): ProgramDraft {
               id: session.id,
               name: session.name,
               scheduled_date: session.scheduled_date,
+              is_optional: session.is_optional,
               workout_session_id: session.workout_session_id,
             })),
           })),

@@ -199,6 +199,7 @@ async function resolvePlanSessions(
       name: session.name,
       day_of_week: session.day_of_week,
       sort_order: session.sort_order ?? sessionPosition,
+      is_optional: session.is_optional,
       assignments,
     });
   }

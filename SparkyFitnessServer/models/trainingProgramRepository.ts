@@ -3,6 +3,9 @@ import type { PoolClient } from 'pg';
 import {
   compareDays,
   trainingProgramSchema,
+  isValidTimeZone,
+  instantToDay,
+  dayToUtcRange,
   type TrainingProgram,
   type TrainingProgramInput,
   type TrainingProgramOutcomeInput,
@@ -33,21 +36,39 @@ interface ProgramTreeRows {
   phases: PhaseRow[];
   weeks: WeekRow[];
   sessions: SessionRow[];
+  today: string;
+  timezone: string;
 }
 
 async function queryProgramRows(
   client: PoolClient,
   userId: string,
-  id?: string
+  id?: string,
+  now = new Date()
 ): Promise<ProgramTreeRows> {
   const programs = await client.query<ProgramRow>(
     `SELECT id, user_id, name, goal, start_date::text, end_date::text, schedule_type, auto_shift, created_at, updated_at
      FROM training_programs WHERE user_id = $1 ${id ? 'AND id = $2' : ''} ORDER BY start_date, created_at, id`,
     id ? [userId, id] : [userId]
   );
-  if (!programs.rows.length)
-    return { programs: [], phases: [], weeks: [], sessions: [] };
   const ids = programs.rows.map((program) => program.id);
+  const preferences = await client.query<{ timezone: string | null }>(
+    'SELECT timezone FROM user_preferences WHERE user_id = $1',
+    [userId]
+  );
+  const configuredZone = preferences.rows[0]?.timezone;
+  const timezone =
+    configuredZone && isValidTimeZone(configuredZone) ? configuredZone : 'UTC';
+  const today = instantToDay(now, timezone);
+  if (!programs.rows.length)
+    return {
+      programs: [],
+      phases: [],
+      weeks: [],
+      sessions: [],
+      today,
+      timezone,
+    };
   const phases = await client.query<PhaseRow>(
     'SELECT id, program_id, name, goal, sort_order FROM training_program_phases WHERE user_id = $1 AND program_id = ANY($2::uuid[]) ORDER BY sort_order, id',
     [userId, ids]
@@ -57,7 +78,7 @@ async function queryProgramRows(
     [userId, ids]
   );
   const sessions = await client.query<SessionRow>(
-    `SELECT s.id, s.program_id, s.week_id, s.name, s.scheduled_date::text, s.effective_date::text, s.status, s.outcome_at, s.completed_workout, s.workout_session_id, s.sort_order,
+    `SELECT s.id, s.program_id, s.week_id, s.name, s.scheduled_date::text, s.effective_date::text, s.status, s.is_optional, s.outcome_at, s.completed_workout, s.workout_session_id, s.sort_order,
        ws.template_id AS workout_plan_id, COALESCE(s.workout_plan_name_snapshot, p.plan_name) AS workout_plan_name,
        COALESCE(s.workout_session_name_snapshot, ws.name) AS workout_session_name
      FROM training_program_sessions s
@@ -71,17 +92,31 @@ async function queryProgramRows(
     phases: phases.rows,
     weeks: weeks.rows,
     sessions: sessions.rows,
+    today,
+    timezone,
   };
 }
 
-function assembleTrainingPrograms(rows: ProgramTreeRows): TrainingProgram[] {
+function assembleTrainingPrograms(
+  rows: ProgramTreeRows,
+  today: string,
+  timezone: string
+): TrainingProgram[] {
   const sessionGroups = new Map<string, Session[]>();
   const scheduleEnds = new Map(
     rows.programs.map((program) => [program.id, program.end_date])
   );
   for (const row of rows.sessions) {
     const group = sessionGroups.get(row.week_id) ?? [];
-    group.push({ ...row, outcome_at: row.outcome_at?.toISOString() ?? null });
+    const omitted =
+      row.is_optional && row.status === 'planned' && row.effective_date < today;
+    group.push({
+      ...row,
+      status: omitted ? 'omitted' : row.status,
+      outcome_at: omitted
+        ? dayToUtcRange(row.effective_date, timezone).end.toISOString()
+        : (row.outcome_at?.toISOString() ?? null),
+    });
     sessionGroups.set(row.week_id, group);
     if (row.effective_date > scheduleEnds.get(row.program_id)!)
       scheduleEnds.set(row.program_id, row.effective_date);
@@ -112,9 +147,11 @@ function assembleTrainingPrograms(rows: ProgramTreeRows): TrainingProgram[] {
 async function readPrograms(
   client: PoolClient,
   userId: string,
-  id?: string
+  id?: string,
+  now = new Date()
 ): Promise<TrainingProgram[]> {
-  return assembleTrainingPrograms(await queryProgramRows(client, userId, id));
+  const rows = await queryProgramRows(client, userId, id, now);
+  return assembleTrainingPrograms(rows, rows.today, rows.timezone);
 }
 
 export async function getTrainingPrograms(
@@ -185,7 +222,8 @@ function validateRecordedSessions(
           !edited ||
           edited.name !== session.name ||
           edited.scheduled_date !== session.scheduled_date ||
-          edited.workout_session_id !== session.workout_session_id
+          edited.workout_session_id !== session.workout_session_id ||
+          (edited.is_optional ?? session.is_optional) !== session.is_optional
         ) {
           throw new HttpError(
             'Recorded sessions cannot be removed or rewritten. Keep their IDs, names, authored dates and exact Workout Sessions.',
@@ -196,7 +234,6 @@ function validateRecordedSessions(
     }
   }
 }
-
 
 async function upsertProgramRow(
   client: PoolClient,
@@ -239,7 +276,9 @@ async function upsertProgramStructure(
   client: PoolClient,
   userId: string,
   programId: string,
-  input: TrainingProgramInput
+  input: TrainingProgramInput,
+  optionalBySession: ReadonlyMap<string, boolean>,
+  existingOptionalById: ReadonlyMap<string, boolean>
 ): Promise<StructureIds> {
   const ids: StructureIds = { phaseIds: [], weekIds: [], sessionIds: [] };
   for (const [p, phase] of input.phases.entries()) {
@@ -262,8 +301,8 @@ async function upsertProgramStructure(
         const sessionId = session.id ?? randomUUID();
         ids.sessionIds.push(sessionId);
         await client.query(
-          `INSERT INTO training_program_sessions (id, program_id, week_id, user_id, name, scheduled_date, effective_date, workout_session_id, sort_order) VALUES ($1,$2,$3,$4,$5,$6,$6,$7,$8)
-            ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, effective_date = CASE WHEN training_program_sessions.scheduled_date = EXCLUDED.scheduled_date THEN training_program_sessions.effective_date ELSE EXCLUDED.scheduled_date END, scheduled_date = EXCLUDED.scheduled_date, workout_session_id = EXCLUDED.workout_session_id, sort_order = EXCLUDED.sort_order, updated_at = now()`,
+          `INSERT INTO training_program_sessions (id, program_id, week_id, user_id, name, scheduled_date, effective_date, workout_session_id, is_optional, sort_order) VALUES ($1,$2,$3,$4,$5,$6,$6,$7,$8,$9)
+            ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, effective_date = CASE WHEN training_program_sessions.scheduled_date = EXCLUDED.scheduled_date THEN training_program_sessions.effective_date ELSE EXCLUDED.scheduled_date END, scheduled_date = EXCLUDED.scheduled_date, workout_session_id = EXCLUDED.workout_session_id, is_optional = EXCLUDED.is_optional, sort_order = EXCLUDED.sort_order, updated_at = now()`,
           [
             sessionId,
             programId,
@@ -272,6 +311,10 @@ async function upsertProgramStructure(
             session.name,
             session.scheduled_date,
             session.workout_session_id,
+            session.is_optional ??
+              existingOptionalById.get(sessionId) ??
+              optionalBySession.get(session.workout_session_id) ??
+              false,
             s,
           ]
         );
@@ -311,6 +354,7 @@ export async function saveTrainingProgram(
   try {
     await client.query('BEGIN');
     let existing: TrainingProgram | undefined;
+    const now = new Date();
     if (id) {
       const locked = await client.query(
         'SELECT id FROM training_programs WHERE id = $1 AND user_id = $2 FOR UPDATE',
@@ -320,7 +364,7 @@ export async function saveTrainingProgram(
         await client.query('ROLLBACK');
         return null;
       }
-      existing = (await readPrograms(client, userId, id))[0];
+      existing = (await readPrograms(client, userId, id, now))[0];
     }
     validateChildIds(input, existing);
     validateRecordedSessions(input, existing);
@@ -333,25 +377,44 @@ export async function saveTrainingProgram(
         )
       ),
     ];
+    const optionalBySession = new Map<string, boolean>();
     if (workoutSessionIds.length) {
-      const workouts = await client.query<{ id: string }>(
-        `SELECT ws.id FROM workout_plan_sessions ws JOIN workout_plan_templates p
+      const workouts = await client.query<{ id: string; is_optional: boolean }>(
+        `SELECT ws.id, ws.is_optional FROM workout_plan_sessions ws JOIN workout_plan_templates p
           ON p.id = ws.template_id AND p.user_id = ws.user_id
          WHERE ws.user_id = $1 AND ws.id = ANY($2::uuid[])
          ORDER BY p.id, ws.id FOR KEY SHARE OF p, ws`,
         [userId, workoutSessionIds]
       );
+      for (const workout of workouts.rows)
+        optionalBySession.set(workout.id, workout.is_optional);
       if (workouts.rows.length !== workoutSessionIds.length)
         throw new HttpError(
           'Every Planned Session must select one of your exact existing Workout Sessions.',
           400
         );
     }
+    const existingOptionalById = new Map(
+      (existing?.phases ?? []).flatMap((phase) =>
+        phase.weeks.flatMap((week) =>
+          week.sessions.map(
+            (session) => [session.id, session.is_optional] as const
+          )
+        )
+      )
+    );
     const programId = id ?? randomUUID();
     await upsertProgramRow(client, userId, programId, input, Boolean(id));
-    const ids = await upsertProgramStructure(client, userId, programId, input);
+    const ids = await upsertProgramStructure(
+      client,
+      userId,
+      programId,
+      input,
+      optionalBySession,
+      existingOptionalById
+    );
     await deleteRemovedChildren(client, userId, programId, ids);
-    const saved = (await readPrograms(client, userId, programId))[0]!;
+    const saved = (await readPrograms(client, userId, programId, now))[0]!;
     await client.query('COMMIT');
     return saved;
   } catch (error) {
@@ -410,17 +473,22 @@ async function lookupDiaryWorkout(
 }
 
 // Advances every still-planned session on a strictly later effective date by
-// one calendar day. Sessions sharing the missed session's own effective date
-// never move, even with a later sort_order. Recorded sessions never move.
+// one calendar day. Same-day sessions, recorded sessions, and optional
+// sessions already omitted as of the athlete's today never move.
 async function shiftLaterSessions(
   client: PoolClient,
   userId: string,
   programId: string,
-  missedEffectiveDate: string
+  missedEffectiveDate: string,
+  today: string
 ): Promise<void> {
+  // Match isOptionalProgramSessionOmitted: omission is derived for a planned
+  // optional session whose effective date is before the athlete's calendar day.
+  const movable =
+    "status = 'planned' AND effective_date > $3::date AND NOT (is_optional AND effective_date < $4::date)";
   const overflow = await client.query(
-    "SELECT id FROM training_program_sessions WHERE program_id = $1 AND user_id = $2 AND status = 'planned' AND effective_date > $3::date AND effective_date = DATE '9999-12-31'",
-    [programId, userId, missedEffectiveDate]
+    `SELECT id FROM training_program_sessions WHERE program_id = $1 AND user_id = $2 AND ${movable} AND effective_date = DATE '9999-12-31'`,
+    [programId, userId, missedEffectiveDate, today]
   );
   if (overflow.rowCount)
     throw new HttpError(
@@ -428,8 +496,8 @@ async function shiftLaterSessions(
       409
     );
   await client.query(
-    "UPDATE training_program_sessions SET effective_date = effective_date + 1, updated_at = now() WHERE program_id = $1 AND user_id = $2 AND status = 'planned' AND effective_date > $3::date",
-    [programId, userId, missedEffectiveDate]
+    `UPDATE training_program_sessions SET effective_date = effective_date + 1, updated_at = now() WHERE program_id = $1 AND user_id = $2 AND ${movable}`,
+    [programId, userId, missedEffectiveDate, today]
   );
 }
 
@@ -443,7 +511,8 @@ async function writeOutcome(
 ): Promise<void> {
   await client.query(
     `UPDATE training_program_sessions SET status = $4, outcome_at = now(), completed_workout = $5::jsonb,
-        workout_plan_name_snapshot = $6, exercise_entry_id = $7, exercise_preset_entry_id = $8, updated_at = now()
+        workout_plan_name_snapshot = $6, workout_session_name_snapshot = $7,
+        exercise_entry_id = $8, exercise_preset_entry_id = $9, updated_at = now()
        WHERE id = $1 AND program_id = $2 AND user_id = $3`,
     [
       session.id,
@@ -452,6 +521,7 @@ async function writeOutcome(
       input.status,
       workout ? JSON.stringify(workout) : null,
       session.workout_plan_name,
+      session.workout_session_name,
       input.status === 'completed' && input.workout.type === 'individual'
         ? input.workout.id
         : null,
@@ -492,16 +562,21 @@ export async function recordTrainingProgramOutcome(
   const client: PoolClient = await getClient(userId, userId);
   try {
     await client.query('BEGIN');
+    const now = new Date();
     const locked = await client.query(
       'SELECT id, auto_shift FROM training_programs WHERE id = $1 AND user_id = $2 FOR UPDATE',
       [programId, userId]
     );
     if (!locked.rowCount)
       throw new HttpError('Training Program not found.', 404);
-    const current = (await readPrograms(client, userId, programId))[0]!;
+    const current = (await readPrograms(client, userId, programId, now))[0]!;
     const session = findSession(current, sessionId);
     if (!session) throw new HttpError('Planned Session not found.', 404);
-    if (session.status !== 'planned') {
+    const lateOptionalCompletion =
+      session.status === 'omitted' &&
+      session.is_optional &&
+      input.status === 'completed';
+    if (session.status !== 'planned' && !lateOptionalCompletion) {
       const same =
         session.status === input.status &&
         (input.status === 'missed' ||
@@ -519,6 +594,8 @@ export async function recordTrainingProgramOutcome(
     if (input.status === 'completed') {
       workout = await lookupDiaryWorkout(client, userId, input.workout);
     } else {
+      if (session.is_optional)
+        throw new HttpError('Optional sessions cannot be marked missed.', 409);
       if (compareDays(session.effective_date, today) > 0)
         throw new HttpError(
           'A session scheduled after today cannot be marked missed yet.',
@@ -529,11 +606,12 @@ export async function recordTrainingProgramOutcome(
           client,
           userId,
           programId,
-          session.effective_date
+          session.effective_date,
+          today
         );
     }
     await writeOutcome(client, userId, programId, session, input, workout);
-    const saved = (await readPrograms(client, userId, programId))[0]!;
+    const saved = (await readPrograms(client, userId, programId, now))[0]!;
     await client.query('COMMIT');
     return saved;
   } catch (error) {

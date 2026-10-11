@@ -46,6 +46,7 @@ it('serializes frozen local prescriptions and persisted links without leaking cl
         id: '10000000-0000-4000-8000-000000000001',
         name: 'A',
         day_of_week: 2,
+        is_optional: true,
         sort_order: 0,
         assignments: [
           {
@@ -69,6 +70,7 @@ it('serializes frozen local prescriptions and persisted links without leaking cl
     jest.mocked(apiCall).mock.calls[0]![1]!.body as string
   );
   const assignments = payload.sessions[0].assignments;
+  expect(payload.sessions[0].is_optional).toBe(true);
   expect(assignments[0].id).toBe(101);
   expect(assignments[1].id).toBeUndefined();
   expect(assignments[0].preset_snapshot.exercises[0].id).toBeUndefined();

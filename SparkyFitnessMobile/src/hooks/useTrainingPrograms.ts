@@ -8,6 +8,7 @@ export function useTrainingPrograms(options?: { enabled?: boolean }) {
     queryKey: trainingProgramsQueryKey,
     queryFn: fetchTrainingPrograms,
     staleTime: 1000 * 60 * 5,
+    refetchInterval: 60_000,
     enabled: options?.enabled ?? true,
   });
   useRefetchOnFocus(query.refetch, options?.enabled ?? true);

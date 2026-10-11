@@ -288,10 +288,8 @@ export function useWatchCheckInBridge(enabled: boolean): void {
       ...selected.standalonePlans,
     ];
     return scheduledWorkoutsForWatch(eligible, dayExerciseEntries, {
-      scheduledToday: t(
-        'exerciseSummary.scheduledToday',
-        'Scheduled Today'
-      ),
+      optional: t('trainingPrograms.optional', 'Optional'),
+      scheduledToday: t('exerciseSummary.scheduledToday', 'Scheduled Today'),
       sessionOf: (current, total) =>
         t('exerciseSummary.sessionNumber', 'Session {{current}} of {{total}}', {
           current,

@@ -117,6 +117,14 @@ from session/plan library visibility. The composite assignment foreign key
 membership. Program references use `(workout_session_id, user_id)` and remain
 Tier 1; sharing a standalone plan never grants Program access.
 
+Session optionality does not broaden access: the library session's `is_optional`
+follows its existing Tier 2 parent-plan read/owner-write rules, while the
+Program binding's independent flag and omitted/completed history remain Tier 1.
+Omission is a read projection in the owner's RLS-scoped transaction using that
+owner's saved preference timezone, never a privileged background mutation.
+Late completion retains the existing owned-workout checks and unique link
+constraints; delegates cannot view or mutate optional Program history.
+
 Plan saves validate every supplied session/assignment/set ID in its exact parent
 location and apply changes in one transaction. They never delete/recreate linked
 assignments, unlink diary rows on a weekly-to-sequential change, or refresh
