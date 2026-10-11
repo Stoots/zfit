@@ -42,6 +42,8 @@ For effort-only changes, select **RPE** and/or **Repetitions in reserve (RIR)** 
 
 A target must be strictly future-dated in the athlete's configured timezone (UTC fallback). Every binding of a reused Workout Session must be still Planned, future-dated, in the selected Program and explicitly accounted for. A session also referenced by another Program is unavailable. Standalone targets must have no Program binding and the saved plan must have an explicit future start date and valid date range. Any diary link, including an incomplete prefill, protects the entire session from bulk editing.
 
+Bulk candidates use the same authoritative omission projection as Program history: an expired optional binding is **Omitted** and unavailable, even while its stored status remains `planned`. Both preview and apply recheck athlete-local effective dates. Bulk prescription changes never copy library optionality onto an independently overridden Program binding.
+
 Preview and cancellation write nothing. Apply retains session/assignment identities, preserves unselected fields and other exercises, and never changes recorded outcomes, completion links, diary prescriptions or performed results. It rechecks the source, targets and bindings transactionally against the preview revision, rejecting stale or completed targets atomically. Diary start and Program outcomes participate in the same locking boundary.
 
 Web plan/Program queries refresh on browser visibility/focus; mobile plan/Program queries refresh on screen focus and foreground resume. Existing in-progress workout drafts and recorded workouts retain their frozen prescription rather than being overwritten.
@@ -178,7 +180,7 @@ pnpm exec vitest run tests/trainingPrograms.integration.test.ts tests/workoutPla
 pnpm exec jest src/tests/components/TrainingPrograms.test.tsx --runInBand
 ```
 
-The bulk suite uses real Better Auth sessions and a non-superuser PostgreSQL application role. Enable it only against a disposable database named `zfit_bulk13_disposable` or `zfit_bulk13_disposable_SUFFIX` (lowercase letters, digits and underscores). The rollback scenario temporarily installs a failing trigger in that disposable database; never point it at an owner or production database.
+The bulk suite uses real Better Auth sessions and a non-superuser PostgreSQL application role. Enable it only against a disposable database named `zfit_bulk13_disposable` or `zfit_bulk13_disposable_SUFFIX`, where `SUFFIX` contains lowercase letters or digits. The rollback scenario temporarily installs a failing trigger in that disposable database; never point it at an owner or production database.
 
 ```bash
 # From SparkyFitnessServer, with that isolated database configured

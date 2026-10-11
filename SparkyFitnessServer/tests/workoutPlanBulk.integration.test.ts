@@ -5,7 +5,15 @@ import express from 'express';
 import request from 'supertest';
 // @ts-expect-error TS7016 — package has no declarations.
 import cookieParser from 'cookie-parser';
-import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
+import {
+  beforeAll,
+  afterAll,
+  beforeEach,
+  describe,
+  it,
+  expect,
+  vi,
+} from 'vitest';
 import {
   workoutPlanAssignmentInputSchema,
   workoutPlanResponseSchema,
@@ -269,6 +277,137 @@ describe.runIf(run)('persisted authenticated bulk prescription APIs', () => {
     });
     expect(created.status, JSON.stringify(created.body)).toBe(201);
     program = trainingProgramSchema.parse(created.body);
+  });
+  it('projects omitted history and preserves independent optional overrides through athlete-local future bulk apply', async () => {
+    const db = await getSystemClient();
+    const previousZone = (
+      await db.query(
+        'SELECT timezone FROM user_preferences WHERE user_id = $1',
+        [owner]
+      )
+    ).rows[0];
+    try {
+      await db.query(
+        `INSERT INTO user_preferences (user_id, timezone) VALUES ($1, 'America/Los_Angeles')
+         ON CONFLICT (user_id) DO UPDATE SET timezone = EXCLUDED.timezone`,
+        [owner]
+      );
+      await db.query(
+        'UPDATE workout_plan_sessions SET is_optional = (id = $2) WHERE template_id = $1',
+        [plan.id, plan.sessions[1]!.id]
+      );
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2026-10-11T05:00:00Z'));
+      const phase = program.phases[0]!;
+      const week = phase.weeks[0]!;
+      const dates = ['2026-10-10', '2026-10-11', '2026-10-12', '2026-10-09'];
+      const changed = await request(app)
+        .put(`/api/training-programs/${program.id}`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          name: program.name,
+          goal: program.goal,
+          start_date: '2026-10-08',
+          end_date: '2026-10-14',
+          schedule_type: 'fixed',
+          auto_shift: false,
+          phases: [
+            {
+              id: phase.id,
+              name: phase.name,
+              goal: phase.goal,
+              weeks: [
+                {
+                  id: week.id,
+                  start_date: '2026-10-08',
+                  end_date: '2026-10-14',
+                  sessions: week.sessions.map((s, i) => ({
+                    id: s.id,
+                    name: s.name,
+                    scheduled_date: dates[i],
+                    workout_session_id: s.workout_session_id,
+                    is_optional: i >= 2,
+                  })),
+                },
+              ],
+            },
+          ],
+        });
+      expect(changed.status, JSON.stringify(changed.body)).toBe(200);
+      program = trainingProgramSchema.parse(changed.body);
+      expect(planned()[3]!.status).toBe('omitted');
+      const before = await fullState();
+      const response = await request(app)
+        .get(
+          `/api/workout-plan-templates/${plan.id}/bulk-prescriptions/candidates?program_id=${program.id}`
+        )
+        .set('Authorization', `Bearer ${token}`);
+      expect(response.status).toBe(200);
+      const expired = response.body.find(
+        (c: { workout_session_id: string }) =>
+          c.workout_session_id === plan.sessions[3]!.id
+      );
+      expect(expired.eligible).toBe(false);
+      expect(expired.bindings[0].status).toBe('omitted');
+      expect(expired.bindings[0].outcome_at).toBe(planned()[3]!.outcome_at);
+      const tomorrowLocal = response.body.find(
+        (c: { workout_session_id: string }) =>
+          c.workout_session_id === plan.sessions[1]!.id
+      );
+      expect(tomorrowLocal.eligible).toBe(true);
+      const body = input();
+      body.fields = ['rpe', 'rir'];
+      const p = await preview(body);
+      const omittedRequest = {
+        ...body,
+        targets: [
+          {
+            workout_session_id: plan.sessions[3]!.id,
+            assignment_id: plan.sessions[3]!.assignments[0]!.id,
+            planned_session_ids: [planned()[3]!.id],
+          },
+        ],
+      };
+      expect((await call(`${endpoint}/preview`, omittedRequest)).status).toBe(
+        409
+      );
+      expect(
+        (
+          await call(`${endpoint}/apply`, {
+            request: omittedRequest,
+            revision: p.revision,
+          })
+        ).status
+      ).toBe(409);
+      expect(await fullState()).toEqual(before);
+      expect((await apply(p)).status).toBe(200);
+      const after = await fullState();
+      for (const [table, rows] of Object.entries(before)) {
+        if (table !== 'sets') expect(after[table]).toEqual(rows);
+      }
+      const physical = await db.query(
+        'SELECT status, outcome_at, is_optional FROM training_program_sessions WHERE id = $1',
+        [planned()[3]!.id]
+      );
+      expect(physical.rows[0]).toEqual({
+        status: 'planned',
+        outcome_at: null,
+        is_optional: true,
+      });
+    } finally {
+      vi.useRealTimers();
+      if (previousZone) {
+        await db.query(
+          'UPDATE user_preferences SET timezone = $2 WHERE user_id = $1',
+          [owner, previousZone.timezone]
+        );
+      } else {
+        await db.query('DELETE FROM user_preferences WHERE user_id = $1', [
+          owner,
+        ]);
+      }
+      db.release();
+    }
   });
   afterAll(async () => {
     const db = await getSystemClient();

@@ -11,6 +11,7 @@ import {
   workoutPlanBulkApplyRequestSchema,
   isValidTimeZone,
   todayInZone,
+  dayToUtcRange,
   type WorkoutPlanBulkRequest,
   type WorkoutPlanBulkApplyRequest,
   type WorkoutPlanBulkCandidate,
@@ -28,6 +29,7 @@ import {
 } from '@workspace/shared';
 import { createExerciseEntriesFromTemplate } from './exerciseTemplate.js';
 import { computeSequentialPlanProgression } from '../services/workoutPlanProgression.js';
+import { isOptionalProgramSessionOmitted } from '../utils/trainingProgramOptionality.js';
 
 export type {
   WorkoutPlanAssignmentInput,
@@ -789,6 +791,7 @@ async function getActiveWorkoutPlanForDate(
 
 type BulkBindingRow = WorkoutPlanBulkBinding & {
   workout_session_id: string;
+  is_optional: boolean;
   completed_workout: unknown;
   outcome_at: unknown;
   exercise_entry_id: string | null;
@@ -891,15 +894,23 @@ async function readBulkState(
     'SELECT timezone FROM user_preferences WHERE user_id = $1',
     [userId]
   );
-  const timezone = preference.rows[0]?.timezone;
-  const today = todayInZone(
-    timezone && isValidTimeZone(timezone) ? timezone : 'UTC'
-  );
+  const configuredZone = preference.rows[0]?.timezone;
+  const timezone =
+    configuredZone && isValidTimeZone(configuredZone) ? configuredZone : 'UTC';
+  const today = todayInZone(timezone);
   return {
     plan,
     sourceSession,
     persistedPrescriptions: persisted.rows,
-    bindings: bindings.rows,
+    bindings: bindings.rows.map((row) =>
+      isOptionalProgramSessionOmitted(row, today)
+        ? {
+            ...row,
+            status: 'omitted',
+            outcome_at: dayToUtcRange(row.effective_date, timezone).end,
+          }
+        : row
+    ),
     diary: diary.rows,
     today,
   };
@@ -920,6 +931,8 @@ function bulkCandidates(
     else if (bindings.some((b) => b.program_id !== programId))
       reason =
         'This Workout Session is referenced outside the selected Training Program scope.';
+    else if (bindings.some((b) => b.status === 'omitted'))
+      reason = 'This Optional Workout Session is omitted history.';
     else if (
       bindings.some(
         (b) =>

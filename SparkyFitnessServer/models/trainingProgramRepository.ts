@@ -12,6 +12,7 @@ import {
 } from '@workspace/shared';
 import { getClient } from '../db/poolManager.js';
 import { HttpError } from '../utils/errors.js';
+import { isOptionalProgramSessionOmitted } from '../utils/trainingProgramOptionality.js';
 
 type ProgramRow = Omit<
   TrainingProgram,
@@ -108,8 +109,7 @@ function assembleTrainingPrograms(
   );
   for (const row of rows.sessions) {
     const group = sessionGroups.get(row.week_id) ?? [];
-    const omitted =
-      row.is_optional && row.status === 'planned' && row.effective_date < today;
+    const omitted = isOptionalProgramSessionOmitted(row, today);
     group.push({
       ...row,
       status: omitted ? 'omitted' : row.status,

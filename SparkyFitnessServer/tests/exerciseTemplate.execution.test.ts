@@ -37,14 +37,13 @@ describe('linked completion session identity', () => {
   ])(
     'rejects $label without guessing a session',
     async ({ links, parentVisible }) => {
-      const query = vi
-        .fn()
-        .mockResolvedValueOnce({ rows: links })
-        .mockResolvedValueOnce({
-          rows: parentVisible
+      const query = vi.fn(async (_sql: string, values: unknown[]) => ({
+        rows: Array.isArray(values[0])
+          ? links
+          : parentVisible && values[0] === first
             ? [{ id: first, name: 'A', assignments: [{ id: 51 }, { id: 52 }] }]
             : [],
-        });
+      }));
       // A query-only fake deliberately supplies just the PoolClient behavior used here.
       const client = { query } as unknown as PoolClient;
       expect(
@@ -59,15 +58,16 @@ describe('linked completion session identity', () => {
       name: 'A',
       assignments: [{ id: 51 }, { id: 52 }],
     };
-    const query = vi
-      .fn()
-      .mockResolvedValueOnce({
-        rows: [
-          { id: 51, workout_session_id: second },
-          { id: 52, workout_session_id: second },
-        ],
-      })
-      .mockResolvedValueOnce({ rows: [session] });
+    const query = vi.fn(async (_sql: string, values: unknown[]) => ({
+      rows: Array.isArray(values[0])
+        ? [
+            { id: 51, workout_session_id: second },
+            { id: 52, workout_session_id: second },
+          ]
+        : values[0] === second
+          ? [session]
+          : [],
+    }));
     // A query-only fake deliberately supplies just the PoolClient behavior used here.
     const client = { query } as unknown as PoolClient;
     expect(
