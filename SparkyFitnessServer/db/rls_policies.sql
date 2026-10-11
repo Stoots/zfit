@@ -76,6 +76,7 @@ BEGIN
     'training_program_weeks',
     'training_program_sessions',
     'cardio_test_attempts',
+    'workout_program_consolidations',
     'workout_preset_exercise_sets',
     'workout_preset_exercises',
     'workout_presets',
@@ -623,6 +624,7 @@ SELECT create_owner_policy('training_programs');
 SELECT create_owner_policy('training_program_phases');
 SELECT create_owner_policy('training_program_weeks');
 SELECT create_owner_policy('training_program_sessions');
+SELECT create_owner_policy('workout_program_consolidations');
 
 -- Cardio Test Attempts are diary records and follow diary delegation.
 SELECT create_diary_policy('cardio_test_attempts');

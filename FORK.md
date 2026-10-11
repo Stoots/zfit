@@ -57,7 +57,7 @@ Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded her
 
 ### Unreleased
 
-Bug fixes
+#### Bug fixes
 
 - Show only the next pending Training Program workout on web and mobile dashboards (ordered by effective date), keeping the session picker for standalone Workout Plans and falling back to all plans if Programs fail to load.
 - Reject `missed` outcomes for future Planned Sessions so an accidental click cannot trigger an irreversible auto-shift; index Program session diary links.
@@ -67,12 +67,14 @@ Bug fixes
 #### Features
 
 - Cooper run Test Attempts: entry, edit, dated history, and trend graph on web and mobile; native acceptance pending per `agent-docs/cooper-manual-acceptance.md`.
+- Normalize stored exercise and diary exercise names with consistent capitalization (#10).
+- Bind Program Planned Sessions to exact Workout Sessions, retain session-level prescriptions and optionality, and let participants link a completed workout to the scheduled session (#11–#12).
+- Preview and apply selected future prescriptions in bulk with Program-aware conflict checks (#13).
+- Add owner-scoped Workout Plan consolidation preflight, explicit mappings, replay-safe transactions, and private rollback receipts (#14). Live cutover remains separately approval-gated.
+- Training Programs: authoring, outcomes, and optional auto-shift (issues #2, #3). See `docs/src/features/exercises/training-programs.md` and `docs/adr/`.
 
-Developer tooling
+#### Developer tooling
 
 - Add a warm-cache deployment smoke command that verifies the browser's loaded frontend asset and live upcoming-workout order, with private JSON/screenshot evidence and CI acceptance checks (`agent-docs/deployment-smoke.md`).
-- Run the Training Program integration suite in CI against Postgres; trigger CI on `shared/**` changes.
-
-### Features
-
-- Training Programs: authoring, outcomes, and optional auto-shift (issues #2, #3). See `docs/src/features/exercises/training-programs.md` and `docs/adr/`.
+- Run the Training Program integration suite in CI against Postgres; trigger consumer checks for shared-contract changes.
+- Add guarded, isolated PostgreSQL acceptance jobs for consolidation and bulk workflows; require the JSON report checker to reject missing, skipped or incomplete suites. The existing migration-check job runs the RLS matrix.

@@ -8,25 +8,31 @@ Concrete examples for testing each layer of the application. Use these patterns 
 
 | Layer | Framework | What | How | Location |
 |-------|-----------|------|-----|----------|
-| **Route** (endpoint) | Vitest + supertest | Request/response, status codes, validation errors | Mock service layer, test HTTP contract | `SparkyFitnessServer/tests/<domain>Routes.test.ts` |
-| **Service** (business logic) | Vitest | Logic, orchestration, error handling | Mock repository, test workflows | `SparkyFitnessServer/tests/<domain>Service.test.ts` |
-| **Repository** (database) | Vitest | SQL query shape, mapping | Mock `poolManager` (`getClient`) with a fake client, assert queries | `SparkyFitnessServer/tests/<domain>Repository.test.ts` |
-| **RLS Policy** (permissions) | Vitest + real test DB | Row filtering, permission inheritance, delegation | Connect via `getClient()` as the app role, seed delegated grants, query (gated on a live DB probe) | `SparkyFitnessServer/tests/rlsPermissionMatrix.integration.test.ts` |
+| **Isolated route** (endpoint) | Vitest + supertest | Request/response, status codes, validation errors | Mock service/auth boundaries, isolate HTTP behavior | `SparkyFitnessServer/tests/<domain>Routes.test.ts` |
+| **Isolated service** (business logic) | Vitest | Calculations, decisions, error handling | Mock repository, assert meaningful behavior | `SparkyFitnessServer/tests/<domain>Service.test.ts` |
+| **Repository** (database) | Vitest | Mapping, persistence invariants and errors | Existing fake-client tests isolate mapping/errors; real DB workflows prove persistence | `SparkyFitnessServer/tests/<domain>Repository.test.ts` and persisted suites below |
+| **Persisted workflow / RLS** | Vitest + disposable PostgreSQL | Authenticated workflows, transactions, identity/history preservation, owner/delegate isolation | Real auth/HTTP where applicable; non-superuser app-role reads/writes | `trainingPrograms.integration.test.ts`, `workoutPlanBulk.integration.test.ts`, `workoutProgramConsolidation.integration.test.ts`, `rlsPermissionMatrix.integration.test.ts` in server tests |
 | **React Query** (frontend) | Jest + @testing-library | Hook state, cache invalidation, error handling | Mock API module with `jest.mock`, test query lifecycle | `SparkyFitnessFrontend/src/tests/hooks/*.test.tsx` (flat) |
 | **Component** (UI) | Jest + @testing-library | Rendering, user interactions, form submission | Mock API hooks, test user flows | `SparkyFitnessFrontend/src/tests/components/` |
 | **Integration** (mobile) | Jest (jest-expo) | API calls, state updates, permissions | Mock `apiFetch`, test with real auth context | `SparkyFitnessMobile/__tests__/services/` (organized by layer) |
 
-> Note: the server suite is **Vitest**; the frontend (`ts-jest`/jsdom) and mobile (`jest-expo`) suites are **Jest** — use `jest.mock`/`jest.fn`, not `vi.*`, in those. Most repository tests **mock** `poolManager`; the only real-database + RLS round-trip is `rlsPermissionMatrix.integration.test.ts`. The examples below are illustrative — open the referenced real test for the exact harness.
+> The server uses **Vitest**; frontend (`ts-jest`/jsdom) and mobile (`jest-expo`) use **Jest**. Use each workspace's mock API. Mocked route/service/repository tests isolate behavior; they do not prove authentication, SQL execution, transactions or RLS. Multiple persisted suites exercise disposable PostgreSQL, not only the RLS matrix. Open the referenced real suite for its exact harness; examples below are illustrative.
+
+Choose assertions that catch consumer-visible regressions: values, identity,
+boundaries, transitions, precedence, rejection and atomic preservation. Compare
+full prescriptions/history where preservation is the contract. SQL text, mock
+echoes, forwarding calls, row counts alone and “did not throw” are not acceptance
+evidence. Reuse existing harnesses rather than pinning implementation details.
 
 ---
 
 ## Server-Side Testing
 
-### Route Tests (Endpoint Contract)
+### Isolated Route Tests (Endpoint Contract)
 
 **What to test:** HTTP request/response, status codes, error handling, validation.
 
-Real route tests do **not** boot the whole server or touch a database. They build a throwaway `express()` app that mounts only the router under test, then `vi.mock(...)` the repository/service layer and the auth/permission middleware so the test isolates the HTTP contract. (Real reference: `SparkyFitnessServer/tests/medicationRoutes.test.ts`.)
+**Isolated route tests** mount a router in a throwaway `express()` app and mock service/repository and auth/permission boundaries to isolate the HTTP contract (reference: `SparkyFitnessServer/tests/medicationRoutes.test.ts`). **Persisted HTTP tests** instead use real authentication and PostgreSQL to prove workflows and authorization; see `trainingPrograms.integration.test.ts` and `workoutPlanBulk.integration.test.ts`. These are different seams, not a rule that every route test avoids the database.
 
 ```typescript
 // SparkyFitnessServer/tests/medicationRoutes.test.ts (shape)
@@ -76,7 +82,7 @@ describe('Medication Routes', () => {
 **Key patterns:**
 - Mount only the router under test on a local `express()` app (don't import `SparkyFitnessServer.ts`)
 - `vi.mock` the repository/service layer and the auth/permission middleware — no real DB, no real tokens
-- v2 routes are mounted under `/api/v2/...`; auth is a `userId=` cookie in the real middleware (stubbed here)
+- Use the router's actual mounted path; stubbed `userId` is test context, not proof of session-cookie/API-key authentication
 - Test both the success path and Zod validation (400) errors
 
 ---
@@ -156,18 +162,47 @@ describe('Medication Service', () => {
 - Mock repository layer (don't call DB)
 - Test pure logic, calculations, validation
 - Test error cases with `.rejects.toThrow()`
-- Verify repository was called with correct arguments
+- Assert decisions, results and error boundaries; verify repository interactions only when they express a meaningful behavioral invariant
 
 ---
 
-### Repository & RLS Tests (Database Queries)
+### Repository, Persisted Workflow & RLS Tests
 
-There are **two** distinct kinds here:
+Existing fake-client repository tests isolate row mapping and database-error
+handling (reference: `tests/measurementRepository.test.ts`). They do not execute
+SQL; query-text assertions are not the target for new behavioral coverage.
 
-1. **Plain repository tests** (`<domain>Repository.test.ts`) — the common case. They `vi.mock('../db/poolManager.js')` with a fake `{ query: vi.fn() }` client and assert the SQL/params and row-mapping. No database runs. (Reference: `tests/measurementRepository.test.ts`.)
-2. **RLS integration test** (`rlsPermissionMatrix.integration.test.ts`) — the only real-database test. It connects as the non-superuser app role via `getClient()`, seeds users + delegated `family_access` grants, and asserts row filtering. It is **gated on a live DB probe** and skips when no database is reachable; it does **not** boot the server.
+Use these real PostgreSQL seams for persisted behavior:
 
-The RLS integration shape (note the real `family_access` column names and the quoted reserved `user` table):
+- `tests/trainingPrograms.integration.test.ts`: real Better Auth signup,
+  authenticated HTTP, persisted Program structure, outcomes and owner isolation.
+- `tests/workoutPlanBulk.integration.test.ts`: authenticated preview/apply,
+  selected-field preservation, eligibility/staleness and atomic rollback.
+- `tests/workoutProgramConsolidation.integration.test.ts` and
+  `tests/fixtures/workoutProgramConsolidation.ts`: real authenticated account
+  setup, owner-scoped repository apply, full raw graph preservation,
+  protected sources, fault/replay and journal behavior. Consolidation itself
+  is an operator repository/CLI action, not a new public HTTP endpoint.
+- `tests/rlsPermissionMatrix.integration.test.ts`: non-superuser app-role
+  row filtering across owner, delegate and unrelated-user contexts.
+
+For Program/bulk harnesses and their database gates, read
+`docs/src/features/exercises/training-programs.md` → “Focused verification”.
+For consolidation backup/restore, explicit mapping and recovery, read
+`docs/src/developer/database.md` → “Selected-Program consolidation operator
+runbook”. Start the isolated schema through normal migrations/grants/RLS before
+these suites. Keep each opt-in suite's host, database-name and environment guards
+intact; fault-trigger suites belong only in explicitly disposable databases.
+Serialize fixtures that initialize/reapply schema or RLS. A missing database,
+disabled opt-in or skipped suite is not a passing acceptance run.
+
+CI selection and fresh job-local database setup live in
+`.github/workflows/ci-tests.yml`; required-suite JSON report checks live in
+`.github/scripts/assert-acceptance-report.mjs`. Use those files as the source of
+truth for job selection and missing/skipped-case enforcement, not copied counts.
+
+The illustrative RLS shape below is not an executable seed: use the real suite's
+UUID accounts, complete schema-required fields and setup/teardown:
 
 ```typescript
 // SparkyFitnessServer/tests/rlsPermissionMatrix.integration.test.ts (shape)
@@ -479,8 +514,8 @@ describe('meals API', () => {
 |-----------|-----|-------|
 | Testing HTTP contract (status, response shape) | Route test (Vitest + supertest) | Service test (doesn't test HTTP) |
 | Testing business logic | Service test (mock repo) | Route test (too coupled to HTTP) |
-| Testing SQL query shape | Repository test (mock `poolManager`) | Service test (wrong layer) |
-| Testing RLS row filtering | `rlsPermissionMatrix.integration.test.ts` (real DB) | Service/route test (can't verify RLS) |
+| Testing persisted identity, prescriptions, outcomes or transaction rollback | Relevant authenticated disposable-DB workflow suite | SQL-text assertions or mocks that echo input |
+| Testing RLS row filtering | `rlsPermissionMatrix.integration.test.ts` (real DB) | Mocked service/route tests (cannot prove RLS) |
 | Testing React hook state | Hook test (renderHook) | Component test (too much setup) |
 | Testing component rendering & interactions | Component test (render + userEvent) | Hook test (doesn't test UI) |
 | Testing family access permissions | RLS integration test (getClient with delegation) | Route test (can't verify RLS filtering) |
@@ -489,24 +524,9 @@ describe('meals API', () => {
 
 ## Running Tests
 
-**Server:**
-```bash
-cd SparkyFitnessServer
-pnpm test                                    # Run all tests
-pnpm exec vitest run tests/medication*.test.ts  # Run specific tests
-pnpm run test:coverage                       # Coverage report
-```
-
-**Frontend (Jest):**
-```bash
-cd SparkyFitnessFrontend
-pnpm test                                    # Run all tests
-pnpm test -- useMedications                  # Filter by test name/path
-```
-
-**Mobile (Jest / jest-expo):**
-```bash
-cd SparkyFitnessMobile
-pnpm test:run -- --watchman=false --runInBand    # Run all tests
-pnpm exec jest --watchman=false __tests__/services  # A layer folder
-```
+Read the root and affected workspace `package.json` scripts for current test and
+validation commands. Choose the nearest existing behavior suite and follow its
+setup/opt-in guards; use the Program guide and consolidation runbook above for
+database workflows. `.github/workflows/ci-tests.yml` defines CI coverage and
+database setup. Jest component/mobile tests do not replace actual browser or
+native workout runtime verification.

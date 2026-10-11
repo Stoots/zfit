@@ -1,6 +1,6 @@
 # Database Security & RLS Tiers
 
-_Last updated: 2026-09-01_
+_Last updated: 2026-10-11_
 
 SparkyFitness uses PostgreSQL Row-Level Security (RLS) to enforce strict data isolation between accounts, caregivers, family members, and third-party integrations (API keys). This document covers the security design, context switching mechanism, and the three-tier database table classifications.
 
@@ -41,6 +41,7 @@ These tables contain highly sensitive credentials, API keys, SSO tokens, 2FA rec
 | `training_program_phases`               | Ordered Program Phases with goals                                                                                                                                                                                  | Owner-Only                                                | Owner-Only                                  |
 | `training_program_weeks`                | Ordered dated weeks within Program Phases                                                                                                                                                                          | Owner-Only                                                | Owner-Only                                  |
 | `training_program_sessions`             | Fixed-date Planned Sessions referencing the owner's exact Workout Sessions; plan identity/name are derived display data                                                                                            | Owner-Only                                                | Owner-Only                                  |
+| `workout_program_consolidations`         | Approved owner-scoped Program consolidation manifests and recovery/repeat receipts; no delegatable permission                                                                                                       | Owner-Only (`create_owner_policy`)                        | Owner-Only                                  |
 | `admin_activity_logs`                   | Admin action audits                                                                                                                                                                                                | Admin-Only                                                | Admin-Only                                  |
 | `ai_service_settings`                   | User-defined custom assistant configurations                                                                                                                                                                       | Owner-Only                                                | Owner-Only (Public configs readable by all) |
 | `cycle_settings`                        | Cycle & pregnancy hub settings (mode, cycle parameters, birth control, conditions)                                                                                                                                 | Owner-Only                                                | Owner-Only                                  |
@@ -59,6 +60,23 @@ These tables contain highly sensitive credentials, API keys, SSO tokens, 2FA rec
 | `openfoodfacts_product_read_rate_limit` | Singleton coordination lease and cooldown for Open Food Facts product reads, including manual previews; contains no user data or credentials                                                                       | System services only                                      | Deny all                                    |
 | `openfoodfacts_sync_queue`              | Dormant automatic Open Food Facts upload state and retained history; stores food/user identifiers and retry metadata, never provider credentials. The manual first release does not enqueue or process these rows. | System worker and owning user                             | Owner-Only                                  |
 | `rate_limit`                            | Sign-in rate limit counters shared by every server instance, keyed by client address and route; holds no account data or credentials                                                                               | Better Auth only                                          | Deny all                                    |
+
+The consolidation journal uses `create_owner_policy`, like the four Program
+hierarchy tables; neither diary/report nor exercise-library grants expose it.
+Consolidation additionally requires the owner as the actual actor and a
+non-table-owner, non-superuser, non-BYPASSRLS application database role. There is
+no public HTTP apply endpoint. A journal-referenced target plan cannot be
+deleted through the ordinary plan interface. Program deletion cascades its
+journal rows but leaves reusable plans and diary history intact. Account deletion
+retains its normal account-data cascades, including the owner's journal rows.
+The journal records an approved operation, not a full backup.
+
+The consolidated library plan retains existing library sharing rules, but is
+inactive with SQL NULL start/end dates: the owner-only Program calendar is not
+copied to family-readable plan dates. Active library/report readers and other
+outside consumers protect source sessions by requiring explicit clones rather
+than moves. See the [operator runbook](./database#selected-program-consolidation-operator-runbook)
+for private-file guards, approval and recovery boundaries.
 
 ---
 

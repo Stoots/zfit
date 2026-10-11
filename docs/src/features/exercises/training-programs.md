@@ -77,6 +77,51 @@ For example, sessions authored October 25, October 30 and November 7 become: **O
 - Recorded sessions must retain their IDs, parents, names, authored dates and exact Workout Session bindings; their effective dates, timestamps and completion snapshots are read-only. Their containing phases/weeks must remain. Order may change; goals and valid containing date ranges may be edited. An invalid or history-rewriting aggregate save is rejected atomically.
 - Outcome recording and aggregate editing lock the Program in one transaction. Concurrent duplicate misses yield one shift; duplicate completion links yield one winner and 409 for the competing link.
 
+## Consolidate a fragmented Program
+
+An operator can explicitly consolidate one existing Program's workouts into a
+single Workout Plan containing independent Workout Sessions. This is not a
+**Save Program** action or a new scheduling system. Same-label sessions retain
+their distinct sets, loads (including unspecified loads), effort, rest, notes,
+per-side instructions, frozen presets and conditioning formats. Program,
+phase, week and Planned Session identities, dates, same-day order, optional
+overrides and recorded outcomes stay intact. No workouts or absent deload
+sessions are created.
+
+The operator first reviews a read-only inventory and exact identity mapping.
+Unshared, unprotected sessions move with their Session/assignment/set IDs
+retained. Sessions still needed by another Program, standalone plan, family
+library/report reader or outside diary history are explicitly cloned; their
+original container and historical links remain. Only selected live Program
+bindings change to the clone, never recorded prescription/result snapshots.
+Old plans are removed only when individually approved and proven safely empty.
+
+The new plan is inactive, sequential and has no start/end dates: the Program
+remains the private calendar, and **Start Workout** still opens its exact bound
+session. The ordinary plan editor still refuses moves/deletes that would break
+Program or diary references; the guarded operator transaction is a separate
+reviewed exception. Its private owner-only journal also protects the target
+plan from ordinary deletion. Explicit Program deletion removes that Program's
+journal but leaves reusable plans and diary workouts intact.
+
+Each current new-apply operator mapping requires `target_day_of_week: null`;
+moves and clones clear destination weekdays for the sequential plan, while
+protected weekly sources keep their weekdays and the Program keeps its
+dates/order. An exact unchanged **recorded** manifest, including an old format,
+recovers its stored acknowledgment through owner-scoped locked journal replay
+before current write-schema validation, without reapplying data or rewriting
+the receipt. Changed recorded manifests are rejected. Only **unrecorded** old
+manifests missing the required field need fresh preflight and review; they cannot
+write through a historical-format compatibility path. See the runbook for exact
+recovery guards and local verification limits.
+
+See the [database operator runbook](../../developer/database.md#selected-program-consolidation-operator-runbook)
+for CLI guards, legacy ambiguity mapping, backup/restore, interruption recovery
+and repeat safety. Local rehearsal is not live approval. A live cutover requires
+separate authorization, public-origin cache-enabled frontend verification,
+actual supported mobile workout checks and a refreshed private Program export.
+Unavailable native runtime checks block a fully verified cutover claim.
+
 ## Privacy and deletion safety
 
 Training Programs are owner-only. Family delegates cannot view or edit them, including with diary, report or exercise-library access. Switch to your own profile first. Only your own Workout Plans and diary workouts can be referenced. Explicit owner predicates, RLS and composite foreign keys enforce isolation. Existing standalone Workout Plan sharing is unchanged.
