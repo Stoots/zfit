@@ -11,6 +11,6 @@ export function useTrainingPrograms(options?: { enabled?: boolean }) {
     refetchInterval: 60_000,
     enabled: options?.enabled ?? true,
   });
-  useRefetchOnFocus(query.refetch, options?.enabled ?? true);
+  useRefetchOnFocus(query.refetch, options?.enabled ?? true, 0, true);
   return query;
 }

@@ -23,6 +23,7 @@ export function useTrainingProgramsList(userId?: string, enabled = true) {
     enabled: enabled && !!userId,
     staleTime: 0,
     refetchInterval: 60_000,
+    refetchOnWindowFocus: 'always',
   });
 }
 
@@ -46,6 +47,7 @@ export function useTrainingPrograms(
     enabled: enabled && !!id,
     staleTime: 0,
     refetchInterval: 60_000,
+    refetchOnWindowFocus: 'always',
   });
   const plans = useQuery({
     queryKey: [...workoutPlanKeys.lists(), 'owned', userId],
@@ -54,6 +56,7 @@ export function useTrainingPrograms(
         (plan) => plan.user_id === userId
       ),
     enabled,
+    refetchOnWindowFocus: 'always',
   });
   const save = useMutation({
     mutationFn: ({

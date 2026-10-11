@@ -52,6 +52,7 @@ import { DAYS_OF_WEEK } from '@/constants/exercises';
 import { useWorkoutPlanAssignments } from '@/hooks/Exercises/useWorkoutPlanAssignments';
 import { SortableExerciseItem } from './SortableExerciseItem';
 import WorkoutPresetForm from './WorkoutPresetForm';
+import WorkoutPlanBulkDialog from './WorkoutPlanBulkDialog';
 
 interface AddWorkoutPlanDialogProps {
   isOpen: boolean;
@@ -115,6 +116,9 @@ const AddWorkoutPlanDialog = ({
   } | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [bulkDraftSessions, setBulkDraftSessions] = useState<
+    WorkoutPlanDraft['sessions'] | null
+  >(null);
   const [startDate, setStartDate] = useState(() => {
     if (initialData?.start_date) {
       return String(initialData.start_date).split('T')[0];
@@ -702,6 +706,20 @@ const AddWorkoutPlanDialog = ({
             </p>
           )}
           <DialogFooter>
+            {initialData && (
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11"
+                disabled={saving}
+                onClick={() => setBulkDraftSessions(buildSessionsForSave())}
+              >
+                {t(
+                  'workoutPlanBulk.open',
+                  'Apply prescription to future sessions…'
+                )}
+              </Button>
+            )}
             <DialogClose asChild>
               <Button variant="outline" onClick={onClose}>
                 {t('addWorkoutPlanDialog.cancelButton', 'Cancel')}
@@ -725,6 +743,27 @@ const AddWorkoutPlanDialog = ({
                 ...prescription,
               });
               setEditingPreset(null);
+            }}
+          />
+        )}
+        {initialData && bulkDraftSessions && (
+          <WorkoutPlanBulkDialog
+            plan={initialData}
+            draftSessions={bulkDraftSessions}
+            onClose={() => setBulkDraftSessions(null)}
+            onApplied={() => {
+              setBulkDraftSessions(null);
+              toast({
+                title: t(
+                  'workoutPlanBulk.applied',
+                  'Selected prescriptions applied'
+                ),
+                description: t(
+                  'workoutPlanBulk.appliedDescription',
+                  'The saved plan has refreshed. Source draft edits and other unsaved plan changes were not saved.'
+                ),
+              });
+              onClose();
             }}
           />
         )}

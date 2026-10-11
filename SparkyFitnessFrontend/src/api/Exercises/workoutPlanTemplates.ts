@@ -2,11 +2,18 @@ import { apiCall } from '@/api/api';
 import {
   workoutPlanCreateRequestSchema,
   workoutPlanUpdateRequestSchema,
+  workoutPlanBulkRequestSchema,
+  workoutPlanBulkApplyRequestSchema,
+  workoutPlanBulkCandidateSchema,
+  workoutPlanBulkPreviewSchema,
+  workoutPlanBulkApplyResponseSchema,
+  type WorkoutPlanBulkRequest,
+  type WorkoutPlanBulkApplyRequest,
 } from '@workspace/shared';
 import type { WorkoutPlanDraft, WorkoutPlanTemplate } from '@/types/workout';
 
 // Persisted integers survive edits; client-only DnD IDs are not API identities.
-function planPayload(plan: Partial<WorkoutPlanDraft>) {
+export function planPayload(plan: Partial<WorkoutPlanDraft>) {
   return {
     plan_name: plan.plan_name,
     description: plan.description,
@@ -116,3 +123,41 @@ export const getActiveWorkoutPlans = async (
   );
   return data.map((plan) => ({ ...plan, id: String(plan.id) }));
 };
+
+export async function getBulkPrescriptionCandidates(
+  planId: number,
+  programId: string | null
+) {
+  const scope = programId ? `?program_id=${encodeURIComponent(programId)}` : '';
+  const data = await apiCall(
+    `/workout-plan-templates/${planId}/bulk-prescriptions/candidates${scope}`,
+    { method: 'GET' }
+  );
+  return workoutPlanBulkCandidateSchema.array().parse(data);
+}
+
+export async function previewBulkPrescriptions(
+  request: WorkoutPlanBulkRequest
+) {
+  const data = await apiCall(
+    '/workout-plan-templates/bulk-prescriptions/preview',
+    {
+      method: 'POST',
+      body: JSON.stringify(workoutPlanBulkRequestSchema.parse(request)),
+    }
+  );
+  return workoutPlanBulkPreviewSchema.parse(data);
+}
+
+export async function applyBulkPrescriptions(
+  input: WorkoutPlanBulkApplyRequest
+) {
+  const data = await apiCall(
+    '/workout-plan-templates/bulk-prescriptions/apply',
+    {
+      method: 'POST',
+      body: JSON.stringify(workoutPlanBulkApplyRequestSchema.parse(input)),
+    }
+  );
+  return workoutPlanBulkApplyResponseSchema.parse(data);
+}

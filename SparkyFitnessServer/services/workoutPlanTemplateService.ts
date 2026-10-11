@@ -3,6 +3,8 @@ import {
   workoutPlanUpdateRequestSchema,
   type WorkoutPlanCreateRequest,
   type WorkoutPlanUpdateRequest,
+  type WorkoutPlanBulkRequest,
+  type WorkoutPlanBulkApplyRequest,
 } from '@workspace/shared';
 import workoutPlanTemplateRepository from '../models/workoutPlanTemplateRepository.js';
 import { log } from '../config/logging.js';
@@ -153,6 +155,41 @@ async function getActiveWorkoutPlanForDate(userId: string, date: string) {
     date
   );
 }
+async function getBulkPrescriptionCandidates(
+  userId: string,
+  actor: string,
+  planId: number,
+  programId: string | null
+) {
+  return workoutPlanTemplateRepository.getBulkPrescriptionCandidates(
+    userId,
+    actor,
+    planId,
+    programId
+  );
+}
+async function previewBulkPrescriptions(
+  userId: string,
+  actor: string,
+  request: WorkoutPlanBulkRequest
+) {
+  return workoutPlanTemplateRepository.previewBulkPrescriptions(
+    userId,
+    actor,
+    request
+  );
+}
+async function applyBulkPrescriptions(
+  userId: string,
+  actor: string,
+  request: WorkoutPlanBulkApplyRequest
+) {
+  return workoutPlanTemplateRepository.applyBulkPrescriptions(
+    userId,
+    actor,
+    request
+  );
+}
 export {
   createWorkoutPlanTemplate,
   getWorkoutPlanTemplatesByUserId,
@@ -160,6 +197,9 @@ export {
   updateWorkoutPlanTemplate,
   deleteWorkoutPlanTemplate,
   getActiveWorkoutPlanForDate,
+  getBulkPrescriptionCandidates,
+  previewBulkPrescriptions,
+  applyBulkPrescriptions,
 };
 export default {
   createWorkoutPlanTemplate,
@@ -168,4 +208,7 @@ export default {
   updateWorkoutPlanTemplate,
   deleteWorkoutPlanTemplate,
   getActiveWorkoutPlanForDate,
+  getBulkPrescriptionCandidates,
+  previewBulkPrescriptions,
+  applyBulkPrescriptions,
 };

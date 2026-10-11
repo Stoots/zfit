@@ -27,7 +27,7 @@ export function useActiveWorkoutPlans(
     enabled,
   });
 
-  useRefetchOnFocus(query.refetch, enabled);
+  useRefetchOnFocus(query.refetch, enabled, 0, true);
 
   return {
     plans: query.data ?? [],
@@ -51,7 +51,7 @@ export function useWorkoutPlanCandidates(
     enabled,
   });
   const programs = useTrainingPrograms({ enabled });
-  useRefetchOnFocus(library.refetch, enabled);
+  useRefetchOnFocus(library.refetch, enabled, 0, true);
   const plans = useMemo(
     () =>
       getWorkoutPlanCandidates(

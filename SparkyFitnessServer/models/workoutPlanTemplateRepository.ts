@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { PoolClient } from 'pg';
 import { getClient } from '../db/poolManager.js';
@@ -7,6 +7,15 @@ import {
   workoutPlanCreateRequestSchema,
   workoutPlanUpdateRequestSchema,
   workoutPlanPresetSnapshotSchema,
+  workoutPlanBulkRequestSchema,
+  workoutPlanBulkApplyRequestSchema,
+  isValidTimeZone,
+  todayInZone,
+  type WorkoutPlanBulkRequest,
+  type WorkoutPlanBulkApplyRequest,
+  type WorkoutPlanBulkCandidate,
+  type WorkoutPlanBulkPreview,
+  type WorkoutPlanBulkBinding,
   type WorkoutPlanAssignmentInput,
   type WorkoutPlanAssignmentSetInput,
   type WorkoutPlanAssignmentResponse,
@@ -778,6 +787,565 @@ async function getActiveWorkoutPlanForDate(
   }
 }
 
+type BulkBindingRow = WorkoutPlanBulkBinding & {
+  workout_session_id: string;
+  completed_workout: unknown;
+  outcome_at: unknown;
+  exercise_entry_id: string | null;
+  exercise_preset_entry_id: string | null;
+};
+
+interface BulkState {
+  plan: WorkoutPlanTemplateRow;
+  sourceSession?: WorkoutPlanSessionRow;
+  persistedPrescriptions: unknown[];
+  bindings: BulkBindingRow[];
+  diary: { workout_session_id: string; id: string }[];
+  today: string;
+}
+
+const bulkSetColumns: Partial<
+  Record<WorkoutPlanBulkRequest['fields'][number], string>
+> = {
+  set_type: 'set_type',
+  reps: 'reps',
+  weight: 'weight',
+  duration: 'duration',
+  distance: 'distance',
+  rest_time: 'rest_time',
+  notes: 'notes',
+};
+
+function bulkError(message: string, status: number): never {
+  throw Object.assign(new Error(message), { status });
+}
+
+function assertBulkOwner(userId: string, actor: string): void {
+  if (userId !== actor)
+    bulkError('Only the authenticated owner can bulk edit prescriptions.', 403);
+}
+
+async function readBulkState(
+  client: PoolClient,
+  userId: string,
+  planId: number,
+  programId: string | null,
+  sourceSessionId?: string
+): Promise<BulkState> {
+  const plan = (
+    await readPlans(client, 'WHERE t.id = $1 AND t.user_id = $2', [
+      planId,
+      userId,
+    ])
+  )[0];
+  if (!plan) bulkError('Workout plan not found or not owned by you.', 404);
+  let sourceSession: WorkoutPlanSessionRow | undefined;
+  const prescriptionPlanIds = [planId];
+  if (sourceSessionId) {
+    const sourcePlans = await readPlans(
+      client,
+      'WHERE t.user_id = $1 AND EXISTS (SELECT 1 FROM workout_plan_sessions ws WHERE ws.template_id = t.id AND ws.user_id = t.user_id AND ws.id = $2)',
+      [userId, sourceSessionId]
+    );
+    sourceSession = sourcePlans[0]?.sessions.find(
+      (s) => s.id === sourceSessionId
+    );
+    if (!sourceSession)
+      bulkError(
+        'Saved source Workout Session not found or not owned by you.',
+        404
+      );
+    if (sourcePlans[0]!.id !== planId)
+      prescriptionPlanIds.push(sourcePlans[0]!.id);
+  }
+  if (programId !== null) {
+    const program = await client.query(
+      'SELECT id FROM training_programs WHERE id = $1 AND user_id = $2',
+      [programId, userId]
+    );
+    if (!program.rowCount)
+      bulkError('Training Program not found or not owned by you.', 404);
+  }
+  const bindings = await client.query<BulkBindingRow>(
+    `SELECT s.*, s.effective_date::text, p.name AS program_name
+     FROM training_program_sessions s JOIN training_programs p ON p.id = s.program_id AND p.user_id = s.user_id
+     JOIN workout_plan_sessions ws ON ws.id = s.workout_session_id AND ws.user_id = s.user_id
+     WHERE ws.template_id = $1 AND ws.user_id = $2 ORDER BY s.program_id, s.id`,
+    [planId, userId]
+  );
+  const diary = await client.query<{ workout_session_id: string; id: string }>(
+    `SELECT a.workout_session_id, e.id FROM exercise_entries e
+     JOIN workout_plan_template_assignments a ON a.id = e.workout_plan_assignment_id
+     WHERE a.template_id = $1 AND a.user_id = $2 ORDER BY e.id`,
+    [planId, userId]
+  );
+  const persisted = await client.query(
+    `SELECT to_jsonb(a) AS assignment, COALESCE((
+      SELECT jsonb_agg(to_jsonb(ps) ORDER BY ps.id) FROM workout_plan_assignment_sets ps WHERE ps.assignment_id = a.id
+     ), '[]'::jsonb) AS sets
+     FROM workout_plan_template_assignments a WHERE a.template_id = ANY($1::integer[]) AND a.user_id = $2
+     ORDER BY a.template_id, a.id`,
+    [prescriptionPlanIds, userId]
+  );
+  const preference = await client.query<{ timezone: string | null }>(
+    'SELECT timezone FROM user_preferences WHERE user_id = $1',
+    [userId]
+  );
+  const timezone = preference.rows[0]?.timezone;
+  const today = todayInZone(
+    timezone && isValidTimeZone(timezone) ? timezone : 'UTC'
+  );
+  return {
+    plan,
+    sourceSession,
+    persistedPrescriptions: persisted.rows,
+    bindings: bindings.rows,
+    diary: diary.rows,
+    today,
+  };
+}
+
+function bulkCandidates(
+  state: BulkState,
+  programId: string | null
+): WorkoutPlanBulkCandidate[] {
+  return state.plan.sessions.map((session) => {
+    const bindings = state.bindings.filter(
+      (b) => b.workout_session_id === session.id
+    );
+    let reason: string | null = null;
+    if (state.diary.some((e) => e.workout_session_id === session.id))
+      reason =
+        'This Workout Session has diary history, including any prefilled workouts.';
+    else if (bindings.some((b) => b.program_id !== programId))
+      reason =
+        'This Workout Session is referenced outside the selected Training Program scope.';
+    else if (
+      bindings.some(
+        (b) =>
+          b.status !== 'planned' ||
+          b.completed_workout !== null ||
+          b.outcome_at !== null ||
+          b.exercise_entry_id !== null ||
+          b.exercise_preset_entry_id !== null
+      )
+    )
+      reason =
+        'This Workout Session has a recorded outcome or completed workout.';
+    else if (bindings.some((b) => b.effective_date <= state.today))
+      reason = 'Every Planned Session binding must be strictly in the future.';
+    else if (!bindings.length && programId !== null)
+      reason =
+        'This Workout Session is not bound to the selected Training Program.';
+    else if (
+      !bindings.length &&
+      (!state.plan.start_date ||
+        state.plan.start_date <= state.today ||
+        (state.plan.end_date !== null &&
+          state.plan.end_date < state.plan.start_date))
+    )
+      reason =
+        'Standalone bulk editing requires an explicit future plan start date and an unexpired date range.';
+    return {
+      workout_session_id: session.id,
+      name: session.name,
+      assignments: session.assignments,
+      bindings,
+      eligible: reason === null,
+      reason,
+    };
+  });
+}
+
+function exactExerciseMapping(
+  source: WorkoutPlanPresetSnapshot,
+  target: WorkoutPlanPresetSnapshot
+): void {
+  const ids = source.exercises.map((e) => e.exercise_id);
+  if (
+    !ids.length ||
+    new Set(ids).size !== ids.length ||
+    ids.some(
+      (id) =>
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          id
+        )
+    ) ||
+    ids.length !== target.exercises.length ||
+    ids.some((id, i) => id !== target.exercises[i]!.exercise_id)
+  )
+    bulkError(
+      'Preset targets require the exact ordered, unique exercise UUID mapping; no guessed matches are allowed.',
+      409
+    );
+}
+
+function copyBulkSets(
+  source: WorkoutPlanAssignmentSetInput[],
+  target: WorkoutPlanAssignmentSetInput[],
+  fields: WorkoutPlanBulkRequest['fields']
+): WorkoutPlanAssignmentSetInput[] {
+  if (
+    new Set(source.map((s) => s.set_number)).size !== source.length ||
+    new Set(target.map((s) => s.set_number)).size !== target.length
+  )
+    bulkError(
+      'Set numbers must be unique for an explicit prescription mapping.',
+      400
+    );
+  if (fields.includes('sets'))
+    return source.map((set) => {
+      const { id: _sourceId, ...prescription } = set;
+      const existing = target.find((t) => t.set_number === set.set_number);
+      return {
+        ...prescription,
+        ...(existing?.id !== undefined ? { id: existing.id } : {}),
+      };
+    });
+  const setFields = fields.filter(
+    (f) => !['workout_format', 'time_cap_seconds', 'description'].includes(f)
+  );
+  if (!setFields.length) return target;
+  if (
+    source.length !== target.length ||
+    source.some((s) => !target.some((t) => t.set_number === s.set_number))
+  )
+    bulkError(
+      'Granular set edits require the exact same set-number shape on every target.',
+      409
+    );
+  return target.map((set) => {
+    const prescribed = source.find((s) => s.set_number === set.set_number)!;
+    const result = { ...set };
+    const values: Record<string, unknown> = result;
+    for (const field of setFields) values[field] = prescribed[field] ?? null;
+    return result;
+  });
+}
+
+function bulkAfter(
+  source: WorkoutPlanAssignmentRow,
+  draft: WorkoutPlanAssignmentInput,
+  target: WorkoutPlanAssignmentRow,
+  fields: WorkoutPlanBulkRequest['fields']
+): WorkoutPlanAssignmentRow {
+  if (
+    (draft.id !== undefined && draft.id !== source.id) ||
+    draft.sort_order !== source.sort_order ||
+    (draft.exercise_id !== undefined &&
+      draft.exercise_id !== source.exercise_id) ||
+    (draft.workout_preset_id !== undefined &&
+      draft.workout_preset_id !== source.workout_preset_id)
+  )
+    bulkError(
+      'The source draft cannot change assignment identity or ordering.',
+      400
+    );
+  const result = { ...target };
+  if (source.preset_snapshot) {
+    if (
+      !draft.preset_snapshot ||
+      !target.preset_snapshot ||
+      target.exercise_id !== null ||
+      draft.preset_snapshot.id !== source.preset_snapshot.id
+    )
+      bulkError(
+        'A preset source requires a compatible local preset prescription.',
+        409
+      );
+    exactExerciseMapping(source.preset_snapshot, draft.preset_snapshot);
+    exactExerciseMapping(source.preset_snapshot, target.preset_snapshot);
+    const snapshot = { ...target.preset_snapshot };
+    for (const field of fields) {
+      if (field === 'workout_format')
+        snapshot.workout_format = draft.preset_snapshot.workout_format;
+      if (field === 'description')
+        snapshot.description = draft.preset_snapshot.description;
+      if (field === 'time_cap_seconds')
+        snapshot.time_cap_seconds =
+          draft.preset_snapshot.time_cap_seconds ?? null;
+    }
+    snapshot.exercises = target.preset_snapshot.exercises.map(
+      (exercise, i) => ({
+        ...exercise,
+        sets: copyBulkSets(
+          draft.preset_snapshot!.exercises[i]!.sets,
+          exercise.sets,
+          fields
+        ),
+      })
+    );
+    result.preset_snapshot = snapshot;
+    result.workout_preset_format = snapshot.workout_format;
+  } else {
+    if (
+      !source.exercise_id ||
+      target.exercise_id !== source.exercise_id ||
+      target.preset_snapshot ||
+      draft.preset_snapshot
+    )
+      bulkError(
+        'Individual exercise targets must reference the exact source exercise UUID.',
+        409
+      );
+    if (
+      fields.some((f) =>
+        ['workout_format', 'time_cap_seconds', 'description'].includes(f)
+      )
+    )
+      bulkError(
+        'Preset format, cap and description fields cannot be applied to an individual exercise.',
+        400
+      );
+    if (!draft.sets)
+      bulkError('The source draft must provide explicit sets.', 400);
+    result.sets = copyBulkSets(draft.sets, target.sets, fields);
+  }
+  return result;
+}
+
+function stableBulkJson(value: unknown): string {
+  if (value === null || typeof value !== 'object')
+    return JSON.stringify(value) ?? 'null';
+  if (value instanceof Date) return JSON.stringify(value.toISOString());
+  if (Array.isArray(value)) return `[${value.map(stableBulkJson).join(',')}]`;
+  return `{${Object.entries(value)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, item]) => `${JSON.stringify(key)}:${stableBulkJson(item)}`)
+    .join(',')}}`;
+}
+
+function makeBulkPreview(
+  state: BulkState,
+  request: WorkoutPlanBulkRequest
+): WorkoutPlanBulkPreview {
+  const sourceSession = state.sourceSession;
+  const source = sourceSession?.assignments.find(
+    (a) => a.id === request.source_assignment_id
+  );
+  if (!source)
+    bulkError(
+      'The saved source assignment does not belong to the selected owned Workout Session.',
+      404
+    );
+  const candidates = bulkCandidates(state, request.program_id);
+  const targets = request.targets.map((selection) => {
+    const candidate = candidates.find(
+      (c) => c.workout_session_id === selection.workout_session_id
+    );
+    if (!candidate)
+      bulkError(
+        'A target Workout Session does not belong to the selected plan.',
+        404
+      );
+    if (!candidate.eligible)
+      bulkError(`${candidate.name}: ${candidate.reason}`, 409);
+    const selectedIds = [...selection.planned_session_ids].sort();
+    const actualIds = candidate.bindings.map((b) => b.id).sort();
+    if (!isDeepStrictEqual(selectedIds, actualIds))
+      bulkError(
+        'Explicitly account for every Planned Session binding of each target; refresh the selection.',
+        409
+      );
+    const before = candidate.assignments.find(
+      (a) => a.id === selection.assignment_id
+    );
+    if (!before)
+      bulkError(
+        'A target assignment does not belong to the selected Workout Session.',
+        404
+      );
+    return {
+      workout_session_id: candidate.workout_session_id,
+      name: candidate.name,
+      bindings: candidate.bindings,
+      before,
+      after: bulkAfter(source, request.prescription, before, request.fields),
+    };
+  });
+  const revision = createHash('sha256')
+    .update(
+      stableBulkJson({
+        request,
+        sourceSession,
+        targets,
+        plan: state.plan,
+        persistedPrescriptions: state.persistedPrescriptions,
+        bindings: state.bindings,
+        diary: state.diary,
+      })
+    )
+    .digest('hex');
+  return { request, revision, targets };
+}
+
+async function getBulkPrescriptionCandidates(
+  userId: string,
+  actor: string,
+  planId: number,
+  programId: string | null
+): Promise<WorkoutPlanBulkCandidate[]> {
+  assertBulkOwner(userId, actor);
+  const client = await getClient(userId, actor);
+  try {
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    const candidates = bulkCandidates(
+      await readBulkState(client, userId, planId, programId),
+      programId
+    );
+    await client.query('COMMIT');
+    return candidates;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function previewBulkPrescriptions(
+  userId: string,
+  actor: string,
+  input: WorkoutPlanBulkRequest
+): Promise<WorkoutPlanBulkPreview> {
+  assertBulkOwner(userId, actor);
+  const request = workoutPlanBulkRequestSchema.parse(input);
+  const client = await getClient(userId, actor);
+  try {
+    await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+    const preview = makeBulkPreview(
+      await readBulkState(
+        client,
+        userId,
+        request.plan_id,
+        request.program_id,
+        request.source_session_id
+      ),
+      request
+    );
+    await client.query('COMMIT');
+    return preview;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function applyBulkPrescriptions(
+  userId: string,
+  actor: string,
+  input: WorkoutPlanBulkApplyRequest
+) {
+  assertBulkOwner(userId, actor);
+  const { request, revision } = workoutPlanBulkApplyRequestSchema.parse(input);
+  const client: PoolClient = await getClient(userId, actor);
+  try {
+    await client.query('BEGIN');
+    // Program authoring/outcomes lock Program before plan/session. Lock all of
+    // this owner's Programs first, including those that might add a binding,
+    // rather than reversing that order after acquiring a plan lock.
+    await client.query(
+      'SELECT id FROM training_programs WHERE user_id = $1 ORDER BY id FOR UPDATE',
+      [userId]
+    );
+    const plan = await client.query<{ id: number }>(
+      `SELECT t.id FROM workout_plan_templates t WHERE t.user_id = $2 AND
+      (t.id = $1 OR EXISTS (SELECT 1 FROM workout_plan_sessions ws WHERE ws.template_id = t.id AND ws.user_id = t.user_id AND ws.id = $3))
+      ORDER BY t.id FOR UPDATE`,
+      [request.plan_id, userId, request.source_session_id]
+    );
+    if (!plan.rows.some((p) => p.id === request.plan_id))
+      bulkError('Workout plan not found or not owned by you.', 404);
+    const planIds = plan.rows.map((p) => p.id);
+    await client.query(
+      'SELECT id FROM workout_plan_sessions WHERE template_id = ANY($1::integer[]) AND user_id = $2 ORDER BY template_id, id FOR UPDATE',
+      [planIds, userId]
+    );
+    await client.query(
+      'SELECT id FROM workout_plan_template_assignments WHERE template_id = ANY($1::integer[]) AND user_id = $2 ORDER BY template_id, id FOR UPDATE',
+      [planIds, userId]
+    );
+    await client.query(
+      `SELECT ps.id FROM workout_plan_assignment_sets ps JOIN workout_plan_template_assignments a ON a.id = ps.assignment_id
+      WHERE a.template_id = ANY($1::integer[]) AND a.user_id = $2 ORDER BY a.template_id, ps.id FOR UPDATE OF ps`,
+      [planIds, userId]
+    );
+    await client.query(
+      `SELECT s.id FROM training_program_sessions s JOIN workout_plan_sessions ws ON ws.id = s.workout_session_id
+      WHERE ws.template_id = $1 AND ws.user_id = $2 ORDER BY s.program_id, s.id FOR UPDATE OF s`,
+      [request.plan_id, userId]
+    );
+    const preview = makeBulkPreview(
+      await readBulkState(
+        client,
+        userId,
+        request.plan_id,
+        request.program_id,
+        request.source_session_id
+      ),
+      request
+    );
+    if (preview.revision !== revision)
+      bulkError(
+        'The source, targets or their bindings changed after preview. Create a new preview.',
+        409
+      );
+    // All validation above completes before the first write. Assignment locks
+    // also conflict with the diary FK's key-share lock for new history links.
+    for (const target of preview.targets) {
+      if (target.after.preset_snapshot) {
+        await client.query(
+          'UPDATE workout_plan_template_assignments SET preset_snapshot = $2::jsonb WHERE id = $1',
+          [target.after.id, JSON.stringify(target.after.preset_snapshot)]
+        );
+      } else if (request.fields.includes('sets')) {
+        await saveAssignmentSets(client, target.after.id, target.after.sets);
+      } else {
+        // Canonical reads contain column-derived nulls absent from the authored
+        // JSON. Patch selected keys only; do not normalize untargeted storage.
+        const selected = request.fields.map((field) => {
+          const column = bulkSetColumns[field];
+          if (!column) invalid('Unsupported individual set field.');
+          return { field, column };
+        });
+        for (const set of target.after.sets) {
+          const patch = Object.fromEntries(
+            selected.map(({ field }) => [field, set[field] ?? null])
+          );
+          const updated = await client.query(
+            `UPDATE workout_plan_assignment_sets SET prescription = prescription || $3::jsonb,
+             ${selected.map(({ column }, index) => `${column} = $${index + 4}`).join(', ')}
+             WHERE id = $1 AND assignment_id = $2 RETURNING id`,
+            [
+              set.id,
+              target.after.id,
+              JSON.stringify(patch),
+              ...selected.map(({ field }) => patch[field]),
+            ]
+          );
+          if (!updated.rowCount)
+            conflict('A selected set changed during apply.');
+        }
+      }
+    }
+    const saved = (
+      await readPlans(client, 'WHERE t.id = $1 AND t.user_id = $2', [
+        request.plan_id,
+        userId,
+      ])
+    )[0]!;
+    await client.query('COMMIT');
+    return { plan: saved };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    translateIntegrityError(error);
+  } finally {
+    client.release();
+  }
+}
+
 export {
   createWorkoutPlanTemplate,
   getWorkoutPlanTemplatesByUserId,
@@ -786,6 +1354,9 @@ export {
   deleteWorkoutPlanTemplate,
   getWorkoutPlanTemplateOwnerId,
   getActiveWorkoutPlanForDate,
+  getBulkPrescriptionCandidates,
+  previewBulkPrescriptions,
+  applyBulkPrescriptions,
 };
 export default {
   createWorkoutPlanTemplate,
@@ -795,4 +1366,7 @@ export default {
   deleteWorkoutPlanTemplate,
   getWorkoutPlanTemplateOwnerId,
   getActiveWorkoutPlanForDate,
+  getBulkPrescriptionCandidates,
+  previewBulkPrescriptions,
+  applyBulkPrescriptions,
 };

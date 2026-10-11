@@ -20,6 +20,31 @@ async function getWorkoutSessionForExecution(
 ): Promise<WorkoutPlanSessionResponse | null> {
   const client: PoolClient = transactionClient ?? (await getClient(userId));
   try {
+    if (transactionClient) {
+      // Freeze the saved prescription before a logging transaction reads it.
+      // Bulk apply and ordinary authorship take these parents in the same
+      // plan -> session -> assignment -> set order. Without this read lock,
+      // a start could read an old draft, wait on the diary FK, then log it
+      // after a newly applied prescription had already committed.
+      await client.query(
+        `SELECT t.id FROM workout_plan_templates t JOIN workout_plan_sessions s ON s.template_id = t.id
+         WHERE s.id = $1 FOR SHARE OF t`,
+        [sessionId]
+      );
+      await client.query(
+        'SELECT id FROM workout_plan_sessions WHERE id = $1 FOR SHARE',
+        [sessionId]
+      );
+      await client.query(
+        'SELECT id FROM workout_plan_template_assignments WHERE workout_session_id = $1 ORDER BY id FOR SHARE',
+        [sessionId]
+      );
+      await client.query(
+        `SELECT ps.id FROM workout_plan_assignment_sets ps JOIN workout_plan_template_assignments a ON a.id = ps.assignment_id
+         WHERE a.workout_session_id = $1 ORDER BY ps.id FOR SHARE OF ps`,
+        [sessionId]
+      );
+    }
     const result = await client.query<WorkoutPlanSessionResponse>(
       `SELECT s.*,
         COALESCE((

@@ -30,6 +30,7 @@ export const useWorkoutPlanTemplates = (userId?: string) => {
       return plans.sort((a, b) => a.plan_name.localeCompare(b.plan_name));
     },
     enabled: !!userId,
+    refetchOnWindowFocus: 'always',
     meta: {
       errorMessage: t(
         'workoutPlansManager.failedToLoadPlans',
@@ -46,6 +47,7 @@ export const useActiveWorkoutPlans = (date?: string, userId?: string) => {
     queryKey: workoutPlanKeys.active(queryDate),
     queryFn: () => getActiveWorkoutPlans(queryDate),
     enabled: !!userId,
+    refetchOnWindowFocus: 'always',
     meta: {
       errorMessage: t(
         'workoutPlansManager.failedToLoadActivePlan',

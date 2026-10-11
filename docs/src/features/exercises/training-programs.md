@@ -26,6 +26,24 @@ Frozen execution retains all prescribed exercise/set data, effort, rest, distanc
 
 Unlike a live library-preset start, a frozen Workout Session is not expanded to a generic EMOM/Tabata round count on load. Its authored sets stay exact; the single-format timer and frozen cap still run. For example, one authored EMOM set with a 120-second cap opens and saves one set, not two cloned sets.
 
+### Apply selected prescription changes to future sessions
+
+Ordinary **Save Plan** remains session-local; matching A/B names never expand an edit. For an intentional batch, edit an existing Workout Plan and choose **Apply prescription to future sessions…**:
+
+1. Choose one saved source assignment from the current draft. Unsaved source prescription edits can supply the copied values; this action does not save the source or other draft edits.
+2. Explicitly choose one Training Program or **Standalone sessions only**. Targets stay inside the open plan; no other plan or Program is silently included.
+3. Select the fields to copy. For each target, choose its exact assignment and separately check **Include this target**. Session UUIDs, Program identities and all dated bindings distinguish same-name sessions.
+4. Choose **Preview selected changes** and inspect every target's exercise UUID and selected before/after values. **Cancel preview** returns to selection without saving anything.
+5. Confirm the exact batch. Success refreshes the saved plan and closes the editor, discarding the other unsaved draft edits. A conflict requires a new preview; no part of an invalid batch is saved.
+
+Granular set edits require identical set numbers. Individual assignments require the same exercise UUID; frozen presets require the same ordered exercise UUIDs. Incompatible mappings are reported, never inferred from names. **Whole set collection** explicitly replaces all authored set data, including effort, notes and additional prescription fields. Preset format, time cap and description can be selected independently; unselected preset metadata remains unchanged.
+
+A target must be strictly future-dated in the athlete's configured timezone (UTC fallback). Every binding of a reused Workout Session must be still Planned, future-dated, in the selected Program and explicitly accounted for. A session also referenced by another Program is unavailable. Standalone targets must have no Program binding and the saved plan must have an explicit future start date and valid date range. Any diary link, including an incomplete prefill, protects the entire session from bulk editing.
+
+Preview and cancellation write nothing. Apply retains session/assignment identities, preserves unselected fields and other exercises, and never changes recorded outcomes, completion links, diary prescriptions or performed results. It rechecks the source, targets and bindings transactionally against the preview revision, rejecting stale or completed targets atomically. Diary start and Program outcomes participate in the same locking boundary.
+
+Web plan/Program queries refresh on browser visibility/focus; mobile plan/Program queries refresh on screen focus and foreground resume. Existing in-progress workout drafts and recorded workouts retain their frozen prescription rather than being overwritten.
+
 ## Completion and missed history
 
 Every session starts **Planned**. Optional sessions become **Omitted** after their effective scheduled day ends in the athlete's saved preference timezone (UTC when absent or invalid). The API derives this status and the next-local-midnight boundary when reading history; it does not require opening the app, a background job or a persisted miss. Spring/fall DST days use their real 23/25-hour local boundaries. In the Program detail view:
@@ -130,6 +148,22 @@ Errors use `{ "error": "message" }`: invalid input/reference → 400; unauthenti
 
 Nested plan requests use `sessions: [{ id?, name, day_of_week, sort_order, is_optional, assignments }]`; `is_optional` defaults to `false`, and assignments contain an exercise or frozen preset prescription. New session IDs are server-generated. The exact standalone execution endpoint is `POST /api/workout-plan-templates/sessions/:workoutSessionId/start` with `{ "entry_date": "YYYY-MM-DD" }`. Shared plan contracts live in `shared/src/schemas/api/WorkoutPlans.api.zod.ts`. The generic legacy upgrade refuses ambiguous whole-plan Program references until an operator provides an explicit per-Planned-Session mapping; see [database migration guidance](../../developer/database.md#workout-session-cutover-preflight-and-explicit-mapping). This is not selected-Program consolidation or permission to deploy the cutover.
 
+### Bulk prescription HTTP interface
+
+These endpoints are owner-only, including when an existing Workout Plan has sharing permissions. Authentication uses the same session-cookie/API-key layer; delegated acting-user contexts are rejected.
+
+| Method | Path                                                                            | Result                                                                                                                     |
+| ------ | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/api/workout-plan-templates/:id/bulk-prescriptions/candidates?program_id=UUID` | Exact sessions, assignments, all dated bindings, eligibility and rejection reasons; omit `program_id` for standalone scope |
+| POST   | `/api/workout-plan-templates/bulk-prescriptions/preview`                        | Read-only canonical request, revision and per-target before/after prescriptions                                            |
+| POST   | `/api/workout-plan-templates/bulk-prescriptions/apply`                          | Atomic confirmed apply; returns `{ plan }` with the canonical saved plan                                                   |
+
+Preview accepts `{ plan_id, program_id, source_session_id, source_assignment_id, prescription, fields, targets }`. `program_id` is the explicit Program UUID or `null` for standalone. `prescription` uses the ordinary assignment input contract (including `sort_order`). Each target is `{ workout_session_id, assignment_id, planned_session_ids }`; supply every binding UUID for that session, or an empty array for an unbound standalone session. Select at most 100 distinct target sessions.
+
+Selectable fields are `sets` (the entire set collection), `set_type`, `reps`, `weight`, `duration`, `distance`, `rest_time`, `notes`, and, for frozen presets, `workout_format`, `time_cap_seconds`, `description`. Send the preview's exact `{ request, revision }` back to apply. Changing the request or any saved source/target/binding state invalidates confirmation; revisions conservatively include the enclosing plan, so another plan edit may also require a fresh preview.
+
+Invalid requests return 400; unauthenticated access 401; delegated context 403; missing or foreign scope 404; stale, incompatible, nonfuture, recorded or wrong-scope targets 409. Database failures roll back every target. Contracts are exported from `shared/src/schemas/api/WorkoutPlanBulk.api.zod.ts`; no database migration is required.
+
 ## Focused verification
 
 Start the server against an isolated PostgreSQL database first so migrations and RLS are applied. Integration tests use real Better Auth sessions, HTTP routes, repositories and the non-superuser application role. They skip explicitly if the database probe fails. Run backend fixtures **serially**, including the full suite, to avoid concurrent migration/RLS setup deadlocks.
@@ -140,4 +174,11 @@ pnpm exec vitest run tests/trainingPrograms.integration.test.ts tests/workoutPla
 
 # From SparkyFitnessFrontend
 pnpm exec jest src/tests/components/TrainingPrograms.test.tsx --runInBand
+```
+
+The bulk suite uses real Better Auth sessions and a non-superuser PostgreSQL application role. Enable it only against a disposable database named `zfit_bulk13_disposable` or `zfit_bulk13_disposable_SUFFIX` (lowercase letters, digits and underscores). The rollback scenario temporarily installs a failing trigger in that disposable database; never point it at an owner or production database.
+
+```bash
+# From SparkyFitnessServer, with that isolated database configured
+RUN_BULK_PRESCRIPTION_DB=1 pnpm exec vitest run tests/workoutPlanBulk.integration.test.ts --no-file-parallelism
 ```
