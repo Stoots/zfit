@@ -1722,7 +1722,7 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
           {
             id: 1,
             exercise_id: exerciseId,
-            exercise_name: 'Dumbbell split squat',
+            exercise_name: 'dumbbell split squat',
             category: 'Strength',
             modality: 'weight_reps' as const,
             image_url: null,
@@ -1756,6 +1756,15 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
             })),
           },
         ],
+      };
+      const normalizedSnapshot = {
+        ...snapshot,
+        exercises: snapshot.exercises.map((exercise) => ({
+          ...exercise,
+          exercise_name:
+            exercise.exercise_name.slice(0, 1).toUpperCase() +
+            exercise.exercise_name.slice(1),
+        })),
       };
       const plan = await createPlan({
         plan_name: `Standalone frozen ${schedule_type}`,
@@ -1792,7 +1801,7 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
       }
       const loaded = await reloadPlan(plan.id);
       const assignment = loaded.sessions[0]!.assignments[0]!;
-      expect(assignment.preset_snapshot).toEqual(snapshot);
+      expect(assignment.preset_snapshot).toEqual(normalizedSnapshot);
       expect(assignment.workout_preset_name).toBe(snapshot.name);
       expect(assignment.workout_preset_format).toBe(snapshot.workout_format);
       const started = await startSession(loaded.sessions[0]!.id, '2026-10-25');
@@ -1807,19 +1816,19 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
       expect(startedWorkout.name).toBe('A');
       expect(startedWorkout.exercises).toHaveLength(1);
       expect(startedWorkout.exercises[0]?.exercise_snapshot?.name).toBe(
-        snapshot.exercises[0]!.exercise_name
+        normalizedSnapshot.exercises[0]!.exercise_name
       );
       const frozenPrescription = startedWorkout.activity_details.find(
         (detail) => detail.detail_type === 'workout_plan_prescription'
       );
       expect(frozenPrescription?.detail_data).toMatchObject({
         workout_session_id: loaded.sessions[0]!.id,
-        assignments: [{ preset_snapshot: snapshot }],
+        assignments: [{ preset_snapshot: normalizedSnapshot }],
       });
       const logged = await diaryPrescription(assignment.id, '2026-10-25');
       expect(logged).toHaveLength(1);
       expect(logged[0].entry.exercise_name).toBe(
-        snapshot.exercises[0]!.exercise_name
+        normalizedSnapshot.exercises[0]!.exercise_name
       );
       expect(logged[0].sets).toMatchObject(
         snapshot.exercises[0]!.sets.map(
@@ -1868,7 +1877,7 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
         orphaned.sessions[0]!.assignments[0]!.workout_preset_id
       ).toBeNull();
       expect(orphaned.sessions[0]!.assignments[0]!.preset_snapshot).toEqual(
-        snapshot
+        normalizedSnapshot
       );
       const afterDelete = await startSession(
         orphaned.sessions[0]!.id,
@@ -1884,7 +1893,9 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
       });
       expect(afterDeleteWorkout.exercises).toHaveLength(1);
       expect(afterDeleteWorkout.exercises[0]).toMatchObject({
-        exercise_snapshot: { name: snapshot.exercises[0]!.exercise_name },
+        exercise_snapshot: {
+          name: normalizedSnapshot.exercises[0]!.exercise_name,
+        },
         workout_plan_assignment_id: assignment.id,
         sets: snapshot.exercises[0]!.sets.map(
           ({ id: _id, rep_range: _range, effort: _effort, ...set }) => set
@@ -1894,7 +1905,9 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
         afterDeleteWorkout.activity_details.find(
           (detail) => detail.detail_type === 'workout_plan_prescription'
         )?.detail_data
-      ).toMatchObject({ assignments: [{ preset_snapshot: snapshot }] });
+      ).toMatchObject({
+        assignments: [{ preset_snapshot: normalizedSnapshot }],
+      });
       expect(await diaryPrescription(assignment.id, '2026-10-25')).toEqual(
         logged
       );

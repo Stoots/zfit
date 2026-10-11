@@ -322,7 +322,7 @@ The migration system:
 
 1. **Checks current database version** on startup
 2. **Applies pending migrations** in order
-3. **Tracks applied migrations** in the `migrations` table
+3. **Tracks applied migrations** in `system.schema_migrations`
 4. **Logs migration results** for debugging
 
 `SparkyFitnessServer/index.ts` loads configuration, awaits database initialization
@@ -359,6 +359,33 @@ Example: `20240315103000_add_exercise_tracking.sql`
 3. **`db_schema_backup.sql` updates itself** — after merge, CI regenerates it from the migrations and opens an automated sync PR; never edit it by hand
 
 4. **Apply RLS policies** (these are reapplied automatically on startup from `db/rls_policies.sql`)
+
+### Exercise-name capitalisation migration
+
+`20261011101000_normalize_exercise_name_initial.sql` corrects `public.exercises.name` and `public.exercise_entries.exercise_name` in one transaction. Each historical label is transformed from its own stored value, including entries with a deleted parent. Only those two label columns change: IDs, owners, provider identifiers, relationships, prescriptions, results, raw provider details and audit timestamps remain intact. Already-normalized rows are not updated on a repeat run.
+
+`public.normalize_exercise_name_initial(text)` uses PostgreSQL's `upper(left(value, 1)) || substring(value FROM 2)`. It preserves the remaining text; NULL, empty strings, leading whitespace and non-letter initial characters are not trimmed or rewritten. Case conversion follows the database locale.
+
+Invoker-rights `BEFORE INSERT OR UPDATE OF` triggers enforce the rule at the existing library and diary persistence boundaries. They do not grant permissions or bypass RLS. No new tables, columns, Zod contracts, sharing rules or security tiers are introduced; existing web/mobile API responses carry the stored names. Plan/preset exercise labels continue to read the library through their existing joins.
+
+Exact name-based repository lookups normalize the incoming initial character without changing the rest of their matching rules or user scope. Garmin retains matching-only fallbacks for older title-cased/uppercase provider names without rewriting the matched exercise; newly authored provider labels retain acronym/proper-name casing. Provider IDs and raw detail payloads are unchanged.
+
+#### Disposable rehearsal and rollback
+
+1. Back up the database and matching application version **before** applying this migration. Restrict access to backups: a real installation contains private health data and credentials. Uppercasing is not reversible, so do not attempt a generic lowercase rollback.
+2. Restore into a disposable PostgreSQL database with a name containing `test`, point both owner and application connection settings at that isolated database, and disable scheduled jobs. Never run these regression suites or the broad migration runner against a live installation.
+3. Run the normal startup migration/RLS path (the server's `test:migrations` script is also available for a disposable rehearsal). Compare full library/snapshot rows and related prescription/result tables against the backup, allowing only each row's own initial label character to change. Include renamed and deleted parents.
+4. From `SparkyFitnessServer`, explicitly opt in to the real-database regressions:
+   ```bash
+   SPARKY_FITNESS_RUN_NAME_MIGRATION_TEST=1 pnpm exec vitest run \
+     tests/exerciseNameMigration.integration.test.ts \
+     tests/exerciseNameCapitalisation.integration.test.ts \
+     --no-file-parallelism
+   ```
+   Both suites require reachable PostgreSQL; the write/read suite additionally requires the migrated schema and configured application role. Fixtures are synthetic and cleaned up. The migration suite exercises repeat runs and an injected failure after library correction to prove transaction rollback.
+5. Rehearse full backup restore into another disposable database, verifying original labels, non-name data and pre-upgrade migration/schema state. For an authorized deployment rollback, stop writers, restore the pre-migration backup and matching application version, and verify before restarting. Do not drop the normalizer while running application queries that depend on it. Changes made after the backup require a separate recovery decision.
+
+Before any approved deployment, exercise the actual library and diary with a new lowercase-first write/import and retained historical wording. Follow the frontend deployment smoke gate in [Troubleshooting](./troubleshooting) for live rollout; a disposable local smoke does not authorize or prove production deployment.
 
 ### Migration Best Practices
 

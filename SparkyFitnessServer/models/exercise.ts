@@ -1159,7 +1159,7 @@ async function findExerciseByNameAndUserId(name: any, userId: any) {
               primary_muscles, secondary_muscles, instructions, category, images,
               calories_per_hour, description, user_id, is_custom, shared_with_public,
               modality, created_at, updated_at
-       FROM exercises WHERE name = $1 AND (user_id = $2 OR shared_with_public = TRUE)`,
+       FROM exercises WHERE name = public.normalize_exercise_name_initial($1) AND (user_id = $2 OR shared_with_public = TRUE)`,
       [name, userId]
     );
     const exercise = result.rows[0];

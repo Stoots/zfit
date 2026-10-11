@@ -1,6 +1,7 @@
 import { log } from '../../config/logging.js';
 import exerciseRepository from '../../models/exercise.js';
 import { deriveExerciseModality } from '@workspace/shared';
+import { formatProviderExerciseName } from '../../utils/exerciseName.js';
 
 const GARMIN_CARDIO_CATEGORY_INDICATORS = [
   'running',
@@ -178,26 +179,12 @@ export function mapGarminExerciseCategory(rawCategory: unknown): string {
   return 'general';
 }
 
-/**
- * Formats an exercise name to Title Case.
- * Example: "LEG_CURL" -> "Leg Curl", "LEG CURL" -> "Leg Curl"
- */
+/** Formats provider exercise labels using readable casing and known acronyms. */
 export function formatExerciseName(name: string): string {
-  if (!name) return 'Unknown Exercise';
-
-  return name
-    .replace(/_/g, ' ')
-    .toLowerCase()
-    .split(' ')
-    .filter((word) => word.length > 0)
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(' ');
+  return formatProviderExerciseName(name);
 }
 
-/**
- * Gets an existing exercise or creates a new one, ensuring name is Title Case
- * and handling potential duplicates from previous Garmin imports.
- */
+/** Reuse provider matches without renaming their library or historical labels. */
 export async function getOrCreateGarminExercise(
   userId: string,
   rawName: string,
@@ -209,11 +196,43 @@ export async function getOrCreateGarminExercise(
   const { primary: primaryMuscles, secondary: secondaryMuscles } =
     mapGarminCategoryToMuscles(rawCategory);
 
-  // 1. Try to find by formatted name (Title Case)
+  // Match prior title-case aliases before uppercase legacy imports. An owned
+  // uppercase provider alias is renamed to its readable display name.
+  const legacyName = formattedName
+    .toLowerCase()
+    .split(' ')
+    .filter((word) => word.length > 0)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
   let exercise = await exerciseRepository.findExerciseByNameAndUserId(
     formattedName,
     userId
   );
+  // Older Garmin imports title-cased enum labels. Retain that lookup only;
+  // never use its lossy casing for a new name or rename an existing exercise.
+  if (!exercise) {
+    if (legacyName !== formattedName) {
+      exercise = await exerciseRepository.findExerciseByNameAndUserId(
+        legacyName,
+        userId
+      );
+    }
+  }
+  if (!exercise) {
+    const uppercaseName = formattedName.toUpperCase();
+    if (uppercaseName !== formattedName) {
+      exercise = await exerciseRepository.findExerciseByNameAndUserId(
+        uppercaseName,
+        userId
+      );
+      if (exercise?.user_id === userId && exercise.name === uppercaseName) {
+        await exerciseRepository.updateExercise(exercise.id, userId, {
+          name: formattedName,
+        });
+        exercise.name = formattedName;
+      }
+    }
+  }
 
   if (exercise) {
     // If found and it's a user's exercise, ensure category is updated if it was previously general/uncategorized
@@ -247,45 +266,7 @@ export async function getOrCreateGarminExercise(
     return exercise;
   }
 
-  // 2. Try to find by uppercase name (to catch existing "LEG CURL" style entries)
-  const uppercaseName = rawName.toUpperCase().replace(/_/g, ' ');
-  if (uppercaseName !== formattedName) {
-    exercise = await exerciseRepository.findExerciseByNameAndUserId(
-      uppercaseName,
-      userId
-    );
-
-    if (exercise) {
-      // If found by uppercase name, rename it to Title Case
-      log(
-        'info',
-        `[garminExerciseMapper] Renaming existing exercise "${exercise.name}" (ID: ${exercise.id}) to "${formattedName}"`
-      );
-
-      if (exercise.user_id === userId) {
-        const hasNoMuscles =
-          !exercise.primary_muscles ||
-          exercise.primary_muscles === '[]' ||
-          exercise.primary_muscles === 'null';
-        await exerciseRepository.updateExercise(exercise.id, userId, {
-          name: formattedName,
-          category: mappedCategory,
-          modality: deriveExerciseModality(mappedCategory),
-          ...(hasNoMuscles && primaryMuscles.length > 0
-            ? {
-                primary_muscles: primaryMuscles,
-                secondary_muscles: secondaryMuscles,
-              }
-            : {}),
-        });
-        exercise.name = formattedName;
-        exercise.category = mappedCategory;
-      }
-      return exercise;
-    }
-  }
-
-  // 3. Not found, create new exercise
+  // Not found: persist the provider's casing, not the legacy lookup spelling.
   log(
     'info',
     `[garminExerciseMapper] Creating new Garmin exercise: "${formattedName}" (Category: ${mappedCategory})`

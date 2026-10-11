@@ -4,6 +4,7 @@ import exerciseRepository from '../../models/exercise.js';
 import exerciseEntryRepository from '../../models/exerciseEntry.js';
 import sleepRepository from '../../models/sleepRepository.js';
 import activityDetailsRepository from '../../models/activityDetailsRepository.js';
+import { formatProviderExerciseName } from '../../utils/exerciseName.js';
 import {
   instantToDay,
   instantHourMinute,
@@ -679,13 +680,6 @@ async function processOuraHeartRate(
   );
 }
 
-function titleCaseActivity(activity: string) {
-  return activity
-    .replace(/_/g, ' ')
-    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
-    .replace(/\b\w/g, (char) => char.toUpperCase());
-}
-
 async function processOuraWorkouts(
   userId: string,
   createdByUserId: string,
@@ -721,7 +715,9 @@ async function processOuraWorkouts(
       const endMs = new Date(workout.end_datetime).getTime();
       if (isNaN(startMs) || isNaN(endMs)) continue;
       const activityKey = workout.activity || 'other';
-      const exerciseName = titleCaseActivity(activityKey);
+      const exerciseName = formatProviderExerciseName(
+        activityKey.replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+      );
       const exerciseSourceId = `oura-workout-${activityKey}`;
       let exercise = await exerciseRepository.getExerciseBySourceAndSourceId(
         OURA_SOURCE,

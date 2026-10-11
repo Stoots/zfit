@@ -132,12 +132,14 @@ async function validateLibraryReferences(
   )
     return snapshot;
   for (const exercise of snapshot.exercises) {
-    const accessible = await client.query(
-      'SELECT id FROM exercises WHERE id = $1 FOR KEY SHARE',
-      [exercise.exercise_id]
+    const accessible = await client.query<{ exercise_name: string }>(
+      `SELECT public.normalize_exercise_name_initial($2) AS exercise_name
+         FROM exercises WHERE id = $1 FOR KEY SHARE`,
+      [exercise.exercise_id, exercise.exercise_name]
     );
     if (!accessible.rowCount)
       invalid('Snapshot exercise not found or not accessible.');
+    exercise.exercise_name = accessible.rows[0]!.exercise_name;
   }
   return snapshot;
 }

@@ -1957,7 +1957,7 @@ async function deleteExerciseEntriesByEntrySourceAndDateWithClient(
            SELECT 1
            FROM exercises e
            WHERE e.id = exercise_entries.exercise_id
-             AND e.name = $5
+             AND e.name = public.normalize_exercise_name_initial($5)
          )
        )
        AND (

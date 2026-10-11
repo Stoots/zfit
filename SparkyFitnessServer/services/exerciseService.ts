@@ -1649,12 +1649,34 @@ async function getExerciseHistory(
     throw error;
   }
 }
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function importExercisesFromCSV(authenticatedUserId: any, filePath: any) {
+type CsvImportFailure = { row: object; reason: string };
+type CsvExerciseData = {
+  name: string;
+  description: string | null;
+  instructions: string[];
+  category: string | null;
+  force: string | null;
+  level: string | null;
+  mechanic: string | null;
+  equipment: string[];
+  primary_muscles: string[];
+  secondary_muscles: string[];
+  calories_per_hour: number | null;
+  user_id: string;
+  is_custom: boolean;
+  shared_with_public: boolean;
+  source: string;
+  source_id: string;
+  images: string[];
+};
+async function importExercisesFromCSV(
+  authenticatedUserId: string,
+  filePath: string
+) {
   let createdCount = 0;
   let updatedCount = 0;
   let failedCount = 0;
-  const failedRows = [];
+  const failedRows: CsvImportFailure[] = [];
   try {
     const fileContent = fs.readFileSync(filePath, 'utf8');
     // parseCsv (shared, not a raw papa.parse call) so delimiter detection
@@ -1697,8 +1719,7 @@ async function importExercisesFromCSV(authenticatedUserId: any, filePath: any) {
           continue;
         }
         const primaryMuscles = row.primary_muscles
-          ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            row.primary_muscles.split(',').map((m: any) => m.trim())
+          ? row.primary_muscles.split(',').map((muscle) => muscle.trim())
           : [];
         if (primaryMuscles.length === 0) {
           failedCount++;
@@ -1706,29 +1727,28 @@ async function importExercisesFromCSV(authenticatedUserId: any, filePath: any) {
           continue;
         }
         const sourceId = exerciseName.toLowerCase().replace(/\s/g, '_');
-        const exerciseData = {
+        const exerciseData: CsvExerciseData = {
           name: exerciseName,
           description: row.description || null,
           instructions: row.instructions
-            ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              row.instructions.split(',').map((i: any) => i.trim())
+            ? row.instructions
+                .split(',')
+                .map((instruction) => instruction.trim())
             : [],
           category: row.category || null,
           force: row.force || null,
           level: row.level || null,
           mechanic: row.mechanic || null,
           equipment: row.equipment
-            ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              row.equipment.split(',').map((e: any) => e.trim())
+            ? row.equipment.split(',').map((item) => item.trim())
             : [],
           primary_muscles: primaryMuscles,
           secondary_muscles: row.secondary_muscles
-            ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              row.secondary_muscles.split(',').map((m: any) => m.trim())
+            ? row.secondary_muscles.split(',').map((muscle) => muscle.trim())
             : [],
-          // toNumber (not parseFloat) so a locale-comma decimal like "300,5"
-          // parses to 300.5 instead of parseFloat's silent truncation at the
-          // comma — the same #1960 bug already fixed client-side.
+          // toNumber (not parseFloat) preserves locale-comma decimals such as
+          // "300,5" as 300.5 instead of silently truncating at the comma
+          // (the #1960 bug also fixed client-side).
           calories_per_hour: row.calories_per_hour
             ? (toNumber(row.calories_per_hour, resolvedDecimal) ?? null)
             : null,
@@ -1737,12 +1757,12 @@ async function importExercisesFromCSV(authenticatedUserId: any, filePath: any) {
           shared_with_public: row.shared_with_public === 'true',
           source: 'CSV',
           source_id: sourceId,
+          images: [],
         };
         // Handle images: download and store local paths
         if (row.images) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const imageUrls = row.images.split(',').map((url: any) => url.trim());
-          const localImagePaths = [];
+          const imageUrls = row.images.split(',').map((url) => url.trim());
+          const localImagePaths: string[] = [];
           const exerciseFolderName = exerciseName.replace(/[^a-zA-Z0-9]/g, '_');
           for (const imageUrl of imageUrls) {
             try {
@@ -1760,22 +1780,17 @@ async function importExercisesFromCSV(authenticatedUserId: any, filePath: any) {
               // Continue without this image, but log the error
             }
           }
-          // @ts-expect-error TS(2339): Property 'images' does not exist on type '{ name: ... Remove this comment to see the full error message
           exerciseData.images = localImagePaths;
         } else {
-          // @ts-expect-error TS(2339): Property 'images' does not exist on type '{ name: ... Remove this comment to see the full error message
           exerciseData.images = [];
         }
-        const existingExercise = await exerciseDb.searchExercises(
+        const existingExercise = await exerciseDb.findExerciseByNameAndUserId(
           exerciseName,
-          authenticatedUserId,
-          [],
-          []
+          authenticatedUserId
         );
-        if (existingExercise && existingExercise.length > 0) {
-          // Assuming the first match is the one to update
+        if (existingExercise) {
           await exerciseDb.updateExercise(
-            existingExercise[0].id,
+            existingExercise.id,
             authenticatedUserId,
             exerciseData
           );
@@ -1786,8 +1801,11 @@ async function importExercisesFromCSV(authenticatedUserId: any, filePath: any) {
         }
       } catch (rowError) {
         failedCount++;
-        // @ts-expect-error TS(2571): Object is of type 'unknown'.
-        failedRows.push({ row, reason: rowError.message });
+        failedRows.push({
+          row,
+          reason:
+            rowError instanceof Error ? rowError.message : String(rowError),
+        });
         log(
           'error',
           `Error processing CSV row for user ${authenticatedUserId}:`,
@@ -1860,10 +1878,25 @@ function createServiceError(status: any, message: any) {
   error.status = status;
   return error;
 }
+type GroupedExerciseEntryInput = Omit<
+  Partial<PresetSessionExerciseRequest>,
+  'id' | 'exercise_id'
+> & {
+  id?: string | number;
+  exercise_id: string | null;
+  exercise_name?: string;
+  distance?: number | null;
+  avg_heart_rate?: number | null;
+};
+type ExerciseDurationInput = {
+  duration_minutes?: number | null;
+  sets?: Parameters<typeof setsDurationMinutes>[0];
+};
 function deriveDurationMinutes(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  exerciseData: any,
-  { preserveLegacyPresetDurationFallback = false } = {}
+  exerciseData: ExerciseDurationInput,
+  {
+    preserveLegacyPresetDurationFallback = false,
+  }: { preserveLegacyPresetDurationFallback?: boolean } = {}
 ) {
   if (typeof exerciseData.duration_minutes === 'number') {
     return exerciseData.duration_minutes;
@@ -1875,18 +1908,12 @@ function deriveDurationMinutes(
 }
 
 async function createGroupedExerciseEntriesWithClient(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  client: any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  userId: any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  actingUserId: any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  presetEntryId: any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  entryDate: any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  exercises: any,
+  client: PoolClient,
+  userId: string,
+  actingUserId: string,
+  presetEntryId: string,
+  entryDate: string,
+  exercises: readonly GroupedExerciseEntryInput[],
   options: {
     entrySource?: string;
     workoutPlanAssignmentId?: string | number | null;
@@ -2915,7 +2942,7 @@ async function importExercisesFromJson(
   exercisesArray: any
 ) {
   let createdCount = 0;
-  let updatedCount = 0;
+  const updatedCount = 0;
   let failedCount = 0;
   const failedRows = [];
   const duplicates = [];
@@ -3012,7 +3039,7 @@ async function importExercisesFromJson(
         []
       );
       if (existingExercise && existingExercise.length > 0) {
-        // Check for exact duplicate before updating
+        // Reject exact duplicates; substring matches are different movements.
         const isDuplicate = existingExercise.some(
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (ex: any) => ex.name.toLowerCase() === exerciseName.toLowerCase()
@@ -3029,17 +3056,9 @@ async function importExercisesFromJson(
           });
           continue;
         }
-        // Assuming the first match is the one to update
-        await exerciseDb.updateExercise(
-          existingExercise[0].id,
-          authenticatedUserId,
-          newExerciseData
-        );
-        updatedCount++;
-      } else {
-        await exerciseDb.createExercise(newExerciseData);
-        createdCount++;
       }
+      await exerciseDb.createExercise(newExerciseData);
+      createdCount++;
     } catch (rowError) {
       failedCount++;
       // @ts-expect-error TS(2571): Object is of type 'unknown'.
