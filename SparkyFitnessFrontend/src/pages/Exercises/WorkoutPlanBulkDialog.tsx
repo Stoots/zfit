@@ -34,6 +34,8 @@ const setFields: WorkoutPlanBulkField[] = [
   'set_type',
   'reps',
   'weight',
+  'rpe',
+  'rir',
   'duration',
   'distance',
   'rest_time',

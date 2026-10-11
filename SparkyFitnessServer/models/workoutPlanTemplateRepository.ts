@@ -1307,22 +1307,24 @@ async function applyBulkPrescriptions(
         // JSON. Patch selected keys only; do not normalize untargeted storage.
         const selected = request.fields.map((field) => {
           const column = bulkSetColumns[field];
-          if (!column) invalid('Unsupported individual set field.');
+          if (!column && field !== 'rpe' && field !== 'rir')
+            invalid('Unsupported individual set field.');
           return { field, column };
         });
+        const columns = selected.filter(({ column }) => column !== undefined);
         for (const set of target.after.sets) {
           const patch = Object.fromEntries(
             selected.map(({ field }) => [field, set[field] ?? null])
           );
           const updated = await client.query(
-            `UPDATE workout_plan_assignment_sets SET prescription = prescription || $3::jsonb,
-             ${selected.map(({ column }, index) => `${column} = $${index + 4}`).join(', ')}
+            `UPDATE workout_plan_assignment_sets SET prescription = prescription || $3::jsonb
+             ${columns.map(({ column }, index) => `, ${column} = $${index + 4}`).join('')}
              WHERE id = $1 AND assignment_id = $2 RETURNING id`,
             [
               set.id,
               target.after.id,
               JSON.stringify(patch),
-              ...selected.map(({ field }) => patch[field]),
+              ...columns.map(({ field }) => patch[field]),
             ]
           );
           if (!updated.rowCount)

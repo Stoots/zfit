@@ -10,6 +10,8 @@ export const workoutPlanBulkFieldSchema = z.enum([
   "set_type",
   "reps",
   "weight",
+  "rpe",
+  "rir",
   "duration",
   "distance",
   "rest_time",

@@ -56,6 +56,7 @@ describe.runIf(run)('persisted authenticated bulk prescription APIs', () => {
         'exercise_entries',
         'exercise_entry_sets',
         'exercise_preset_entries',
+        'exercise_entry_activity_details',
       ]) {
         const result = await db.query(
           `SELECT COALESCE(jsonb_agg(to_jsonb(t) ORDER BY t.id),'[]'::jsonb) AS rows FROM ${table} t`
@@ -211,6 +212,8 @@ describe.runIf(run)('persisted authenticated bulk prescription APIs', () => {
                 notes: `Week ${i}: 5–8 each side; RPE 7`,
                 effort: 'RPE 7',
                 per_side: true,
+                rpe: 5 + i,
+                rir: 3 + i,
               },
               {
                 set_number: 2,
@@ -218,6 +221,8 @@ describe.runIf(run)('persisted authenticated bulk prescription APIs', () => {
                 weight: null,
                 rest_time: 90,
                 notes: `Second set ${i}`,
+                rpe: 9,
+                ...(i === 2 ? {} : { rir: 1 }),
               },
             ],
           },
@@ -362,6 +367,148 @@ describe.runIf(run)('persisted authenticated bulk prescription APIs', () => {
     expect(repeat.status).toBe(409);
     expect(await fullState()).toEqual(after);
   });
+
+  it.each(['individual', 'frozen preset'] as const)(
+    '%s effort-only edits copy numeric/null RPE and RIR without changing any other stored key or scalar',
+    async (kind) => {
+      await outcome(3);
+      let effortPlan = plan;
+      if (kind === 'frozen preset') {
+        const created = await call('/api/workout-plan-templates', {
+          plan_name: 'Effort-only frozen future sets',
+          start_date: '2099-10-11',
+          is_active: false,
+          schedule_type: 'sequential',
+          sessions: [0, 1, 2].map((i) => ({
+            name: 'A',
+            day_of_week: null,
+            sort_order: i,
+            assignments: [
+              {
+                sort_order: 0,
+                sets: [],
+                preset_snapshot: {
+                  id: 701,
+                  name: `Frozen effort ${i}`,
+                  description: `Target-local description ${i}`,
+                  workout_format: 'amrap',
+                  time_cap_seconds: 600 + i,
+                  exercises: [exerciseId, differentExerciseId].map((id, e) => ({
+                    id: 80 + e,
+                    exercise_id: id,
+                    exercise_name: e ? 'Row' : 'Split squat',
+                    image_url: null,
+                    category: 'Strength',
+                    superset_group: null,
+                    equipment_brand: `Target-local equipment ${i}`,
+                    sets: [1, 2].map((set_number) => ({
+                      set_number,
+                      reps: 5 + i + e + set_number,
+                      weight: i === 0 ? null : 20 + i,
+                      rest_time: 45 + i,
+                      notes: `Keep notes ${i}/${e}/${set_number}`,
+                      per_side: true,
+                      effort: 'Keep authored effort wording',
+                      rpe: 5 + i,
+                      ...(i === 2 && set_number === 2 ? {} : { rir: 3 + i }),
+                    })),
+                  })),
+                },
+              },
+            ],
+          })),
+        });
+        expect(created.status, JSON.stringify(created.body)).toBe(201);
+        effortPlan = workoutPlanResponseSchema.parse(created.body);
+      }
+      const source = effortPlan.sessions[0]!;
+      const targets = effortPlan.sessions.slice(1, 3).map((session) => ({
+        workout_session_id: session.id,
+        assignment_id: session.assignments[0]!.id,
+        planned_session_ids:
+          kind === 'individual'
+            ? planned()
+                .filter((p) => p.workout_session_id === session.id)
+                .map((p) => p.id)
+            : [],
+      }));
+      for (const field of ['rpe', 'rir'] as const) {
+        const value = field === 'rpe' ? 8.5 : 2.5;
+        const prescription = workoutPlanAssignmentInputSchema.parse({
+          ...source.assignments[0]!,
+          preset_snapshot: source.assignments[0]!.preset_snapshot ?? undefined,
+        });
+        const sourceSets = prescription.preset_snapshot
+          ? prescription.preset_snapshot.exercises.flatMap((e) => e.sets)
+          : prescription.sets!;
+        sourceSets.forEach((set) => {
+          set[field] = set.set_number === 1 ? value : null;
+        });
+        const body: WorkoutPlanBulkRequest = {
+          plan_id: effortPlan.id,
+          program_id: kind === 'individual' ? program.id : null,
+          source_session_id: source.id,
+          source_assignment_id: source.assignments[0]!.id,
+          prescription,
+          fields: [field],
+          targets,
+        };
+        const before = await fullState();
+        const p = await preview(body);
+        expect(await fullState()).toEqual(before);
+        for (const target of p.targets) {
+          const sets = target.after.preset_snapshot
+            ? target.after.preset_snapshot.exercises.flatMap((e) => e.sets)
+            : target.after.sets;
+          expect(sets.map((set) => set[field])).toEqual(
+            kind === 'individual' ? [value, null] : [value, null, value, null]
+          );
+        }
+        const result = await apply(p);
+        expect(result.status, JSON.stringify(result.body)).toBe(200);
+        const after = await fullState();
+        const expected = structuredClone(before);
+        const table =
+          kind === 'individual' ? 'sets' : 'workout_plan_template_assignments';
+        type RawRow = Record<string, unknown> & {
+          id: number;
+          assignment_id: number;
+          set_number: number;
+          prescription: Record<string, unknown>;
+          preset_snapshot: { exercises: { sets: Record<string, unknown>[] }[] };
+        };
+        const rows = expected[table] as RawRow[];
+        const stored = after[table] as RawRow[];
+        for (const row of rows) {
+          if (
+            !targets.some(
+              (target) =>
+                target.assignment_id ===
+                (kind === 'individual' ? row.assignment_id : row.id)
+            )
+          )
+            continue;
+          row.updated_at = stored.find(
+            (saved) => saved.id === row.id
+          )!.updated_at;
+          if (kind === 'individual') {
+            row.prescription[field] = row.set_number === 1 ? value : null;
+          } else {
+            row.preset_snapshot.exercises.forEach((exercise) =>
+              exercise.sets.forEach((set) => {
+                set[field] = set.set_number === 1 ? value : null;
+              })
+            );
+          }
+        }
+        // Exact raw SQL rows: all scalar columns, absent JSON keys, unrelated
+        // prescriptions, source, completed snapshots, outcomes and links.
+        expect(after).toEqual(expected);
+        expect((await apply(p)).status).toBe(409);
+        expect(await fullState()).toEqual(after);
+      }
+    }
+  );
   it('ordinary single-session edits keep other weeks and completed diary/history exact after reload', async () => {
     await outcome(3);
     const before = await fullState();
@@ -674,7 +821,13 @@ describe.runIf(run)('persisted authenticated bulk prescription APIs', () => {
     expect(await fullState()).toEqual(unchanged);
   });
   it('rolls back writes to earlier targets when PostgreSQL fails later in the batch', async () => {
-    const p = await preview();
+    const body = input();
+    body.fields = ['rpe', 'rir'];
+    body.prescription.sets!.forEach((set) => {
+      set.rpe = 8.5;
+      set.rir = null;
+    });
+    const p = await preview(body);
     const db = await getSystemClient();
     const failedId = plan.sessions[2]!.assignments[0]!.id;
     try {
