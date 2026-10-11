@@ -9,7 +9,7 @@ import {
   deleteWorkoutPlanTemplate,
 } from '@/api/Exercises/workoutPlanTemplates';
 import { trainingProgramKeys } from '@/api/keys/exercises';
-import type { WorkoutPlanTemplate } from '@/types/workout';
+import type { WorkoutPlanDraft } from '@/types/workout';
 
 export const workoutPlanKeys = {
   all: ['workoutPlanTemplates'] as const,
@@ -71,16 +71,8 @@ export const useCreateWorkoutPlanTemplateMutation = () => {
   const { t } = useTranslation();
 
   return useMutation({
-    mutationFn: ({
-      userId,
-      data,
-    }: {
-      userId: string;
-      data: Omit<
-        WorkoutPlanTemplate,
-        'id' | 'user_id' | 'created_at' | 'updated_at'
-      >;
-    }) => createWorkoutPlanTemplate(userId, data),
+    mutationFn: ({ data }: { data: WorkoutPlanDraft }) =>
+      createWorkoutPlanTemplate(data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: workoutPlanKeys.all });
       queryClient.invalidateQueries({ queryKey: trainingProgramKeys.all });
@@ -108,7 +100,7 @@ export const useUpdateWorkoutPlanTemplateMutation = () => {
       data,
     }: {
       id: string;
-      data: Partial<WorkoutPlanTemplate>;
+      data: Partial<WorkoutPlanDraft>;
     }) => updateWorkoutPlanTemplate(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: workoutPlanKeys.all });
@@ -120,7 +112,7 @@ export const useUpdateWorkoutPlanTemplateMutation = () => {
         'Failed to update workout plan.'
       ),
       successMessage: (_data, variables) => {
-        const typedVars = variables as { data: Partial<WorkoutPlanTemplate> };
+        const typedVars = variables as { data: Partial<WorkoutPlanDraft> };
 
         if (
           Object.keys(typedVars.data).length === 1 &&

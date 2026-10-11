@@ -4,18 +4,13 @@ import type {
   ExerciseSessionResponse,
   TrainingProgram,
 } from '@workspace/shared';
-import type { UseQueryResult } from '@tanstack/react-query';
 import ExerciseSummary from '../../src/components/ExerciseSummary';
-import { useActiveWorkoutPlans } from '../../src/hooks/useActiveWorkoutPlan';
-import { useTrainingPrograms } from '../../src/hooks/useTrainingPrograms';
+import { useWorkoutPlanCandidates } from '../../src/hooks/useActiveWorkoutPlan';
 import type { WorkoutPlanTemplate } from '../../src/types/workoutPlans';
 import { initializeI18n } from '../../src/localization/i18n';
 
 jest.mock('../../src/hooks/useActiveWorkoutPlan', () => ({
-  useActiveWorkoutPlans: jest.fn(),
-}));
-jest.mock('../../src/hooks/useTrainingPrograms', () => ({
-  useTrainingPrograms: jest.fn(),
+  useWorkoutPlanCandidates: jest.fn(),
 }));
 jest.mock('../../src/components/Icon', () => 'Icon');
 jest.mock(
@@ -42,30 +37,46 @@ jest.mock('uniwind', () => ({ useCSSVariable: () => '#3B82F6' }));
 function plan(id: string, name: string): WorkoutPlanTemplate {
   const first = {
     id: `${id}-first`,
-    template_id: id,
+    name: `${name} previous`,
     day_of_week: null,
-    session_index: 1,
-    session_name: `${name} previous`,
     sort_order: 0,
-    sets: [],
+    assignments: [
+      {
+        id: Number(id) * 10,
+        workout_session_id: `${id}-first`,
+        sort_order: 0,
+        exercise_id: 'row',
+        sets: [],
+      },
+    ],
   };
   const next = {
-    ...first,
     id: `${id}-next`,
-    session_index: 2,
-    session_name: name,
+    name,
+    day_of_week: null,
+    sort_order: 1,
+    assignments: [
+      {
+        id: Number(id) * 10 + 1,
+        workout_session_id: `${id}-next`,
+        sort_order: 0,
+        exercise_id: 'row',
+        sets: [],
+      },
+    ],
   };
   return {
-    id,
+    id: Number(id),
     user_id: 'athlete',
     plan_name: `Plan ${id}`,
     start_date: '2026-10-01',
     is_active: true,
     schedule_type: 'sequential',
-    assignments: [first, next],
-    next_assignment: next,
+    sessions: [first, next],
+    next_session: next,
+    next_assignments: next.assignments,
     sequence_position: { current: 2, total: 2 },
-  };
+  } as WorkoutPlanTemplate;
 }
 const strength = plan('1', 'Strength next');
 const cardio = plan('2', 'Cardio next');
@@ -78,11 +89,13 @@ const programs = [
             sessions: [
               {
                 workout_plan_id: 1,
+                workout_session_id: '1-next',
                 status: 'planned',
                 effective_date: '2026-10-15',
               },
               {
                 workout_plan_id: 2,
+                workout_session_id: '2-next',
                 status: 'planned',
                 effective_date: '2026-10-12',
               },
@@ -107,40 +120,36 @@ beforeAll(async () => {
   await initializeI18n('en');
 });
 beforeEach(() => {
-  jest.mocked(useActiveWorkoutPlans).mockReturnValue({
-    plans: [strength, cardio],
-    plan: strength,
-    isLoading: false,
-    isError: false,
-    refetch: jest.fn(),
-  });
   setSchedule(programs);
 });
 
-it('previews only the scheduled program workout and starts its resolved next session', () => {
+it('previews and starts the exact workout session selected by the Program', () => {
   const start = jest.fn();
   const view = render(
     <ExerciseSummary
       exerciseEntries={[]}
       entryDate="2026-10-11"
-      onPressPlanAssignment={start}
+      onPressPlanSession={start}
     />
   );
   expect(view.getByText('Cardio next')).toBeTruthy();
   expect(view.queryByText('Strength next')).toBeNull();
   expect(view.queryByText('Cardio next previous')).toBeNull();
-  fireEvent.press(view.getByRole('button', { name: 'Start' }));
-  expect(start).toHaveBeenCalledWith(cardio, cardio.next_assignment);
+  fireEvent.press(view.getByRole('button', { name: 'Start: Cardio next' }));
+  expect(start).toHaveBeenCalledWith(
+    expect.objectContaining({ id: cardio.id }),
+    cardio.next_session
+  );
 });
 
-it('moves the preview past a plan logged today without offering a different session in that plan', () => {
+it('suppresses a logged earliest Program session without promoting a later date', () => {
   const entries = [
-    { id: 'logged', workout_plan_assignment_id: '2-next' },
+    { id: 'logged', workout_plan_assignment_id: 21 },
   ] as unknown as ExerciseSessionResponse[];
   const view = render(
     <ExerciseSummary exerciseEntries={entries} entryDate="2026-10-11" />
   );
-  expect(view.getByText('Strength next')).toBeTruthy();
+  expect(view.queryByText('Strength next')).toBeNull();
   expect(view.queryByText('Cardio next')).toBeNull();
 });
 

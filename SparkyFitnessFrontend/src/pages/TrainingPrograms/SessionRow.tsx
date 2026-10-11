@@ -75,29 +75,34 @@ export default function SessionRow({
           />
         </div>
         <div>
-          <Label htmlFor={`${prefix}-plan`}>
-            {t('trainingPrograms.workoutPlan', 'Workout Plan')}
+          <Label htmlFor={`${prefix}-session`}>
+            {t('trainingPrograms.workoutSession', 'Workout Session')}
           </Label>
           <select
-            id={`${prefix}-plan`}
+            id={`${prefix}-session`}
             disabled={locked}
             className="flex h-11 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            value={session.workout_plan_id ?? ''}
-            onChange={(e) =>
+            value={session.workout_session_id ?? ''}
+            onChange={(event) =>
               onChange({
-                workout_plan_id:
-                  e.target.value === '' ? null : Number(e.target.value),
+                workout_session_id:
+                  event.target.value === '' ? null : event.target.value,
               })
             }
           >
             <option value="">
-              {t('trainingPrograms.choosePlan', 'Choose a Workout Plan')}
+              {t(
+                'trainingPrograms.chooseSession',
+                'Choose an exact Workout Session'
+              )}
             </option>
-            {plans.map((plan) => (
-              <option key={plan.id} value={plan.id}>
-                {plan.plan_name}
-              </option>
-            ))}
+            {plans.flatMap((plan) =>
+              plan.sessions.map((workoutSession) => (
+                <option key={workoutSession.id} value={workoutSession.id}>
+                  {plan.plan_name} — {workoutSession.name}
+                </option>
+              ))
+            )}
           </select>
         </div>
       </div>

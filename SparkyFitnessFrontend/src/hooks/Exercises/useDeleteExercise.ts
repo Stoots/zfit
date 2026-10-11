@@ -15,7 +15,6 @@ import {
 import type { ExerciseDeleteMode } from '@/types/exercises';
 import { useAuth } from '@/hooks/useAuth';
 import { usePreferences } from '@/contexts/PreferencesContext';
-import { formatDateToYYYYMMDD } from '@/lib/utils';
 
 export function useDeleteExercise() {
   const { t } = useTranslation();
@@ -52,11 +51,9 @@ export function useDeleteExercise() {
   const confirmDelete = async (mode: ExerciseDeleteMode = 'delete') => {
     if (!exerciseToDelete || !user) return;
     try {
-      const clientDate = formatDateToYYYYMMDD(new Date());
       const response = await deleteExercise({
         id: exerciseToDelete.id,
         mode,
-        clientDate,
       });
 
       if (

@@ -5,6 +5,7 @@ import {
   ExerciseModality,
   PresetSessionResponse,
   WorkoutFormat,
+  WorkoutPlanCreateRequest,
 } from '@workspace/shared';
 import { Exercise } from './exercises';
 
@@ -24,18 +25,21 @@ export interface WorkoutPresetExercise {
   exercise_id: string;
   image_url?: string;
   exercise_name: string; // Populated from backend join
-  exercise: Exercise; // Full exercise object
+  exercise?: Exercise; // Optional library metadata; frozen snapshots need not embed it.
   sets: WorkoutPresetSet[];
   category?: string;
   modality?: ExerciseModality | null; // Populated from backend join
   superset_group?: number | null;
   /** Within-session per-set ramp, kg. Null = off. */
   ramp_increment?: number | null;
+  increment_value?: number | null;
   workout_plan_assignment_id?: string | number | null;
 }
 
 export interface WorkoutPreset {
   id: number | string;
+  /** Present only when executing an exact, frozen plan session. */
+  workout_session_id?: string;
   user_id: string;
   name: string;
   description?: string;
@@ -55,13 +59,11 @@ export interface PaginatedWorkoutPresets {
 }
 
 export interface WorkoutPlanAssignment {
-  id?: string;
-  template_id?: string;
-  day_of_week?: number | null;
-  session_index?: number | null;
-  session_name?: string | null;
+  id?: string | number;
+  workout_session_id?: string;
+  preset_snapshot?: WorkoutPreset | null;
   sort_order?: number | null;
-  workout_preset_id?: string;
+  workout_preset_id?: string | number | null;
   workout_preset_name?: string; // Populated from backend join
   exercise_id?: string;
   exercise_name?: string; // Populated from backend join
@@ -71,6 +73,19 @@ export interface WorkoutPlanAssignment {
   category?: string;
   modality?: ExerciseModality | null; // Populated from backend join
 }
+
+export interface WorkoutPlanSession {
+  id: string;
+  name: string;
+  day_of_week: number | null;
+  sort_order: number;
+  assignments: WorkoutPlanAssignment[];
+}
+
+/** Editor write shape: new sessions have no persisted identity until saved. */
+export type WorkoutPlanDraft = Omit<WorkoutPlanCreateRequest, 'sessions'> & {
+  sessions: Array<Omit<WorkoutPlanSession, 'id'> & { id?: string }>;
+};
 
 export interface WorkoutPlanTemplate {
   id: string;
@@ -84,9 +99,11 @@ export interface WorkoutPlanTemplate {
   entry_mode?: 'prompt' | 'prefill';
   created_at?: string;
   updated_at?: string;
-  assignments?: WorkoutPlanAssignment[];
-  next_assignment?: WorkoutPlanAssignment | null;
+  sessions: WorkoutPlanSession[];
+  next_session?: WorkoutPlanSession | null;
   next_assignments?: WorkoutPlanAssignment[];
+  /** Dashboard attribution supplied when selecting an exact Program workout. */
+  training_program_session_id?: string;
   sequence_position?: {
     current: number;
     total: number;

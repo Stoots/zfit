@@ -11,12 +11,22 @@ import { getClient } from '../db/poolManager.js';
 import exerciseDb from '../models/exercise.js';
 import exerciseEntryDb from '../models/exerciseEntry.js';
 import exercisePresetEntryRepository from '../models/exercisePresetEntryRepository.js';
+import activityDetailsRepository from '../models/activityDetailsRepository.js';
 import workoutPresetRepository from '../models/workoutPresetRepository.js';
 import calorieCalculationService from '../services/CalorieCalculationService.js';
 import { resolveExerciseIdToUuid } from '../utils/uuidUtils.js';
 import { getGroupedExerciseSessionByIdWithClient } from '../services/exerciseEntryHistoryService.js';
 import exerciseService from '../services/exerciseService.js';
 import { canEditGroupedWorkout } from '@workspace/shared';
+import {
+  getWorkoutSessionForExecution,
+  getWorkoutSessionForAssignments,
+} from '../models/exerciseTemplate.js';
+import { workoutPlanSessionResponseSchema } from '@workspace/shared';
+vi.mock('../models/exerciseTemplate.js', () => ({
+  getWorkoutSessionForExecution: vi.fn(),
+  getWorkoutSessionForAssignments: vi.fn(),
+}));
 import * as workoutTelemetryRepository from '../models/workoutTelemetryRepository.js';
 vi.mock('../db/poolManager', () => ({
   getClient: vi.fn(),
@@ -39,7 +49,12 @@ vi.mock('../models/exerciseEntry', () => ({
     getWorkoutPlanAssignmentIdByPresetEntryIdWithClient: vi.fn(),
   },
 }));
-vi.mock('../models/activityDetailsRepository', () => ({}));
+vi.mock('../models/activityDetailsRepository', () => ({
+  default: {
+    _createActivityDetailWithClient: vi.fn(),
+    _deleteActivityDetailsByEntryIdAndProviderWithClient: vi.fn(),
+  },
+}));
 vi.mock('../models/exercisePresetEntryRepository.js', () => ({
   default: {
     createExercisePresetEntryWithClient: vi.fn(),
@@ -108,6 +123,660 @@ describe('exerciseService grouped workouts', () => {
     )
       .mockReset()
       .mockResolvedValue([]);
+  });
+  it.each([false, true])(
+    'freezes completion extras and rejects unrelated exercise identity %s',
+    async (unrelatedExercise) => {
+      const sessionId = '77777777-7777-4777-8777-777777777777';
+      const exerciseId = '11111111-1111-4111-8111-111111111111';
+      const prescribedSets = [
+        {
+          set_number: 1,
+          reps: 8,
+          weight: null,
+          rest_time: 120,
+          notes: '8–10 each side',
+          rpe: 8,
+          rir: 2,
+          reps_range: [8, 10],
+          per_side: true,
+        },
+      ];
+      vi.mocked(getWorkoutSessionForAssignments).mockResolvedValue(
+        workoutPlanSessionResponseSchema.parse({
+          id: sessionId,
+          name: 'A',
+          day_of_week: null,
+          sort_order: 0,
+          assignments: [
+            {
+              id: 52,
+              workout_session_id: sessionId,
+              sort_order: 0,
+              exercise_id: null,
+              exercise_name: null,
+              modality: null,
+              workout_preset_id: null,
+              workout_preset_name: null,
+              workout_preset_format: null,
+              sets: [],
+              preset_snapshot: {
+                id: 42,
+                name: 'Frozen A',
+                description: 'Original prescription',
+                workout_format: 'amrap',
+                time_cap_seconds: 600,
+                exercises: [
+                  {
+                    id: 1,
+                    exercise_id: exerciseId,
+                    exercise_name: 'Original Press',
+                    category: null,
+                    image_url: null,
+                    superset_group: null,
+                    sets: prescribedSets,
+                  },
+                ],
+              },
+            },
+          ],
+        })
+      );
+      vi.mocked(resolveExerciseIdToUuid).mockImplementation(async (id) => id);
+      vi.mocked(exerciseDb.getExerciseById).mockResolvedValue({
+        id: exerciseId,
+        name: 'Renamed library exercise',
+        calories_per_hour: 300,
+      });
+      vi.mocked(
+        calorieCalculationService.estimateCaloriesBurnedPerHour
+      ).mockResolvedValue(300);
+      vi.mocked(
+        exercisePresetEntryRepository.createExercisePresetEntryWithClient
+      ).mockResolvedValue({ id: 'preset-entry-1' });
+      vi.mocked(
+        exerciseEntryDb._createExerciseEntryWithClient
+      ).mockResolvedValue({
+        entry: { id: 'created-entry' },
+        operation: 'created',
+      });
+      const performedSets = [
+        {
+          set_number: 1,
+          reps: 9,
+          weight: 24,
+          rest_time: 105,
+          rpe: 9,
+          rir: 1,
+          notes: 'Performed',
+          completed_at: '2026-10-11T10:00:00.000Z',
+        },
+      ];
+      const completion = exerciseService.createGroupedWorkoutSession(
+        'user-1',
+        'actor-1',
+        {
+          entry_date: '2026-10-11',
+          name: 'A',
+          source: 'Workout Plan',
+          workout_preset_id: null,
+          exercises: [
+            {
+              exercise_id: unrelatedExercise
+                ? '22222222-2222-4222-8222-222222222222'
+                : exerciseId,
+              duration_minutes: 0,
+              sort_order: 0,
+              workout_plan_assignment_id: 52,
+              sets: performedSets,
+            },
+          ],
+          activity_details: [
+            {
+              detail_type: 'workout_plan_prescription',
+              detail_data: { forged: true },
+            },
+          ],
+        }
+      );
+      if (unrelatedExercise) {
+        await expect(completion).rejects.toMatchObject({ status: 400 });
+        expect(
+          exercisePresetEntryRepository.createExercisePresetEntryWithClient
+        ).not.toHaveBeenCalled();
+        expect(
+          exerciseEntryDb._createExerciseEntryWithClient
+        ).not.toHaveBeenCalled();
+        expect(client.query).toHaveBeenCalledWith('ROLLBACK');
+        return;
+      }
+      await completion;
+      expect(getClient).toHaveBeenCalledWith('user-1', 'actor-1');
+      expect(
+        exerciseEntryDb._createExerciseEntryWithClient
+      ).toHaveBeenCalledWith(
+        client,
+        'user-1',
+        expect.objectContaining({
+          exercise_name: 'Original Press',
+          workout_plan_assignment_id: 52,
+          sets: performedSets,
+        }),
+        'actor-1',
+        'Workout Plan',
+        'preset-entry-1',
+        expect.objectContaining({
+          frozenExerciseSnapshot: expect.objectContaining({
+            exercise_name: 'Original Press',
+            category: null,
+            sets: prescribedSets,
+          }),
+        })
+      );
+      const details = vi.mocked(
+        activityDetailsRepository._createActivityDetailWithClient
+      ).mock.calls;
+      expect(details).toHaveLength(1);
+      expect(details[0][1]).toMatchObject({
+        detail_type: 'workout_plan_prescription',
+        detail_data: {
+          workout_session_id: sessionId,
+          assignments: [
+            {
+              id: 52,
+              preset_snapshot: {
+                name: 'Frozen A',
+                description: 'Original prescription',
+                exercises: [
+                  { exercise_name: 'Original Press', sets: prescribedSets },
+                ],
+              },
+            },
+          ],
+        },
+      });
+      expect(
+        workoutPresetRepository.getWorkoutPresetById
+      ).not.toHaveBeenCalled();
+      expect(exerciseDb.getExerciseById).not.toHaveBeenCalled();
+      expect(resolveExerciseIdToUuid).not.toHaveBeenCalled();
+      expect(
+        exercisePresetEntryRepository.createExercisePresetEntryWithClient
+      ).toHaveBeenCalledWith(
+        client,
+        'user-1',
+        expect.objectContaining({
+          workout_format: 'amrap',
+          time_cap_seconds: 600,
+        }),
+        'actor-1'
+      );
+    }
+  );
+  it('rejects linked completion with inaccessible or mixed-session assignments before writing', async () => {
+    vi.mocked(getWorkoutSessionForAssignments).mockResolvedValue(null);
+    await expect(
+      exerciseService.createGroupedWorkoutSession('user-1', 'actor-1', {
+        entry_date: '2026-10-11',
+        name: 'A',
+        source: 'Workout Plan',
+        exercises: [
+          {
+            exercise_id: '11111111-1111-4111-8111-111111111111',
+            duration_minutes: 0,
+            sort_order: 0,
+            workout_plan_assignment_id: 52,
+            sets: [],
+          },
+        ],
+      })
+    ).rejects.toMatchObject({ status: 404 });
+    expect(
+      exercisePresetEntryRepository.createExercisePresetEntryWithClient
+    ).not.toHaveBeenCalled();
+    expect(
+      exerciseEntryDb._createExerciseEntryWithClient
+    ).not.toHaveBeenCalled();
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK');
+  });
+  it('retains reserved historical prescriptions when completion sends replacement activity details', async () => {
+    vi.mocked(getGroupedExerciseSessionByIdWithClient).mockResolvedValue({
+      type: 'preset',
+      workout_preset_id: null,
+      name: 'A',
+      description: null,
+      notes: null,
+      total_duration_minutes: 0,
+      id: 'preset-entry-1',
+      entry_date: '2026-10-11',
+      source: 'Workout Plan',
+      exercises: [],
+      activity_details: [
+        {
+          id: 'prescription-1',
+          provider_name: 'SparkyFitness',
+          detail_type: 'workout_plan_prescription',
+          detail_data: { original: true },
+        },
+      ],
+    });
+    await exerciseService.updateGroupedWorkoutSession(
+      'user-1',
+      'actor-1',
+      'preset-entry-1',
+      {
+        activity_details: [
+          {
+            provider_name: 'SparkyFitness',
+            detail_type: 'workout_plan_prescription',
+            detail_data: { forged: true },
+          },
+          {
+            provider_name: 'SparkyFitness',
+            detail_type: 'wod_score',
+            detail_data: { rounds: 5 },
+          },
+        ],
+      }
+    );
+    const deletions = vi.mocked(
+      activityDetailsRepository._deleteActivityDetailsByEntryIdAndProviderWithClient
+    ).mock.calls;
+    expect(deletions).toEqual([
+      [client, 'user-1', 'preset-entry-1', 'SparkyFitness', 'wod_score'],
+    ]);
+    const insertions = vi.mocked(
+      activityDetailsRepository._createActivityDetailWithClient
+    ).mock.calls;
+    expect(insertions).toHaveLength(1);
+    expect(insertions[0][1]).toMatchObject({
+      detail_type: 'wod_score',
+      detail_data: { rounds: 5 },
+    });
+    expect(getWorkoutSessionForAssignments).not.toHaveBeenCalled();
+    expect(workoutPresetRepository.getWorkoutPresetById).not.toHaveBeenCalled();
+    const headerUpdate = vi.mocked(
+      exercisePresetEntryRepository.updateExercisePresetEntryWithClient
+    ).mock.calls[0][3];
+    expect(headerUpdate).not.toHaveProperty('workout_format');
+    expect(headerUpdate).not.toHaveProperty('time_cap_seconds');
+    expect(client.query).toHaveBeenCalledWith('COMMIT');
+  });
+  it('gives a standalone-exercise-only session standard format and an explicit null cap', async () => {
+    const sessionId = '77777777-7777-4777-8777-777777777777';
+    const exerciseId = '11111111-1111-4111-8111-111111111111';
+    vi.mocked(getWorkoutSessionForExecution).mockResolvedValue(
+      workoutPlanSessionResponseSchema.parse({
+        id: sessionId,
+        name: 'A',
+        sort_order: 0,
+        day_of_week: null,
+        assignments: [
+          {
+            id: 51,
+            workout_session_id: sessionId,
+            sort_order: 0,
+            exercise_id: exerciseId,
+            exercise_name: 'Press',
+            modality: null,
+            workout_preset_id: null,
+            workout_preset_name: null,
+            workout_preset_format: null,
+            preset_snapshot: null,
+            sets: [{ set_number: 1, reps: 8, weight: null }],
+          },
+        ],
+      })
+    );
+    vi.mocked(resolveExerciseIdToUuid).mockImplementation(async (id) => id);
+    vi.mocked(exerciseDb.getExerciseById).mockResolvedValue({
+      id: exerciseId,
+      name: 'Press',
+      calories_per_hour: 300,
+    });
+    vi.mocked(
+      calorieCalculationService.estimateCaloriesBurnedPerHour
+    ).mockResolvedValue(300);
+    vi.mocked(
+      exercisePresetEntryRepository.createExercisePresetEntryWithClient
+    ).mockResolvedValue({ id: 'preset-entry-1' });
+    vi.mocked(exerciseEntryDb._createExerciseEntryWithClient).mockResolvedValue(
+      { entry: { id: 'created-entry' }, operation: 'created' }
+    );
+    await exerciseService.logWorkoutPlanSession(
+      'user-1',
+      'actor-1',
+      sessionId,
+      '2026-10-11'
+    );
+    expect(
+      exercisePresetEntryRepository.createExercisePresetEntryWithClient
+    ).toHaveBeenCalledWith(
+      client,
+      'user-1',
+      expect.objectContaining({
+        name: 'A',
+        workout_format: 'standard',
+        time_cap_seconds: null,
+      }),
+      'actor-1'
+    );
+    expect(workoutPresetRepository.getWorkoutPresetById).not.toHaveBeenCalled();
+  });
+  it.each([
+    {
+      presetId: 42,
+      failChild: false,
+      mixedFormats: false,
+      sameFormat: false,
+      secondCap: 90,
+    },
+    {
+      presetId: null,
+      failChild: false,
+      mixedFormats: false,
+      sameFormat: false,
+      secondCap: 90,
+    },
+    {
+      presetId: 42,
+      failChild: true,
+      mixedFormats: false,
+      sameFormat: false,
+      secondCap: 90,
+    },
+    {
+      presetId: null,
+      failChild: false,
+      mixedFormats: true,
+      sameFormat: false,
+      secondCap: 90,
+    },
+    {
+      presetId: null,
+      failChild: false,
+      mixedFormats: true,
+      sameFormat: true,
+      secondCap: 600,
+    },
+    {
+      presetId: null,
+      failChild: false,
+      mixedFormats: true,
+      sameFormat: true,
+      secondCap: 90,
+    },
+  ])(
+    'executes frozen timing link $presetId, formats $mixedFormats/$sameFormat and cap $secondCap',
+    async ({ presetId, failChild, mixedFormats, sameFormat, secondCap }) => {
+      const sessionId = '77777777-7777-4777-8777-777777777777';
+      const exerciseId = '11111111-1111-4111-8111-111111111111';
+      const sets = [1, 2, 3].map((set_number) => ({
+        set_number,
+        set_type: 'working',
+        reps: 8,
+        weight: null,
+        duration: null,
+        distance: null,
+        rest_time: 90,
+        rpe: 8,
+        rir: 2,
+        notes: '8–10 reps per side; unspecified load',
+      }));
+      vi.mocked(getWorkoutSessionForExecution).mockResolvedValue(
+        workoutPlanSessionResponseSchema.parse({
+          id: sessionId,
+          name: 'A',
+          day_of_week: null,
+          sort_order: 1,
+          assignments: [
+            {
+              id: 51,
+              workout_session_id: sessionId,
+              sort_order: 0,
+              exercise_id: exerciseId,
+              exercise_name: 'Press',
+              modality: null,
+              workout_preset_id: null,
+              workout_preset_name: null,
+              workout_preset_format: null,
+              preset_snapshot: null,
+              sets: sets.slice(0, 2),
+            },
+            {
+              id: 52,
+              workout_session_id: sessionId,
+              sort_order: 1,
+              exercise_id: null,
+              exercise_name: null,
+              modality: null,
+              workout_preset_id: presetId,
+              workout_preset_name: 'Mutable library label',
+              workout_preset_format: 'standard',
+              sets: [],
+              preset_snapshot: {
+                id: 42,
+                name: 'Frozen A',
+                description: 'Week-specific prescription',
+                workout_format: 'amrap',
+                time_cap_seconds: 600,
+                exercises: [
+                  {
+                    id: 1,
+                    exercise_id: exerciseId,
+                    exercise_name: 'Frozen Press',
+                    sort_order: 0,
+                    category: null,
+                    image_url: null,
+                    superset_group: 2,
+                    sets,
+                  },
+                ],
+              },
+            },
+            ...(mixedFormats
+              ? [
+                  {
+                    id: 53,
+                    workout_session_id: sessionId,
+                    sort_order: 2,
+                    exercise_id: null,
+                    exercise_name: null,
+                    modality: null,
+                    workout_preset_id: null,
+                    workout_preset_name: null,
+                    workout_preset_format: null,
+                    sets: [],
+                    preset_snapshot: {
+                      id: 43,
+                      name: 'Frozen Conditioning',
+                      description: 'Separate timer',
+                      workout_format: sameFormat ? 'amrap' : 'emom',
+                      time_cap_seconds: secondCap,
+                      exercises: [
+                        {
+                          id: 2,
+                          exercise_id: exerciseId,
+                          exercise_name: 'Frozen Conditioning',
+                          category: null,
+                          image_url: null,
+                          superset_group: null,
+                          sort_order: 0,
+                          sets,
+                        },
+                      ],
+                    },
+                  },
+                ]
+              : []),
+          ],
+        })
+      );
+      vi.mocked(resolveExerciseIdToUuid).mockImplementation(async (id) => id);
+      vi.mocked(exerciseDb.getExerciseById).mockResolvedValue({
+        id: exerciseId,
+        name: 'Renamed library press',
+        calories_per_hour: 300,
+      });
+      vi.mocked(
+        calorieCalculationService.estimateCaloriesBurnedPerHour
+      ).mockResolvedValue(300);
+      vi.mocked(
+        exercisePresetEntryRepository.createExercisePresetEntryWithClient
+      ).mockResolvedValue({ id: 'preset-entry-1' });
+      vi.mocked(
+        exerciseEntryDb._createExerciseEntryWithClient
+      ).mockResolvedValue({
+        entry: { id: 'created-entry' },
+        operation: 'created',
+      });
+      if (failChild) {
+        vi.mocked(exerciseEntryDb._createExerciseEntryWithClient)
+          .mockResolvedValueOnce({
+            entry: { id: 'first-entry' },
+            operation: 'created',
+          })
+          .mockRejectedValueOnce(new Error('second child failed'));
+        await expect(
+          exerciseService.logWorkoutPlanSession(
+            'user-1',
+            'actor-1',
+            sessionId,
+            '2026-10-11'
+          )
+        ).rejects.toThrow('second child failed');
+        expect(client.query).toHaveBeenCalledWith('ROLLBACK');
+        expect(client.query).not.toHaveBeenCalledWith('COMMIT');
+        expect(
+          workoutPresetRepository.getWorkoutPresetById
+        ).not.toHaveBeenCalled();
+        return;
+      }
+      const result = await exerciseService.logWorkoutPlanSession(
+        'user-1',
+        'actor-1',
+        sessionId,
+        '2026-10-11'
+      );
+      expect(result.workout_session_id).toBe(sessionId);
+      expect(getWorkoutSessionForExecution).toHaveBeenCalledWith(
+        'user-1',
+        sessionId,
+        client
+      );
+      const inserts = vi.mocked(exerciseEntryDb._createExerciseEntryWithClient)
+        .mock.calls;
+      expect(inserts).toHaveLength(mixedFormats ? 3 : 2);
+      expect(inserts[0][2]).toMatchObject({
+        workout_plan_assignment_id: 51,
+        sets: sets.slice(0, 2),
+      });
+      expect(inserts[1][2]).toMatchObject({
+        workout_plan_assignment_id: 52,
+        exercise_name: 'Frozen Press',
+        superset_group: 2,
+        sets,
+      });
+      expect(inserts[1][2].sets[0].weight).toBeNull();
+      expect(
+        exercisePresetEntryRepository.createExercisePresetEntryWithClient
+      ).toHaveBeenCalledWith(
+        client,
+        'user-1',
+        expect.objectContaining({
+          name: 'A',
+          workout_format: mixedFormats && !sameFormat ? 'standard' : 'amrap',
+          time_cap_seconds:
+            mixedFormats && (!sameFormat || secondCap !== 600) ? null : 600,
+        }),
+        'actor-1'
+      );
+      expect(
+        activityDetailsRepository._createActivityDetailWithClient
+      ).toHaveBeenCalledWith(
+        client,
+        expect.objectContaining({
+          detail_type: 'workout_plan_prescription',
+          detail_data: expect.objectContaining({
+            workout_session_id: sessionId,
+            assignments: expect.arrayContaining([
+              expect.objectContaining({
+                id: 52,
+                preset_snapshot: expect.objectContaining({
+                  name: 'Frozen A',
+                  description: 'Week-specific prescription',
+                  workout_format: 'amrap',
+                  exercises: [expect.objectContaining({ sets })],
+                }),
+              }),
+            ]),
+          }),
+        })
+      );
+      if (mixedFormats) {
+        expect(inserts[2][2]).toMatchObject({
+          exercise_name: 'Frozen Conditioning',
+          workout_plan_assignment_id: 53,
+          sort_order: 2,
+          sets,
+        });
+        expect(
+          activityDetailsRepository._createActivityDetailWithClient
+        ).toHaveBeenCalledWith(
+          client,
+          expect.objectContaining({
+            detail_data: expect.objectContaining({
+              assignments: expect.arrayContaining([
+                expect.objectContaining({
+                  id: 53,
+                  preset_snapshot: expect.objectContaining({
+                    workout_format: sameFormat ? 'amrap' : 'emom',
+                    time_cap_seconds: secondCap,
+                  }),
+                }),
+              ]),
+            }),
+          })
+        );
+      }
+      expect(
+        workoutPresetRepository.getWorkoutPresetById
+      ).not.toHaveBeenCalled();
+      expect(
+        client.query.mock.calls.filter(([query]) => query === 'BEGIN')
+      ).toHaveLength(1);
+      expect(client.query).toHaveBeenCalledWith('COMMIT');
+    }
+  );
+  it('rejects an inaccessible exact session before materializing any workout', async () => {
+    vi.mocked(getWorkoutSessionForExecution).mockResolvedValue(null);
+    await expect(
+      exerciseService.logWorkoutPlanSession(
+        'user-1',
+        'actor-1',
+        '77777777-7777-4777-8777-777777777777',
+        '2026-10-11'
+      )
+    ).rejects.toMatchObject({ status: 404 });
+    expect(
+      exerciseEntryDb._createExerciseEntryWithClient
+    ).not.toHaveBeenCalled();
+    expect(
+      exercisePresetEntryRepository.createExercisePresetEntryWithClient
+    ).not.toHaveBeenCalled();
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK');
+    expect(client.query).not.toHaveBeenCalledWith('COMMIT');
+  });
+  it('rejects an unfrozen plan preset rather than falling back to the live library', async () => {
+    await expect(
+      exerciseService.createGroupedWorkoutSession('user-1', 'actor-1', {
+        source: 'Workout Plan',
+        workout_preset_id: 42,
+        entry_date: '2026-10-11',
+      })
+    ).rejects.toMatchObject({ status: 400 });
+    expect(workoutPresetRepository.getWorkoutPresetById).not.toHaveBeenCalled();
+    expect(client.query).toHaveBeenCalledWith('ROLLBACK');
   });
   it('rolls back grouped workout creation when a child insert fails', async () => {
     // @ts-expect-error TS(2339): Property 'mockResolvedValue' does not exist on typ... Remove this comment to see the full error message

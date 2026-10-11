@@ -67,6 +67,85 @@ describe('workoutPlayback utils', () => {
     ).toBe(true);
   });
 
+  it.each([
+    { format: 'emom' as const, expandedSets: 2 },
+    { format: 'tabata' as const, expandedSets: 8 },
+  ])(
+    'keeps exact frozen $format sets and its timer while library starts retain format expansion',
+    ({ format, expandedSets }) => {
+      const prescription = {
+        set_number: 1,
+        reps: null,
+        weight: null,
+        duration: 45,
+        distance: 0.2,
+        rest_time: 15,
+        rpe: 6,
+        notes: 'Carry the prescribed distance.',
+      };
+      const preset: WorkoutPreset = {
+        ...createPresetFixture(),
+        workout_format: format,
+        time_cap_seconds: 120,
+        exercises: [
+          {
+            exercise_id: 'exercise-1',
+            exercise_name: 'Carry',
+            modality: 'duration_distance',
+            sets: [prescription],
+          },
+        ],
+      };
+      const frozen = createWorkoutPlaybackDraftFromPreset(
+        {
+          ...preset,
+          workout_session_id: '10000000-0000-4000-8000-000000000001',
+        },
+        '2026-04-27'
+      );
+      expect(frozen.workout_format).toBe(format);
+      expect(frozen.time_cap_seconds).toBe(120);
+      expect(frozen.exercises[0]?.sets).toEqual([
+        {
+          ...prescription,
+          set_type: undefined,
+          completed: false,
+          completed_at: null,
+        },
+      ]);
+      const completed = completeCurrentWorkoutSet(frozen);
+      const payload = buildPresetSessionCreateRequestFromDraft(
+        completed,
+        'UTC'
+      );
+      expect(payload.exercises?.[0]?.sets).toMatchObject([prescription]);
+      expect(payload.exercises?.[0]?.sets).toHaveLength(1);
+
+      const library = createWorkoutPlaybackDraftFromPreset(
+        preset,
+        '2026-04-27'
+      );
+      expect(library.workout_format).toBe(format);
+      expect(library.time_cap_seconds).toBe(120);
+      expect(
+        library.exercises[0]?.sets.map((set) => [
+          set.set_number,
+          set.duration,
+          set.distance,
+          set.rest_time,
+        ])
+      ).toEqual(
+        Array.from({ length: expandedSets }, (_, index) => [
+          index + 1,
+          45,
+          0.2,
+          15,
+        ])
+      );
+      expect(preset.exercises[0]?.sets).toEqual([prescription]);
+    }
+  );
+
   it('builds a route state that carries the draft and return path', () => {
     const routeState = createWorkoutPlaybackRouteState(
       createPresetFixture(),

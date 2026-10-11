@@ -26,6 +26,7 @@ import {
 } from '../services/notifications';
 import { getActiveServerConfig } from '../services/storage';
 import { getTodayDate } from '../utils/dateUtils';
+import { startWorkoutPlanSession } from '../services/api/workoutPlansApi';
 import { isBodyweightModality } from '@workspace/shared';
 import {
   extractPlannedSetValues,
@@ -71,6 +72,8 @@ export interface StartLiveWorkoutArgs {
   sourcePresetId?: number;
   /** Plan assignment id if starting from a workout plan session. */
   workoutPlanAssignmentId?: number;
+  /** Exact authored session UUID; the server executes its frozen prescriptions. */
+  workoutSessionId?: string;
   workoutFormat?: WorkoutFormat;
   timeCapSeconds?: number | null;
 }
@@ -247,6 +250,7 @@ export function useStartLiveWorkout(navigation: StartLiveWorkoutNavigation): {
       exerciseConfigs,
       sourcePresetId,
       workoutPlanAssignmentId,
+      workoutSessionId,
       workoutFormat,
       timeCapSeconds,
     }: StartLiveWorkoutArgs) => {
@@ -277,7 +281,7 @@ export function useStartLiveWorkout(navigation: StartLiveWorkoutNavigation): {
             ? (await getActiveServerConfig())?.id
             : undefined;
         let resolvedExercises = exercises;
-        if (workoutFormat === 'tabata') {
+        if (workoutSessionId == null && workoutFormat === 'tabata') {
           resolvedExercises = exercises.map((ex) => {
             if (ex.sets.length < 8 && ex.sets.length > 0) {
               const baseSets = ex.sets;
@@ -295,6 +299,7 @@ export function useStartLiveWorkout(navigation: StartLiveWorkoutNavigation): {
             return ex;
           });
         } else if (
+          workoutSessionId == null &&
           workoutFormat === 'emom' &&
           timeCapSeconds != null &&
           timeCapSeconds >= 60
@@ -325,18 +330,23 @@ export function useStartLiveWorkout(navigation: StartLiveWorkoutNavigation): {
         // plan renders as gray placeholders and is only recorded when a set
         // is completed or typed over.
         const plannedSetValues = extractPlannedSetValues(resolvedExercises);
-        const session = await createSession({
-          name: name ?? defaultWorkoutName(entryDate),
-          entry_date: entryDate,
-          source: 'sparky',
-          exercises: stripPlannedSetValues(resolvedExercises),
-          // Tags the created session to the preset (recentSessions stats
-          // scoping, server-side) without changing how it's built — the
-          // server keeps the client-supplied exercises verbatim when both
-          // fields are present instead of substituting the preset's own.
-          workout_preset_id: sourcePresetId,
-          workoutPlanAssignmentId,
-        });
+        const session =
+          workoutSessionId != null
+            ? await startWorkoutPlanSession(workoutSessionId, entryDate)
+            : await createSession({
+                name: name ?? defaultWorkoutName(entryDate),
+                entry_date: entryDate,
+                source: 'sparky',
+                exercises: stripPlannedSetValues(resolvedExercises),
+                // Tags the created session to the preset (recentSessions stats
+                // scoping, server-side) without changing how it's built — the
+                // server keeps the client-supplied exercises verbatim when both
+                // fields are present instead of substituting the preset's own.
+                workout_preset_id: sourcePresetId,
+                workoutPlanAssignmentId,
+                workout_format: workoutFormat,
+                time_cap_seconds: timeCapSeconds,
+              });
         invalidateCache(entryDate);
         // Chained so the exact-alarm prompt never stacks on top of the OS
         // notification-permission dialog.
@@ -345,7 +355,17 @@ export function useStartLiveWorkout(navigation: StartLiveWorkoutNavigation): {
         );
         useActiveWorkoutStore.getState().startWorkout(session, {
           createdByLiveStart: true,
-          plannedSetValues,
+          plannedSetValues:
+            workoutSessionId == null
+              ? plannedSetValues
+              : session.exercises.map((exercise) =>
+                  exercise.sets.map((set) => ({
+                    weight: set.weight ?? null,
+                    reps: set.reps ?? null,
+                    duration: set.duration ?? null,
+                    distance: set.distance ?? null,
+                  }))
+                ),
           exerciseConfigs,
           sourcePresetId,
           sourceServerConfigId,
@@ -367,8 +387,20 @@ export function useStartLiveWorkout(navigation: StartLiveWorkoutNavigation): {
           inFlightRef.current = false;
           setIsStarting(false);
         }
-      } catch {
-        // useCrudMutation already showed the failure toast; re-enable the UI.
+      } catch (error) {
+        if (workoutSessionId != null) {
+          Toast.show({
+            type: 'error',
+            text1: t('exerciseSummary.startWorkout', { defaultValue: 'Start' }),
+            text2:
+              error instanceof Error
+                ? error.message
+                : t('liveWorkout.startFailed', {
+                    defaultValue:
+                      'Unable to start the selected workout session.',
+                  }),
+          });
+        }
         inFlightRef.current = false;
         liveWorkoutStartInFlight = false;
         setIsStarting(false);

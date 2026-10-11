@@ -1407,10 +1407,10 @@ router.get('/:id/deletion-impact', authenticate, async (req, res, next) => {
  *           default: delete
  *         description: >
  *           hide - stop showing the exercise in search, change nothing else.
- *           delete - remove it from the library and from presets/plans; diary
- *           entries are preserved. delete_with_history - also delete the
- *           caller's own diary entries. Another user's diary is never touched;
- *           if anyone else still references the exercise it is hidden instead.
+ *           delete - remove the library item and unlinked template uses, keeping
+ *           diary snapshots. delete_with_history - also delete the caller's own
+ *           unlinked diary entries. Linked plan history rejects either removal
+ *           with 409; use hide to preserve it. Other users' references cause hide.
  *       - in: query
  *         name: forceDelete
  *         schema:
@@ -1433,15 +1433,16 @@ router.get('/:id/deletion-impact', authenticate, async (req, res, next) => {
  *         description: Forbidden, if the user does not have access to delete the exercise.
  *       404:
  *         description: Exercise not found.
+ *       409:
+ *         description: Linked workout plan history prevents removal; no changes saved.
  *       500:
  *         description: Server error.
  */
 router.delete('/:id', authenticate, async (req, res, next) => {
   const { id } = req.params;
-  const { forceDelete, mode, clientDate } = req.query as {
+  const { forceDelete, mode } = req.query as {
     forceDelete?: string;
     mode?: string;
-    clientDate?: string;
   };
   const uuidRegex =
     /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
@@ -1463,8 +1464,7 @@ router.delete('/:id', authenticate, async (req, res, next) => {
     const result = await exerciseService.deleteExercise(
       req.userId,
       id,
-      requestedMode,
-      typeof clientDate === 'string' ? clientDate : undefined
+      requestedMode
     );
     // Based on the result status, return appropriate messages and status codes
     if (
@@ -1480,6 +1480,9 @@ router.delete('/:id', authenticate, async (req, res, next) => {
         .json({ error: 'An unexpected error occurred during deletion.' });
     }
   } catch (error) {
+    if (error instanceof Error && 'status' in error && error.status === 409) {
+      return res.status(409).json({ error: error.message });
+    }
     // @ts-expect-error TS(2571): Object is of type 'unknown'.
     if (error.message.startsWith('Forbidden')) {
       // @ts-expect-error TS(2571): Object is of type 'unknown'.

@@ -239,6 +239,8 @@ export const createPresetSessionRequestSchema = z
     entry_date: dateStringSchema,
     name: z.string().nullable().optional(),
     description: z.string().nullable().optional(),
+    workout_format: workoutFormatSchema.optional(),
+    time_cap_seconds: z.number().int().nonnegative().nullable().optional(),
     notes: z.string().nullable().optional(),
     location: workoutLocationRequestSchema,
     source: z.string().default("manual"),
@@ -283,6 +285,8 @@ export const updatePresetSessionRequestSchema = z
   .object({
     name: z.string().min(1).optional(),
     description: z.string().nullable().optional(),
+    workout_format: workoutFormatSchema.optional(),
+    time_cap_seconds: z.number().int().nonnegative().nullable().optional(),
     notes: z.string().nullable().optional(),
     location: workoutLocationRequestSchema,
     entry_date: dateStringSchema.optional(),
@@ -293,6 +297,8 @@ export const updatePresetSessionRequestSchema = z
   .superRefine((data, ctx) => {
     const hasAnyField =
       data.name !== undefined ||
+      data.workout_format !== undefined ||
+      data.time_cap_seconds !== undefined ||
       data.description !== undefined ||
       data.notes !== undefined ||
       data.location !== undefined ||
@@ -551,6 +557,8 @@ export const presetSessionResponseSchema = z
     notes: z.string().nullable(),
     location: z.string().nullable().optional(),
     source: z.string(),
+    workout_format: workoutFormatSchema.optional(),
+    time_cap_seconds: z.number().int().nullable().optional(),
     created_at: z.string().nullable().optional(),
     total_duration_minutes: z.number(),
     exercises: z.array(exerciseEntryResponseSchema),

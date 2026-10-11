@@ -9,114 +9,60 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import type {
-  WorkoutPlanAssignment,
-  WorkoutPlanTemplate,
-} from '@/types/workout';
+import type { WorkoutPlanSession, WorkoutPlanTemplate } from '@/types/workout';
 
 interface DashboardPlanCardProps {
   plan: WorkoutPlanTemplate;
-  /**
-   * Standalone plans let the user pick any session; the next Training Program
-   * workout is a fixed preview that always starts `plan.next_assignment`.
-   */
+  /** Program-bound plans start the exact scheduled session; standalone plans
+   * let the user choose any session. */
   allowSessionPicker: boolean;
-  onStart: (
-    plan: WorkoutPlanTemplate,
-    assignment: WorkoutPlanAssignment
-  ) => void;
+  startingSessionId: string | null;
+  onStart: (plan: WorkoutPlanTemplate, session: WorkoutPlanSession) => void;
 }
 
 interface DistinctSession {
-  assignment: WorkoutPlanAssignment;
-  sessionIndex: number;
+  session: WorkoutPlanSession;
   name: string;
-  exerciseCount: number;
   isSuggested: boolean;
 }
 
 const DashboardPlanCard = ({
   plan,
   allowSessionPicker,
+  startingSessionId,
   onStart,
 }: DashboardPlanCardProps) => {
   const { t } = useTranslation();
-  const [selectedAssignmentId, setSelectedAssignmentId] = useState<
-    string | number | undefined
-  >(undefined);
+  const [selectedSessionId, setSelectedSessionId] = useState<string>();
 
-  const distinctSessions = useMemo<DistinctSession[]>(() => {
-    if (!allowSessionPicker) return [];
-    if (!plan.assignments || plan.assignments.length === 0) return [];
-    const map = new Map<number | string, DistinctSession>();
-
-    for (const a of plan.assignments) {
-      const key =
-        plan.schedule_type === 'sequential'
-          ? (a.session_index ?? 0)
-          : (a.day_of_week ?? 0);
-      const isSuggested =
-        plan.schedule_type === 'sequential'
-          ? (a.session_index ?? 0) ===
-            (plan.next_assignment?.session_index ?? 0)
-          : a.id === plan.next_assignment?.id;
-
-      const existing = map.get(key);
-      if (existing) {
-        existing.exerciseCount += 1;
-        if (isSuggested) existing.isSuggested = true;
-      } else {
-        const name =
-          a.session_name ||
-          a.workout_preset_name ||
-          a.exercise_name ||
-          (plan.schedule_type === 'sequential'
-            ? t('exerciseCard.sessionNumber', {
-                num: a.session_index ?? 1,
-                defaultValue: `Session ${a.session_index ?? 1}`,
-              })
-            : t('exerciseCard.dayNumber', {
-                num: (a.day_of_week ?? 0) + 1,
-                defaultValue: `Day ${(a.day_of_week ?? 0) + 1}`,
-              }));
-        map.set(key, {
-          assignment: a,
-          sessionIndex: a.session_index ?? 1,
-          name,
-          exerciseCount: 1,
-          isSuggested,
-        });
-      }
-    }
-    return Array.from(map.values());
-  }, [allowSessionPicker, plan, t]);
-
-  const currentAssignmentId =
-    selectedAssignmentId ||
-    (plan.next_assignment?.id ? String(plan.next_assignment.id) : '');
-  const currentSessionItem =
-    distinctSessions.find(
-      (s) => String(s.assignment.id) === String(currentAssignmentId)
-    ) ||
-    distinctSessions.find(
-      (s) => String(s.assignment.id) === String(plan.next_assignment?.id)
-    ) ||
-    distinctSessions[0];
-  const currentAssignment =
-    currentSessionItem?.assignment || plan.next_assignment;
-  if (!currentAssignment) return null;
+  const distinctSessions = useMemo<DistinctSession[]>(
+    () =>
+      allowSessionPicker
+        ? plan.sessions.map((session) => ({
+            session,
+            name: session.name,
+            isSuggested: session.id === plan.next_session?.id,
+          }))
+        : [],
+    [allowSessionPicker, plan]
+  );
+  const currentSession =
+    (allowSessionPicker
+      ? distinctSessions.find((item) => item.session.id === selectedSessionId)
+          ?.session
+      : undefined) ||
+    plan.next_session ||
+    distinctSessions[0]?.session;
+  if (!currentSession) return null;
 
   const sessionName =
-    currentAssignment.session_name ||
-    currentAssignment.workout_preset_name ||
-    currentAssignment.exercise_name ||
+    currentSession.name ||
     t('exerciseCard.scheduledWorkout', 'Workout Session');
-
-  const sessionIndex =
-    currentAssignment.session_index ?? (plan.sequence_position?.current || 1);
-  const totalSessions =
-    plan.sequence_position?.total ?? distinctSessions.length ?? 1;
-
+  const sessionIndex = Math.max(
+    plan.sessions.findIndex((session) => session.id === currentSession.id) + 1,
+    1
+  );
+  const totalSessions = plan.sessions.length;
   return (
     <div
       className="mb-3 p-3.5 rounded-lg border bg-muted/40 hover:bg-muted/60 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3"
@@ -158,10 +104,8 @@ const DashboardPlanCard = ({
                 </div>
                 {distinctSessions.map((sessionItem, index) => (
                   <DropdownMenuItem
-                    key={sessionItem.assignment.id || index}
-                    onClick={() =>
-                      setSelectedAssignmentId(sessionItem.assignment.id ?? '')
-                    }
+                    key={sessionItem.session.id || index}
+                    onClick={() => setSelectedSessionId(sessionItem.session.id)}
                     className="flex items-center justify-between gap-2 cursor-pointer"
                   >
                     <span className="truncate">
@@ -202,10 +146,20 @@ const DashboardPlanCard = ({
         <Button
           size="sm"
           variant="default"
-          onClick={() => onStart(plan, currentAssignment)}
+          aria-label={t('exerciseCard.startExactSession', {
+            name: sessionName,
+            number: sessionIndex,
+            total: totalSessions,
+            plan: plan.plan_name,
+            defaultValue: `Start Workout: ${sessionName} (session ${sessionIndex} of ${totalSessions}) — ${plan.plan_name}`,
+          })}
+          disabled={startingSessionId === currentSession.id}
+          onClick={() => onStart(plan, currentSession)}
         >
           <Play className="w-3.5 h-3.5 mr-1" />
-          {t('exerciseCard.startWorkoutButton', 'Start Workout')}
+          {startingSessionId === currentSession.id
+            ? t('common.loading', 'Starting…')
+            : t('exerciseCard.startWorkoutButton', 'Start Workout')}
         </Button>
       </div>
     </div>

@@ -32,8 +32,7 @@ import foodRoutes from './routes/foodRoutes.js';
 import favoritesRoutes from './routes/favoritesRoutes.js';
 // @ts-expect-error TS1192
 import v2FoodRoutes from './routes/v2/foodRoutes.js';
-// @ts-expect-error TS1192
-import v2ExerciseEntryRoutes from './routes/v2/exerciseEntryRoutes.js';
+import { router as v2ExerciseEntryRoutes } from './routes/v2/exerciseEntryRoutes.js';
 // @ts-expect-error TS1192
 import v2ExerciseRoutes from './routes/v2/exerciseRoutes.js';
 import workoutCoachingRoutesV2 from './routes/v2/workoutCoachingRoutes.js';

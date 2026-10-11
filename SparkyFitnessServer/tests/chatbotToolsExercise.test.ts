@@ -1,5 +1,10 @@
 import { vi, beforeEach, describe, expect, it } from 'vitest';
-import { todayInZone } from '@workspace/shared';
+import {
+  todayInZone,
+  type ExerciseEntryResponse,
+  type ExerciseEntrySetResponse,
+  type PresetSessionResponse,
+} from '@workspace/shared';
 import { buildExerciseTools } from '../ai/tools/exerciseTools.js';
 import exerciseService from '../services/exerciseService.js';
 import workoutPresetService from '../services/workoutPresetService.js';
@@ -91,6 +96,79 @@ const ENTRY_ID = '11111111-1111-4111-8111-111111111111';
 const EXERCISE_ID = '22222222-2222-4222-8222-222222222222';
 const EXERCISE_ID_2 = '33333333-3333-4333-8333-333333333333';
 const PRESET_ID = 4;
+
+function diaryExercise(
+  name: string,
+  fields: Partial<ExerciseEntryResponse>
+): ExerciseEntryResponse {
+  return {
+    id: ENTRY_ID,
+    exercise_id: null,
+    duration_minutes: 0,
+    calories_burned: 0,
+    entry_date: '2026-06-10',
+    notes: null,
+    distance: null,
+    avg_heart_rate: null,
+    source: null,
+    superset_group: null,
+    sets: [],
+    activity_details: [],
+    exercise_snapshot: {
+      id: null,
+      name,
+      category: null,
+      images: null,
+      primary_muscles: null,
+      secondary_muscles: null,
+      equipment: null,
+      instructions: null,
+      force: null,
+      level: null,
+      mechanic: null,
+    },
+    ...fields,
+  };
+}
+
+function diarySet(
+  fields: Partial<ExerciseEntrySetResponse>
+): ExerciseEntrySetResponse {
+  return {
+    id: 1,
+    set_number: 1,
+    set_type: 'Working Set',
+    reps: null,
+    weight: null,
+    duration: null,
+    rest_time: null,
+    notes: null,
+    rpe: null,
+    rir: null,
+    completed_at: null,
+    is_pr: false,
+    ...fields,
+  };
+}
+
+function diaryPreset(
+  fields: Partial<PresetSessionResponse>
+): PresetSessionResponse {
+  return {
+    type: 'preset',
+    id: ENTRY_ID,
+    entry_date: '2026-06-10',
+    workout_preset_id: null,
+    name: 'Archived workout',
+    description: null,
+    notes: null,
+    source: 'manual',
+    total_duration_minutes: 0,
+    exercises: [],
+    activity_details: [],
+    ...fields,
+  };
+}
 
 let tools: ReturnType<typeof buildExerciseTools>;
 
@@ -714,82 +792,55 @@ describe('log_exercise', () => {
 });
 
 describe('list_exercise_diary', () => {
-  it('flattens preset sessions and renders the per-entry list in created_at order', async () => {
+  it('flattens archived preset children and displays their historical snapshot labels in created_at order', async () => {
     vi.mocked(exerciseService.getExerciseEntriesByDate).mockResolvedValue([
-      {
-        type: 'preset',
+      diaryPreset({
         id: 'pe-1',
         name: 'Push Day',
         created_at: '2026-06-10T08:00:00Z',
         exercises: [
-          {
+          diaryExercise('Bench Press', {
             id: 'ee-2',
-            name: 'Bench Press',
+            created_at: '2026-06-10T08:05:00Z',
+            notes: 'felt good',
             sets: [
-              {
-                id: 's1',
-                set_number: 1,
-                set_type: 'Working Set',
-                reps: 10,
-                weight: 60,
-                duration: null,
-                rest_time: 90,
-                rpe: 8,
-                rir: null,
-                notes: null,
-              },
-              {
-                id: 's2',
+              diarySet({ id: 1, reps: 10, weight: 60, rest_time: 90, rpe: 8 }),
+              diarySet({
+                id: 2,
                 set_number: 2,
-                set_type: 'Working Set',
                 reps: 8,
                 weight: 65,
-                duration: null,
-                rest_time: null,
-                rpe: null,
                 notes: 'tough',
-              },
+              }),
             ],
-            duration_minutes: 0,
-            calories_burned: 0,
-            notes: 'felt good',
-            distance: null,
-            avg_heart_rate: null,
-            steps: null,
-            created_at: '2026-06-10T08:05:00Z',
-          },
+          }),
         ],
-      },
+      }),
       {
+        ...diaryExercise('Morning Run', {
+          id: 'ee-1',
+          duration_minutes: 30,
+          calories_burned: 300,
+          distance: 5,
+          avg_heart_rate: 150,
+          steps: 6000,
+          created_at: '2026-06-10T07:00:00Z',
+        }),
         type: 'individual',
-        id: 'ee-1',
-        name: 'Morning Run',
-        sets: [],
-        duration_minutes: 30,
-        calories_burned: 300,
-        notes: null,
-        distance: 5,
-        avg_heart_rate: 150,
-        steps: 6000,
-        created_at: '2026-06-10T07:00:00Z',
+        name: 'Renamed live exercise',
       },
     ]);
-
     const result = await tools.sparky_manage_exercise.execute!(
       { action: 'list_exercise_diary', entry_date: '2026-06-10' },
       opts
     );
-
     expect(result).toBe(
       '# Exercise Diary: 2026-06-10\n\n' +
         '**Morning Run** | 30 min | 300 kcal | 5 dist | 150 bpm | 6000 steps\n  ID: ee-1\n\n' +
         '**Bench Press** — 2 sets\n  Sets: 10r×60kg×RPE 8 (rest 90s); 8r×65kg (tough)\n  Notes: felt good\n  ID: ee-2'
     );
-    expect(exerciseService.getExerciseEntriesByDate).toHaveBeenCalledWith(
-      'user-1',
-      'user-1',
-      '2026-06-10'
-    );
+    expect(exerciseService.searchExercises).not.toHaveBeenCalled();
+    expect(result).not.toContain('Renamed live exercise');
   });
 
   it('renders an empty diary', async () => {
@@ -1559,13 +1610,14 @@ describe('workout presets', () => {
 
   it('list_exercise_diary reads WOD scores logged by the mobile app (legacy keys)', async () => {
     vi.mocked(exerciseService.getExerciseEntriesByDate).mockResolvedValue([
-      {
+      diaryPreset({
         id: 'pe-2',
-        type: 'preset',
         name: 'Cindy',
         created_at: '2026-06-10T10:00:00Z',
         activity_details: [
           {
+            id: 'score-1',
+            provider_name: 'manual',
             detail_type: 'wod_score',
             detail_data: {
               format: 'amrap',
@@ -1576,48 +1628,42 @@ describe('workout presets', () => {
           },
         ],
         exercises: [
-          {
+          diaryExercise('Pull-up', {
             id: 'ee-9',
-            name: 'Pull-up',
             created_at: '2026-06-10T10:00:00Z',
-            sets: [],
-          },
+          }),
         ],
-      },
-    ] as never);
-
+      }),
+    ]);
     const result = await tools.sparky_manage_exercise.execute!(
       { action: 'list_exercise_diary', entry_date: '2026-06-10' },
       opts
     );
-
+    expect(result).toContain('**Pull-up**');
     expect(result).toContain('Score: AMRAP — 5 rounds + 3 reps (Rx)');
   });
 
   it('list_exercise_diary shows per-set RIR and the session location', async () => {
     vi.mocked(exerciseService.getExerciseEntriesByDate).mockResolvedValue([
-      {
+      diaryPreset({
         id: 'pe-1',
-        type: 'preset',
         name: 'Push Day',
         location: 'Home Gym',
         created_at: '2026-06-10T10:00:00Z',
         exercises: [
-          {
+          diaryExercise('Bench Press', {
             id: 'ee-1',
-            name: 'Bench Press',
             created_at: '2026-06-10T10:00:00Z',
-            sets: [{ reps: 8, weight: 100, rir: 2 }],
-          },
+            sets: [diarySet({ reps: 8, weight: 100, rir: 2 })],
+          }),
         ],
-      },
-    ] as never);
-
+      }),
+    ]);
     const result = await tools.sparky_manage_exercise.execute!(
       { action: 'list_exercise_diary', entry_date: '2026-06-10' },
       opts
     );
-
+    expect(result).toContain('**Bench Press**');
     expect(result).toContain('RIR 2');
     expect(result).toContain('Location: Home Gym');
   });
@@ -1694,15 +1740,16 @@ describe('workout presets', () => {
     });
   });
 
-  it('list_exercise_diary renders WOD scores when preset activity details are present', async () => {
+  it('list_exercise_diary renders one WOD score alongside the frozen child labels', async () => {
     vi.mocked(exerciseService.getExerciseEntriesByDate).mockResolvedValue([
-      {
+      diaryPreset({
         id: 'pe-1',
-        type: 'preset',
         name: 'Cindy',
         created_at: '2026-06-10T10:00:00Z',
         activity_details: [
           {
+            id: 'score-1',
+            provider_name: 'manual',
             detail_type: 'wod_score',
             detail_data: {
               workout_format: 'amrap',
@@ -1715,32 +1762,28 @@ describe('workout presets', () => {
           },
         ],
         exercises: [
-          {
+          diaryExercise('Pull-up', {
             id: 'ee-1',
-            name: 'Pull-up',
             created_at: '2026-06-10T10:00:00Z',
-            sets: [{ reps: 5 }],
-          },
-          {
+            sets: [diarySet({ reps: 5 })],
+          }),
+          diaryExercise('Push-up', {
             id: 'ee-2',
-            name: 'Push-up',
             created_at: '2026-06-10T10:00:01Z',
-            sets: [{ reps: 10 }],
-          },
+            sets: [diarySet({ reps: 10 })],
+          }),
         ],
-      },
-    ] as never);
-
+      }),
+    ]);
     const result = await tools.sparky_manage_exercise.execute!(
       { action: 'list_exercise_diary', entry_date: '2026-06-10' },
       opts
     );
-
     expect(result).toContain('**Pull-up** — 1 sets');
+    expect(result).toContain('**Push-up** — 1 sets');
     expect(result).toContain(
       'Score: AMRAP 20:00 cap — 18 rounds + 7 reps (Rx)'
     );
-    // One score per session, not repeated on every exercise.
     expect(String(result).split('Score:').length - 1).toBe(1);
   });
 

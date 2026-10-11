@@ -10,729 +10,580 @@ vi.mock('../services/workoutPlanTemplateService.js', () => ({
     deleteWorkoutPlanTemplate: vi.fn(),
   },
 }));
-
 vi.mock('../models/workoutPresetRepository.js', () => ({
   default: {
     getWorkoutPresetByName: vi.fn(),
+    getWorkoutPresetById: vi.fn(),
   },
 }));
-
 vi.mock('../services/exerciseService.js', () => ({
-  default: {
-    searchExercises: vi.fn(),
-  },
+  default: { searchExercises: vi.fn() },
 }));
-
-vi.mock('../config/logging.js', () => ({
-  log: vi.fn(),
-}));
+vi.mock('../config/logging.js', () => ({ log: vi.fn() }));
 
 import workoutPlanTemplateService from '../services/workoutPlanTemplateService.js';
 import workoutPresetRepository from '../models/workoutPresetRepository.js';
 import exerciseService from '../services/exerciseService.js';
 import { buildWorkoutPlanTools } from '../ai/tools/workoutPlanTools.js';
+import { HttpError } from '../utils/errors.js';
 import { toolOpts } from './helpers/toolExecutionOptions.js';
 
-const opts = toolOpts;
-
-const PLAN_ID = 42;
-
-const DB_ERROR_TEXT =
-  'Error [DB_ERROR]: A database error occurred.\n\nSuggestion: Do NOT retry the same call — it will fail the same way. Tell the user what failed and stop.';
-
-const svc = workoutPlanTemplateService as unknown as {
-  getWorkoutPlanTemplatesByUserId: ReturnType<typeof vi.fn>;
-  getWorkoutPlanTemplateById: ReturnType<typeof vi.fn>;
-  getActiveWorkoutPlanForDate: ReturnType<typeof vi.fn>;
-  createWorkoutPlanTemplate: ReturnType<typeof vi.fn>;
-  updateWorkoutPlanTemplate: ReturnType<typeof vi.fn>;
-  deleteWorkoutPlanTemplate: ReturnType<typeof vi.fn>;
+const svc = vi.mocked(workoutPlanTemplateService);
+const presets = vi.mocked(workoutPresetRepository);
+const sessionA = '11111111-1111-4111-8111-111111111111';
+const sessionB = '22222222-2222-4222-8222-222222222222';
+const exerciseId = '33333333-3333-4333-8333-333333333333';
+const set = {
+  set_number: 1,
+  set_type: 'Working Set',
+  reps: 8,
+  weight: null,
+  duration: null,
+  distance: null,
+  rest_time: 90,
+  notes: '8–10 reps; RPE 7; each side',
 };
-
-const presetRepo = workoutPresetRepository as unknown as {
-  getWorkoutPresetByName: ReturnType<typeof vi.fn>;
+const preset = {
+  id: 7,
+  name: 'Strength',
+  description: null,
+  workout_format: 'standard',
+  exercises: [
+    {
+      id: 70,
+      exercise_id: exerciseId,
+      exercise_name: 'Row',
+      image_url: null,
+      category: 'Strength',
+      modality: 'weight_reps',
+      superset_group: null,
+      progression_mode: 'manual',
+      ramp_increment: null,
+      sets: [{ id: 700, ...set }],
+    },
+  ],
 };
+const assignment = (count: number) => ({
+  exercise_id: exerciseId,
+  exercise_name: 'Row',
+  sort_order: 0,
+  sets: Array.from({ length: count }, (_, index) => ({
+    ...set,
+    set_number: index + 1,
+  })),
+});
+const sessions = () => [
+  {
+    id: sessionA,
+    name: 'A',
+    day_of_week: null,
+    sort_order: 0,
+    assignments: [{ id: 10, ...assignment(2) }],
+  },
+  {
+    id: sessionB,
+    name: 'A',
+    day_of_week: null,
+    sort_order: 1,
+    assignments: [{ id: 11, ...assignment(3) }],
+  },
+];
+const execute = (args: unknown) =>
+  buildWorkoutPlanTools('user-1', 'UTC').sparky_manage_workout_plans.execute!(
+    args as never,
+    toolOpts
+  );
 
-const exSvc = exerciseService as unknown as {
-  searchExercises: ReturnType<typeof vi.fn>;
-};
-
-function getTool() {
-  const tools = buildWorkoutPlanTools('user-1', 'UTC');
-  return tools.sparky_manage_workout_plans;
-}
-
-describe('sparky_manage_workout_plans', () => {
+describe('AI independently prescribed Workout Sessions', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
+    svc.createWorkoutPlanTemplate.mockResolvedValue({
+      id: 42,
+      plan_name: 'Cycle',
+    } as never);
+    svc.updateWorkoutPlanTemplate.mockResolvedValue({
+      id: 42,
+      plan_name: 'Cycle',
+    } as never);
+    svc.getWorkoutPlanTemplateById.mockResolvedValue({
+      id: 42,
+      plan_name: 'Cycle',
+      schedule_type: 'sequential',
+      entry_mode: 'prompt',
+      sessions: sessions(),
+    } as never);
   });
 
-  describe('list_workout_plans', () => {
-    it('lists sequential and weekly workout plans with correct session/day counts', async () => {
-      svc.getWorkoutPlanTemplatesByUserId.mockResolvedValue([
-        {
-          id: PLAN_ID,
-          plan_name: 'Push Pull Legs',
-          is_active: true,
-          schedule_type: 'sequential',
-          assignments: [
-            { session_index: 1, session_name: 'Push' },
-            { session_index: 1, session_name: 'Push' },
-            { session_index: 2, session_name: 'Pull' },
-            { session_index: 3, session_name: 'Legs' },
-          ],
-        },
-        {
-          id: 43,
-          plan_name: 'Upper Lower',
-          is_active: false,
-          schedule_type: 'weekly',
-          assignments: [
-            { day_of_week: 1 },
-            { day_of_week: 2 },
-            { day_of_week: 4 },
-            { day_of_week: 5 },
-          ],
-        },
-      ]);
-      const result = await getTool().execute!({}, opts);
-      expect(result).toBe(
-        '# Workout Plans\n\n**Push Pull Legs** (active, sequential, 3 sessions)\n  ID: ' +
-          PLAN_ID +
-          '\n\n**Upper Lower** (inactive, weekly, 4 days)\n  ID: 43'
-      );
-    });
-
-    it('renders no results when there are no plans', async () => {
-      svc.getWorkoutPlanTemplatesByUserId.mockResolvedValue([]);
-      const result = await getTool().execute!(
-        { action: 'list_workout_plans' },
-        opts
-      );
-      expect(result).toBe('# Workout Plans\n\nNo results found.');
-    });
-  });
-
-  describe('get_workout_plan', () => {
-    it('gets a sequential workout plan grouped by session_index with formats and sets', async () => {
-      svc.getWorkoutPlanTemplateById.mockResolvedValue({
-        id: PLAN_ID,
-        plan_name: 'Push Pull Legs',
-        is_active: true,
-        schedule_type: 'sequential',
-        assignments: [
-          {
-            session_index: 1,
-            session_name: 'Push',
-            workout_preset_name: 'Push Day',
-            workout_preset_format: 'tabata',
-            sets: [{ id: 's1' }],
-          },
-          {
-            session_index: 1,
-            session_name: 'Push',
-            exercise_name: 'Push Up',
-            sets: [{ id: 's2' }, { id: 's3' }],
-          },
-          {
-            session_index: 2,
-            session_name: 'Pull',
-            workout_preset_name: 'Pull Day',
-            workout_preset_format: 'standard',
-          },
-        ],
-      });
-      const result = await getTool().execute!(
-        { action: 'get_workout_plan', plan_id: PLAN_ID },
-        opts
-      );
-      expect(result).toBe(
-        '# Workout Plan: Push Pull Legs (Sequential)\n\n' +
-          'Session 1 — Push:\n' +
-          '  1. Push Day (preset, tabata) — 1 set\n' +
-          '  2. Push Up — 2 sets\n\n' +
-          'Session 2 — Pull:\n' +
-          '  1. Pull Day (preset)'
-      );
-      expect(svc.getWorkoutPlanTemplateById).toHaveBeenCalledWith(
-        'user-1',
-        PLAN_ID
-      );
-    });
-
-    it('gets a weekly workout plan grouped by day_of_week with day names', async () => {
-      svc.getWorkoutPlanTemplateById.mockResolvedValue({
-        id: PLAN_ID,
-        plan_name: 'Weekly Split',
-        is_active: true,
+  it('counts distinct session identities even when labels and weekdays repeat', async () => {
+    svc.getWorkoutPlanTemplatesByUserId.mockResolvedValue([
+      {
+        id: 42,
+        plan_name: 'Cycle',
         schedule_type: 'weekly',
-        assignments: [
-          {
-            day_of_week: 1,
-            workout_preset_name: 'Chest',
-          },
-          {
-            day_of_week: 3,
-            exercise_name: 'Deadlift',
-            sets: [{ id: 's1' }],
-          },
-        ],
-      });
-      const result = await getTool().execute!(
-        { action: 'get_workout_plan', plan_id: PLAN_ID },
-        opts
-      );
-      expect(result).toBe(
-        '# Workout Plan: Weekly Split (Weekly)\n\n' +
-          'Monday:\n' +
-          '  1. Chest (preset)\n\n' +
-          'Wednesday:\n' +
-          '  1. Deadlift — 1 set'
-      );
-    });
+        sessions: sessions().map((session) => ({ ...session, day_of_week: 1 })),
+      },
+    ] as never);
+    expect(await execute({ action: 'list_workout_plans' })).toContain(
+      'weekly, 2 sessions'
+    );
+  });
 
-    it('returns empty message when plan has no assignments', async () => {
-      svc.getWorkoutPlanTemplateById.mockResolvedValue({
-        id: PLAN_ID,
-        plan_name: 'Empty Plan',
+  it('displays same-label sessions separately with their exact identities and different prescriptions', async () => {
+    const result = await execute({ action: 'get_workout_plan', plan_id: 42 });
+    expect(result).toContain(`Session 1 — A (ID: ${sessionA})`);
+    expect(result).toContain(`Session 2 — A (ID: ${sessionB})`);
+    expect(result).toContain('Row — 2 sets');
+    expect(result).toContain('Row — 3 sets');
+  });
+
+  it('creates two independent same-label sessions and preserves null load and detailed notes', async () => {
+    const result = await execute({
+      action: 'create_workout_plan',
+      plan_name: 'Cycle',
+      sessions: sessions().map((session) => ({
+        ...session,
+        assignments: session.assignments.map(
+          ({ exercise_name: _name, ...item }) => item
+        ),
+      })),
+    });
+    expect(result).toContain('Workout plan "Cycle" created');
+    expect(svc.createWorkoutPlanTemplate).toHaveBeenCalledTimes(1);
+    const input = svc.createWorkoutPlanTemplate.mock.calls[0]![1];
+    expect(input.sessions).toHaveLength(2);
+    expect(input.sessions[0]!.assignments[0]!.sets).toHaveLength(2);
+    expect(input.sessions[1]!.assignments[0]!.sets).toHaveLength(3);
+    expect(input.sessions[0]!.assignments[0]!.sets![0]).toEqual(set);
+    expect(input.sessions.map((session) => session.id)).toEqual([
+      sessionA,
+      sessionB,
+    ]);
+  });
+
+  it('resolves exercise names inside nested assignments without grouping session labels', async () => {
+    vi.mocked(exerciseService.searchExercises).mockResolvedValue([
+      { id: exerciseId, name: 'Row' },
+    ] as never);
+    const result = await execute({
+      action: 'create_workout_plan',
+      plan_name: 'Cycle',
+      sessions: [
+        { name: 'A', assignments: [{ exercise_name: 'Row', sets: [set] }] },
+      ],
+    });
+    expect(result).toContain('Workout plan "Cycle" created');
+    expect(svc.createWorkoutPlanTemplate).toHaveBeenCalledTimes(1);
+    expect(
+      svc.createWorkoutPlanTemplate.mock.calls[0]![1].sessions[0]!
+        .assignments[0]!.exercise_id
+    ).toBe(exerciseId);
+  });
+
+  it('rejects invalid live preset prescriptions before creating a plan instead of forwarding malformed snapshots', async () => {
+    presets.getWorkoutPresetById.mockResolvedValue({
+      ...preset,
+      exercises: [{ ...preset.exercises[0], modality: 'strength' }],
+    } as never);
+    const result = await execute({
+      action: 'create_workout_plan',
+      plan_name: 'Cycle',
+      sessions: [{ name: 'A', assignments: [{ workout_preset_id: 7 }] }],
+    });
+    expect(result).toContain('VALIDATION');
+    expect(svc.createWorkoutPlanTemplate).not.toHaveBeenCalled();
+  });
+
+  it('freezes complete preset exercise/set prescriptions by ID at authoring', async () => {
+    presets.getWorkoutPresetById.mockResolvedValue(preset as never);
+    const result = await execute({
+      action: 'create_workout_plan',
+      plan_name: 'Cycle',
+      sessions: [{ name: 'A', assignments: [{ workout_preset_id: 7 }] }],
+    });
+    expect(result).toContain('Workout plan "Cycle" created');
+    expect(svc.createWorkoutPlanTemplate).toHaveBeenCalledTimes(1);
+    const snapshot =
+      svc.createWorkoutPlanTemplate.mock.calls[0]![1].sessions[0]!
+        .assignments[0]!.preset_snapshot;
+    expect(presets.getWorkoutPresetById).toHaveBeenCalledWith(7, 'user-1');
+    expect(snapshot).toEqual(preset);
+    preset.exercises[0]!.sets[0]!.notes = 'Library changed';
+    expect(snapshot!.exercises[0]!.sets[0]!.notes).toBe(set.notes);
+    preset.exercises[0]!.sets[0]!.notes = set.notes;
+  });
+
+  it('resolves a preset name and snapshots the full accessible detail', async () => {
+    presets.getWorkoutPresetByName.mockResolvedValue(preset as never);
+    presets.getWorkoutPresetById.mockResolvedValue(preset as never);
+    const result = await execute({
+      action: 'create_workout_plan',
+      plan_name: 'Cycle',
+      sessions: JSON.stringify([
+        { name: 'A', assignments: [{ preset_name: 'Strength' }] },
+      ]),
+    });
+    expect(result).toContain('Workout plan "Cycle" created');
+    expect(svc.createWorkoutPlanTemplate).toHaveBeenCalledTimes(1);
+    expect(
+      svc.createWorkoutPlanTemplate.mock.calls[0]![1].sessions[0]!
+        .assignments[0]!.preset_snapshot!.exercises[0]!.sets[0]
+    ).toEqual({ id: 700, ...set });
+  });
+
+  it('retains an edited frozen preset without consulting the live library', async () => {
+    const result = await execute({
+      action: 'update_workout_plan',
+      plan_id: 42,
+      confirmed: true,
+      sessions: [
+        {
+          id: sessionA,
+          name: 'A',
+          day_of_week: null,
+          assignments: [
+            { id: 10, workout_preset_id: 7, preset_snapshot: preset },
+          ],
+        },
+      ],
+    });
+    expect(result).toContain('Workout plan "Cycle" updated');
+    expect(svc.updateWorkoutPlanTemplate).toHaveBeenCalledTimes(1);
+    expect(presets.getWorkoutPresetById).not.toHaveBeenCalled();
+    expect(presets.getWorkoutPresetByName).not.toHaveBeenCalled();
+    expect(
+      svc.updateWorkoutPlanTemplate.mock.calls[0]![2].sessions![0]!
+        .assignments[0]
+    ).toMatchObject({ id: 10, preset_snapshot: preset });
+  });
+
+  it('does not refresh existing preset assignments whose snapshot was omitted', async () => {
+    const result = await execute({
+      action: 'update_workout_plan',
+      plan_id: 42,
+      confirmed: true,
+      sessions: [
+        {
+          id: sessionA,
+          name: 'A',
+          assignments: [{ id: 10, workout_preset_id: 7 }],
+        },
+      ],
+    });
+    expect(result).toContain('retain their frozen preset_snapshot');
+    expect(presets.getWorkoutPresetById).not.toHaveBeenCalled();
+    expect(svc.updateWorkoutPlanTemplate).not.toHaveBeenCalled();
+  });
+
+  it('uses only selected next-session assignments and frozen preset labels for progression', async () => {
+    svc.getActiveWorkoutPlanForDate.mockResolvedValue([
+      {
+        id: 42,
+        plan_name: 'Cycle',
         schedule_type: 'sequential',
-        assignments: [],
-      });
-      const result = await getTool().execute!(
-        { action: 'get_workout_plan', plan_id: PLAN_ID },
-        opts
-      );
-      expect(result).toBe(
-        '# Workout Plan: Empty Plan (Sequential)\n\n_No assignments in this plan._'
-      );
+        sessions: sessions(),
+        next_session: { ...sessions()[1], name: 'Second A' },
+        next_assignments: [{ id: 11, preset_snapshot: preset }],
+        sequence_position: { current: 2, total: 2 },
+      },
+    ] as never);
+    const result = await execute({
+      action: 'get_active_workout_plan',
+      date: '2026-10-11',
     });
-
-    it('returns NOT_FOUND when getting a missing plan', async () => {
-      svc.getWorkoutPlanTemplateById.mockRejectedValue(
-        new Error('Workout plan template not found.')
-      );
-      const result = await getTool().execute!(
-        { action: 'get_workout_plan', plan_id: PLAN_ID },
-        opts
-      );
-      expect(result).toBe(
-        "Error [NOT_FOUND]: Workout plan with ID '" +
-          PLAN_ID +
-          "' not found.\n\nSuggestion: Check the ID and try again."
-      );
-    });
+    expect(result).toContain('Session 2 of 2 — Second A');
+    expect(result).toContain('Strength (preset) — 1 set');
+    expect(result).not.toContain('Row — 2 sets');
+    expect(presets.getWorkoutPresetById).not.toHaveBeenCalled();
   });
 
-  describe('get_active_workout_plan', () => {
-    it('returns progression and next session for active sequential plan', async () => {
-      svc.getActiveWorkoutPlanForDate.mockResolvedValue([
-        {
-          id: PLAN_ID,
-          plan_name: 'Hypertrophy Block',
-          schedule_type: 'sequential',
-          sequence_position: {
-            current: 2,
-            total: 3,
-            session_name: 'Pull Day',
-          },
-          next_assignments: [
-            {
-              workout_preset_name: 'Pull Workout',
-              workout_preset_format: 'standard',
-            },
-            {
-              exercise_name: 'Bicep Curls',
-              sets: [{ id: 1 }, { id: 2 }, { id: 3 }],
-            },
-          ],
-        },
-      ]);
-      const result = await getTool().execute!(
-        { action: 'get_active_workout_plan', date: '2026-09-24' },
-        opts
-      );
-      expect(result).toContain(
-        '# Active Plan: **Hypertrophy Block** (Sequential)'
-      );
-      expect(result).toContain('Next up: Session 2 of 3 — Pull Day');
-      expect(result).toContain('1. Pull Workout (preset)');
-      expect(result).toContain('2. Bicep Curls — 3 sets');
-    });
-
-    it('returns today session for active weekly plan', async () => {
-      // 2026-09-24 is a Thursday (day 4)
-      svc.getActiveWorkoutPlanForDate.mockResolvedValue([
-        {
-          id: PLAN_ID,
-          plan_name: '5x5 Program',
-          schedule_type: 'weekly',
-          assignments: [
-            {
-              day_of_week: 4,
-              workout_preset_name: 'Thursday Strength',
-            },
-          ],
-          // The repository selects the query date's weekday assignments.
-          next_assignments: [
-            {
-              day_of_week: 4,
-              workout_preset_name: 'Thursday Strength',
-            },
-          ],
-        },
-      ]);
-      const result = await getTool().execute!(
-        { action: 'get_active_workout_plan', date: '2026-09-24' },
-        opts
-      );
-      expect(result).toContain('# Active Plan: **5x5 Program** (Weekly)');
-      expect(result).toContain('Session for Thursday (2026-09-24):');
-      expect(result).toContain('1. Thursday Strength (preset)');
-    });
-
-    it('returns rest day message when weekly plan has no assignments for date', async () => {
-      // 2026-09-24 is a Thursday (day 4)
-      svc.getActiveWorkoutPlanForDate.mockResolvedValue([
-        {
-          id: PLAN_ID,
-          plan_name: '5x5 Program',
-          schedule_type: 'weekly',
-          assignments: [
-            {
-              day_of_week: 1, // Monday only
-              workout_preset_name: 'Monday Workout',
-            },
-          ],
-          next_assignments: [],
-        },
-      ]);
-      const result = await getTool().execute!(
-        { action: 'get_active_workout_plan', date: '2026-09-24' },
-        opts
-      );
-      expect(result).toContain('# Active Plan: **5x5 Program** (Weekly)');
-      expect(result).toContain(
-        'Rest day: nothing scheduled for Thursday (2026-09-24).'
-      );
-    });
-
-    it('returns not found message when no active plan exists', async () => {
-      svc.getActiveWorkoutPlanForDate.mockResolvedValue([]);
-      const result = await getTool().execute!(
-        { action: 'get_active_workout_plan', date: '2026-09-24' },
-        opts
-      );
-      expect(result).toBe('No active workout plan found for 2026-09-24.');
-    });
-  });
-
-  describe('create_workout_plan', () => {
-    it('creates sequential plan by default with preset_name and exercise_name resolution', async () => {
-      presetRepo.getWorkoutPresetByName.mockResolvedValue({
-        id: 101,
-        name: 'Push Day',
-      });
-      // Substring search results: only the exact (case-insensitive) match
-      // may be picked.
-      exSvc.searchExercises.mockResolvedValue([
-        { id: 'ex-uuid-2', name: 'Incline Bench Press' },
-        { id: 'ex-uuid-1', name: 'bench press' },
-      ]);
-      svc.createWorkoutPlanTemplate.mockResolvedValue({
-        id: PLAN_ID,
-        plan_name: 'My PPL',
-      });
-
-      const result = await getTool().execute!(
-        {
-          action: 'create_workout_plan',
-          plan_name: 'My PPL',
-          sessions: [
-            { preset_name: 'Push Day', session_name: 'Push' },
-            {
-              exercise_name: 'Bench Press',
-              session_name: 'Push',
-              sets: [{ reps: 10, weight: 80 }],
-            },
-            { preset_name: 'Push Day', session_name: 'Pull' },
-          ],
-        },
-        opts
-      );
-
-      expect(result).toContain('Workout plan "My PPL" created');
-      expect(result).toContain('sequential');
-      expect(svc.createWorkoutPlanTemplate).toHaveBeenCalledWith(
-        'user-1',
-        expect.objectContaining({
-          plan_name: 'My PPL',
-          schedule_type: 'sequential',
-          entry_mode: 'prompt',
-          assignments: [
-            expect.objectContaining({
-              workout_preset_id: 101,
-              session_index: 1,
-              session_name: 'Push',
-            }),
-            expect.objectContaining({
-              exercise_id: 'ex-uuid-1',
-              session_index: 1,
-              session_name: 'Push',
-              sets: [
-                expect.objectContaining({
-                  set_number: 1,
-                  reps: 10,
-                  weight: 80,
-                }),
-              ],
-            }),
-            expect.objectContaining({
-              workout_preset_id: 101,
-              session_index: 2,
-              session_name: 'Pull',
-            }),
-          ],
-        })
-      );
-    });
-
-    it('coerces entry_mode prefill to prompt on sequential plan and adds notice', async () => {
-      svc.createWorkoutPlanTemplate.mockResolvedValue({
-        id: PLAN_ID,
-        plan_name: 'Sequential Plan',
-      });
-
-      const result = await getTool().execute!(
-        {
-          action: 'create_workout_plan',
-          plan_name: 'Sequential Plan',
-          schedule_type: 'sequential',
-          entry_mode: 'prefill',
-        },
-        opts
-      );
-
-      expect(result).toContain(
-        'Note: Sequential plans only support "prompt" entry mode'
-      );
-      expect(svc.createWorkoutPlanTemplate).toHaveBeenCalledWith(
-        'user-1',
-        expect.objectContaining({
-          schedule_type: 'sequential',
-          entry_mode: 'prompt',
-        })
-      );
-    });
-
-    it('creates weekly plan with day names parsed to 0-6', async () => {
-      presetRepo.getWorkoutPresetByName.mockResolvedValue({
-        id: 102,
-        name: 'Full Body',
-      });
-      svc.createWorkoutPlanTemplate.mockResolvedValue({
-        id: PLAN_ID,
-        plan_name: 'Weekly Full Body',
-      });
-
-      const result = await getTool().execute!(
-        {
-          action: 'create_workout_plan',
-          plan_name: 'Weekly Full Body',
-          schedule_type: 'weekly',
-          sessions: [
-            { preset_name: 'Full Body', day_of_week: 'Monday' },
-            { preset_name: 'Full Body', day_of_week: 'Friday' },
-          ],
-        },
-        opts
-      );
-
-      expect(result).toContain('Workout plan "Weekly Full Body" created');
-      expect(svc.createWorkoutPlanTemplate).toHaveBeenCalledWith(
-        'user-1',
-        expect.objectContaining({
-          schedule_type: 'weekly',
-          assignments: [
-            expect.objectContaining({
-              workout_preset_id: 102,
-              day_of_week: 1,
-            }),
-            expect.objectContaining({
-              workout_preset_id: 102,
-              day_of_week: 5,
-            }),
-          ],
-        })
-      );
-    });
-
-    it('returns NOT_FOUND-style validation error when exercise_name has no exact match', async () => {
-      exSvc.searchExercises.mockResolvedValue([
-        { id: 'ex-uuid-2', name: 'Incline Bench Press' },
-      ]);
-
-      const result = await getTool().execute!(
-        {
-          action: 'create_workout_plan',
-          plan_name: 'Bench Plan',
-          sessions: [{ exercise_name: 'Bench Press' }],
-        },
-        opts
-      );
-
-      expect(result).toContain('Error [VALIDATION]');
-      expect(result).toContain('Exercise with name "Bench Press" not found');
-      expect(svc.createWorkoutPlanTemplate).not.toHaveBeenCalled();
-    });
-
-    it('validates sessions passed as a JSON string', async () => {
-      const result = await getTool().execute!(
-        {
-          action: 'create_workout_plan',
-          plan_name: 'Bad JSON Items',
-          sessions: JSON.stringify([{ preset_name: 'Push', bogus: 1 }]),
-        },
-        opts
-      );
-
-      expect(result).toContain('Error [VALIDATION]');
-      expect(svc.createWorkoutPlanTemplate).not.toHaveBeenCalled();
-    });
-
-    it('maps an unknown preset ID from the service to a validation error, not plan not found', async () => {
-      svc.createWorkoutPlanTemplate.mockRejectedValue(
-        new Error('Workout Preset with ID 999 not found.')
-      );
-
-      const result = await getTool().execute!(
-        {
-          action: 'create_workout_plan',
-          plan_name: 'Ghost Preset',
-          sessions: [{ workout_preset_id: 999 }],
-        },
-        opts
-      );
-
-      expect(result).toContain('Error [VALIDATION]');
-      expect(result).toContain('Workout Preset with ID 999 not found.');
-    });
-
-    it('returns validation error when weekly plan assignment is missing day_of_week', async () => {
-      presetRepo.getWorkoutPresetByName.mockResolvedValue({
-        id: 102,
-        name: 'Full Body',
-      });
-
-      const result = await getTool().execute!(
-        {
-          action: 'create_workout_plan',
-          plan_name: 'Weekly Invalid',
-          schedule_type: 'weekly',
-          sessions: [{ preset_name: 'Full Body' }],
-        },
-        opts
-      );
-
-      expect(result).toContain('Error [VALIDATION]');
-      expect(result).toContain('missing required day_of_week');
-      expect(svc.createWorkoutPlanTemplate).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('update_workout_plan', () => {
-    it('returns confirmation prompt when confirmed is omitted', async () => {
-      const result = await getTool().execute!(
-        {
-          action: 'update_workout_plan',
-          plan_id: PLAN_ID,
-          plan_name: 'New Name',
-        },
-        opts
-      );
-
-      expect(result).toContain(
-        `Updating workout plan ${PLAN_ID} can replace all assignments`
-      );
-      expect(result).toContain('Nothing was changed.');
-      expect(svc.updateWorkoutPlanTemplate).not.toHaveBeenCalled();
-    });
-
-    it('updates workout plan when confirmed=true', async () => {
-      svc.getWorkoutPlanTemplateById.mockResolvedValue({
-        id: PLAN_ID,
-        plan_name: 'Old Name',
-        schedule_type: 'sequential',
-        entry_mode: 'prompt',
-        assignments: [],
-      });
-      svc.updateWorkoutPlanTemplate.mockResolvedValue({
-        id: PLAN_ID,
-        plan_name: 'Renamed Plan',
-      });
-
-      const result = await getTool().execute!(
-        {
-          action: 'update_workout_plan',
-          plan_id: PLAN_ID,
-          confirmed: true,
-          plan_name: 'Renamed Plan',
-        },
-        opts
-      );
-
-      expect(result).toBe('✅ Workout plan "Renamed Plan" updated.');
-      expect(svc.updateWorkoutPlanTemplate).toHaveBeenCalledWith(
-        'user-1',
-        PLAN_ID,
-        expect.objectContaining({
-          plan_name: 'Renamed Plan',
-        })
-      );
-    });
-  });
-
-  describe('update_workout_plan on weekly plans', () => {
-    it('does not flip a weekly prefill plan to prompt on a rename and preserves existing fields', async () => {
-      svc.getWorkoutPlanTemplateById.mockResolvedValue({
-        id: PLAN_ID,
-        plan_name: 'Weekly 5x5',
-        description: 'Heavy strength',
-        is_active: true,
-        start_date: '2026-01-01',
-        end_date: '2026-12-31',
+  it('reports a weekly rest day instead of falling back to a stored session', async () => {
+    svc.getActiveWorkoutPlanForDate.mockResolvedValue([
+      {
+        id: 42,
+        plan_name: 'Cycle',
         schedule_type: 'weekly',
-        entry_mode: 'prefill',
-        assignments: [],
-      });
-      svc.updateWorkoutPlanTemplate.mockResolvedValue({
-        id: PLAN_ID,
-        plan_name: 'Weekly 5x5 v2',
-      });
+        sessions: sessions(),
+        next_session: null,
+        next_assignments: [],
+      },
+    ] as never);
+    expect(
+      await execute({ action: 'get_active_workout_plan', date: '2026-10-11' })
+    ).toContain('Rest day: nothing scheduled for Sunday');
+  });
 
-      await getTool().execute!(
+  it.each([
+    { assignments: [{ exercise_id: exerciseId }] },
+    {
+      sessions: [
         {
-          action: 'update_workout_plan',
-          plan_id: PLAN_ID,
-          confirmed: true,
-          plan_name: 'Weekly 5x5 v2',
+          name: 'A',
+          assignments: [{ exercise_id: exerciseId, session_index: 1 }],
         },
-        opts
-      );
-
-      const payload = svc.updateWorkoutPlanTemplate.mock.calls[0][2];
-      expect(payload.entry_mode).toBe('prefill');
-      expect(payload.schedule_type).toBe('weekly');
-      expect(payload.is_active).toBe(true);
-      expect(payload.start_date).toBe('2026-01-01');
-      expect(payload.end_date).toBe('2026-12-31');
-      expect(payload.description).toBe('Heavy strength');
-    });
-
-    it('resolves new sessions against the existing weekly schedule', async () => {
-      svc.getWorkoutPlanTemplateById.mockResolvedValue({
-        id: PLAN_ID,
-        plan_name: 'Weekly 5x5',
-        schedule_type: 'weekly',
-        entry_mode: 'prefill',
-        assignments: [],
-      });
-      presetRepo.getWorkoutPresetByName.mockResolvedValue({
-        id: 7,
-        name: 'Squat Day',
-      });
-      svc.updateWorkoutPlanTemplate.mockResolvedValue({
-        id: PLAN_ID,
-        plan_name: 'Weekly 5x5',
-      });
-
-      await getTool().execute!(
+      ],
+    },
+    {
+      sessions: [
         {
-          action: 'update_workout_plan',
-          plan_id: PLAN_ID,
-          confirmed: true,
-          sessions: [{ preset_name: 'Squat Day', day_of_week: 'Wed' }],
+          name: 'A',
+          assignments: [{ exercise_id: exerciseId, session_name: 'A' }],
         },
-        opts
-      );
-
-      expect(svc.updateWorkoutPlanTemplate).toHaveBeenCalledWith(
-        'user-1',
-        PLAN_ID,
-        expect.objectContaining({
-          assignments: [
-            expect.objectContaining({
-              workout_preset_id: 7,
-              day_of_week: 3,
-              session_index: null,
-            }),
-          ],
+      ],
+    },
+    { sessions: '[{"name":"A","assignments":[{"exercise_id":"bad"}]}]' },
+    { sessions: 'invalid JSON' },
+    {
+      schedule_type: 'weekly',
+      sessions: [{ name: 'A', assignments: [{ exercise_id: exerciseId }] }],
+    },
+    {
+      sessions: [
+        {
+          name: 'A',
+          assignments: [{ workout_preset_id: 7, exercise_id: exerciseId }],
+        },
+      ],
+    },
+  ])(
+    'rejects obsolete, malformed, or ambiguous authoring without writes: %j',
+    async (payload) => {
+      expect(
+        await execute({
+          action: 'create_workout_plan',
+          plan_name: 'Cycle',
+          ...payload,
         })
-      );
+      ).toContain('VALIDATION');
+      expect(svc.createWorkoutPlanTemplate).not.toHaveBeenCalled();
+    }
+  );
+
+  it('requires confirmation before inspecting or mutating a plan', async () => {
+    expect(
+      await execute({ action: 'update_workout_plan', plan_id: 42 })
+    ).toContain('Nothing was changed');
+    expect(
+      await execute({ action: 'delete_workout_plan', plan_id: 42 })
+    ).toContain('Nothing was deleted');
+    expect(svc.getWorkoutPlanTemplateById).not.toHaveBeenCalled();
+    expect(svc.updateWorkoutPlanTemplate).not.toHaveBeenCalled();
+    expect(svc.deleteWorkoutPlanTemplate).not.toHaveBeenCalled();
+  });
+
+  it('keeps weekly prefill and session prescriptions unchanged during metadata edits', async () => {
+    svc.getWorkoutPlanTemplateById.mockResolvedValue({
+      id: 42,
+      plan_name: 'Cycle',
+      schedule_type: 'weekly',
+      entry_mode: 'prefill',
+      sessions: sessions(),
+    } as never);
+    const result = await execute({
+      action: 'update_workout_plan',
+      plan_id: 42,
+      confirmed: true,
+      description: null,
+      end_date: null,
+    });
+    expect(result).toContain('Workout plan "Cycle" updated');
+    expect(svc.updateWorkoutPlanTemplate).toHaveBeenCalledTimes(1);
+    expect(svc.updateWorkoutPlanTemplate.mock.calls[0]![2]).toMatchObject({
+      schedule_type: 'weekly',
+      entry_mode: 'prefill',
+      description: null,
+      end_date: null,
+      sessions: undefined,
+    });
+    expect(presets.getWorkoutPresetById).not.toHaveBeenCalled();
+  });
+
+  it('does not report an inaccessible preset as a missing workout plan', async () => {
+    presets.getWorkoutPresetById.mockResolvedValue(null);
+    expect(
+      await execute({
+        action: 'create_workout_plan',
+        plan_name: 'Cycle',
+        sessions: [{ name: 'A', assignments: [{ workout_preset_id: 7 }] }],
+      })
+    ).toContain('VALIDATION');
+    expect(svc.createWorkoutPlanTemplate).not.toHaveBeenCalled();
+  });
+
+  it('retains frozen prescriptions after the live preset has been deleted without resurrecting its ID', async () => {
+    const result = await execute({
+      action: 'update_workout_plan',
+      plan_id: 42,
+      confirmed: true,
+      sessions: [
+        {
+          id: sessionA,
+          name: 'A',
+          day_of_week: null,
+          assignments: [
+            {
+              id: 10,
+              workout_preset_id: null,
+              exercise_id: null,
+              preset_snapshot: preset,
+            },
+          ],
+        },
+      ],
+    });
+    expect(result).toContain('Workout plan "Cycle" updated');
+    expect(svc.updateWorkoutPlanTemplate).toHaveBeenCalledTimes(1);
+    expect(presets.getWorkoutPresetById).not.toHaveBeenCalled();
+    expect(presets.getWorkoutPresetByName).not.toHaveBeenCalled();
+    expect(
+      svc.updateWorkoutPlanTemplate.mock.calls[0]![2].sessions![0]!
+        .assignments[0]
+    ).toMatchObject({
+      id: 10,
+      workout_preset_id: null,
+      exercise_id: null,
+      preset_snapshot: preset,
     });
   });
 
-  describe('delete_workout_plan', () => {
-    it('returns confirmation prompt when confirmed is omitted', async () => {
-      const result = await getTool().execute!(
-        { action: 'delete_workout_plan', plan_id: PLAN_ID },
-        opts
-      );
+  it.each([
+    [
+      { id: sessionA, name: 'A', assignments: [{ exercise_id: exerciseId }] },
+      { id: sessionA, name: 'B', assignments: [{ exercise_id: exerciseId }] },
+    ],
+    [
+      { name: 'A', assignments: [{ id: 10, exercise_id: exerciseId }] },
+      { name: 'B', assignments: [{ id: 10, exercise_id: exerciseId }] },
+    ],
+    [
+      {
+        name: 'A',
+        assignments: [{ exercise_id: exerciseId, sets: [set, set] }],
+      },
+    ],
+    [{ name: 'A', day_of_week: 1, assignments: [{ exercise_id: exerciseId }] }],
+  ])(
+    'rejects conflicting session identities, assignment identities, set numbers, or sequential weekdays: %j',
+    async (...invalidSessions) => {
+      expect(
+        await execute({
+          action: 'create_workout_plan',
+          plan_name: 'Cycle',
+          sessions: invalidSessions,
+        })
+      ).toContain('VALIDATION');
+      expect(svc.createWorkoutPlanTemplate).not.toHaveBeenCalled();
+    }
+  );
 
-      expect(result).toContain(
-        `Deleting workout plan ${PLAN_ID} is permanent. Confirm with the user first.`
-      );
-      expect(result).toContain('Nothing was deleted.');
-      expect(svc.deleteWorkoutPlanTemplate).not.toHaveBeenCalled();
+  it('preserves an explicitly unspecified set type rather than inventing a prescription', async () => {
+    const result = await execute({
+      action: 'create_workout_plan',
+      plan_name: 'Cycle',
+      sessions: [
+        {
+          name: 'A',
+          assignments: [
+            { exercise_id: exerciseId, sets: [{ ...set, set_type: null }] },
+          ],
+        },
+      ],
     });
+    expect(result).toContain('Workout plan "Cycle" created');
+    expect(svc.createWorkoutPlanTemplate).toHaveBeenCalledTimes(1);
+    expect(
+      svc.createWorkoutPlanTemplate.mock.calls[0]![1].sessions[0]!
+        .assignments[0]!.sets![0]!.set_type
+    ).toBeNull();
+  });
 
-    it('deletes a workout plan when confirmed=true', async () => {
-      svc.deleteWorkoutPlanTemplate.mockResolvedValue({
-        message: 'Workout plan template deleted successfully.',
+  it.each([
+    'A supplied session ID does not belong to this plan or is duplicated.',
+    'Sequential sessions must have a null weekday.',
+    'Changing schedule_type requires providing sessions.',
+  ])(
+    'preserves a repository 400 as actionable validation: %s',
+    async (message) => {
+      svc.updateWorkoutPlanTemplate.mockRejectedValue(
+        Object.assign(new Error(message), { status: 400 })
+      );
+
+      const result = await execute({
+        action: 'update_workout_plan',
+        plan_id: 42,
+        confirmed: true,
       });
-      const result = await getTool().execute!(
-        { action: 'delete_workout_plan', plan_id: PLAN_ID, confirmed: true },
-        opts
+
+      expect(result).toBe(`Error [VALIDATION]: ${message}`);
+    }
+  );
+
+  it.each([
+    'A diary-linked assignment cannot be changed to another exercise or preset. Create a new assignment instead.',
+    'Remove the exact Workout Session references from Training Programs before deleting a session.',
+    'Diary-linked assignments cannot be removed; their identity and history links must be retained.',
+  ])(
+    'preserves a repository 409 as actionable validation: %s',
+    async (message) => {
+      svc.updateWorkoutPlanTemplate.mockRejectedValue(
+        new HttpError(message, 409)
       );
-      expect(result).toBe('✅ Workout plan deleted.');
-      expect(svc.deleteWorkoutPlanTemplate).toHaveBeenCalledWith(
-        'user-1',
-        PLAN_ID
-      );
+
+      const result = await execute({
+        action: 'update_workout_plan',
+        plan_id: 42,
+        confirmed: true,
+      });
+
+      expect(result).toBe(`Error [VALIDATION]: ${message}`);
+    }
+  );
+
+  it('preserves a plan deletion conflict as actionable validation', async () => {
+    const message =
+      'This Workout Plan has diary-linked assignments and cannot be deleted without removing their history links explicitly.';
+    svc.deleteWorkoutPlanTemplate.mockRejectedValue(
+      new HttpError(message, 409)
+    );
+
+    const result = await execute({
+      action: 'delete_workout_plan',
+      plan_id: 42,
+      confirmed: true,
     });
 
-    it('returns NOT_FOUND when deleting a missing plan', async () => {
-      svc.deleteWorkoutPlanTemplate.mockRejectedValue(
-        new Error('Workout plan template not found.')
-      );
-      const result = await getTool().execute!(
-        { action: 'delete_workout_plan', plan_id: PLAN_ID, confirmed: true },
-        opts
-      );
-      expect(result).toBe(
-        "Error [NOT_FOUND]: Workout plan with ID '" +
-          PLAN_ID +
-          "' not found.\n\nSuggestion: Check the ID and try again."
-      );
-    });
+    expect(result).toBe(`Error [VALIDATION]: ${message}`);
   });
 
-  describe('validation and error handling', () => {
-    it('rejects a non-integer plan_id (VALIDATION)', async () => {
-      const result = await getTool().execute!(
-        { action: 'get_workout_plan', plan_id: 'not-a-number' },
-        opts
-      );
-      expect(result).toContain('Error [VALIDATION]');
-      expect(svc.getWorkoutPlanTemplateById).not.toHaveBeenCalled();
+  it('reports a repository missing preset as validation rather than a missing Workout plan', async () => {
+    presets.getWorkoutPresetById.mockResolvedValue(preset as never);
+    svc.createWorkoutPlanTemplate.mockRejectedValue(
+      Object.assign(new Error('Workout preset not found or not accessible.'), {
+        status: 400,
+      })
+    );
+
+    const result = await execute({
+      action: 'create_workout_plan',
+      plan_name: 'Cycle',
+      sessions: [{ name: 'A', assignments: [{ workout_preset_id: 7 }] }],
     });
 
-    it('returns DB_ERROR when the service throws a generic error', async () => {
-      svc.getWorkoutPlanTemplatesByUserId.mockRejectedValue(new Error('boom'));
-      const result = await getTool().execute!(
-        { action: 'list_workout_plans' },
-        opts
-      );
-      expect(result).toBe(DB_ERROR_TEXT);
-    });
+    expect(result).toBe(
+      'Error [VALIDATION]: Workout preset not found or not accessible.'
+    );
+  });
+
+  it('returns database errors without retrying writes', async () => {
+    svc.createWorkoutPlanTemplate.mockRejectedValue(
+      new Error('Database unavailable')
+    );
+    expect(
+      await execute({
+        action: 'create_workout_plan',
+        plan_name: 'Cycle',
+        sessions: [],
+      })
+    ).toContain('DB_ERROR');
+    expect(svc.createWorkoutPlanTemplate).toHaveBeenCalledTimes(1);
   });
 });

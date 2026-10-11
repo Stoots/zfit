@@ -13,6 +13,7 @@ import {
   useActiveWorkoutStore,
 } from '../../src/stores/activeWorkoutStore';
 import { createWorkout } from '../../src/services/api/exerciseApi';
+import { startWorkoutPlanSession } from '../../src/services/api/workoutPlansApi';
 import { invalidateExerciseCache } from '../../src/hooks/invalidateExerciseCache';
 import { ensureNotificationPermission } from '../../src/services/notifications';
 import { flushActiveWorkoutBeforeClear } from '../../src/hooks/useActiveWorkoutAutosave';
@@ -25,6 +26,10 @@ import { createQueryWrapper, createTestQueryClient } from './queryTestUtils';
 
 jest.mock('../../src/services/api/exerciseApi', () => ({
   createWorkout: jest.fn(),
+}));
+
+jest.mock('../../src/services/api/workoutPlansApi', () => ({
+  startWorkoutPlanSession: jest.fn(),
 }));
 
 jest.mock('../../src/hooks/invalidateExerciseCache', () => ({
@@ -178,12 +183,6 @@ describe('useStartLiveWorkout', () => {
       });
     });
 
-    expect(mockCreateWorkout).toHaveBeenCalledWith({
-      name: 'Push Day',
-      entry_date: getTodayDate(),
-      source: 'sparky',
-      exercises: EXERCISES,
-    });
     expect(mockInvalidate).toHaveBeenCalledWith(queryClient, getTodayDate());
     expect(mockEnsurePermission).toHaveBeenCalled();
 
@@ -191,6 +190,49 @@ describe('useStartLiveWorkout', () => {
     expect(store.sessionId).toBe('session-1');
     expect(store.createdByLiveStart).toBe(true);
     expect(navigation.replace).toHaveBeenCalledWith('ActiveWorkout');
+  });
+
+  it('starts the exact authored UUID and seeds live targets from server prescriptions, not stale client sets', async () => {
+    const session = makeSession();
+    session.name = 'A';
+    session.workout_format = 'amrap';
+    session.time_cap_seconds = 600;
+    session.exercises[0]!.sets = [1, 2, 3].map((set_number) => ({
+      ...session.exercises[0]!.sets[0]!,
+      id: 100 + set_number,
+      set_number,
+      reps: 8,
+      weight: null,
+      notes: '8–10 each side',
+    }));
+    jest.mocked(startWorkoutPlanSession).mockResolvedValue(session);
+    const { result } = setup();
+    await act(async () => {
+      await result.current.startLiveWorkout({
+        workoutSessionId: '33333333-3333-4333-8333-333333333333',
+        name: 'A',
+        exercises: EXERCISES,
+        workoutFormat: 'tabata',
+        timeCapSeconds: 90,
+      });
+    });
+    const store = useActiveWorkoutStore.getState();
+    expect(store.session?.exercises[0]?.sets.map((set) => set.reps)).toEqual([
+      8, 8, 8,
+    ]);
+    expect(
+      Object.values(store.plannedSetValues).map((set) => set.reps)
+    ).toEqual([8, 8, 8]);
+    expect(store.sourcePresetId).toBeNull();
+    expect(store.workoutFormat).toBe('amrap');
+    expect(store.timeCapSeconds).toBe(600);
+    expect(mockStartWorkout).toHaveBeenCalledWith(
+      expect.objectContaining({
+        workoutFormat: 'amrap',
+        timeCapSeconds: 600,
+      })
+    );
+    expect(mockCreateWorkout).not.toHaveBeenCalled();
   });
 
   it('lets only one caller create a session when the phone and the watch start together', async () => {

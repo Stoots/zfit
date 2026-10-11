@@ -28,6 +28,17 @@ export function assertSnapshot(snapshot, expectedEntry) {
     snapshot.expected.length > 0,
     "No eligible upcoming workouts; this account cannot exercise the workout-ordering check",
   );
+  for (const card of snapshot.expected) {
+    assert.match(
+      card.workoutSessionId,
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      "Expected workout is missing a stable session UUID",
+    );
+    assert.ok(
+      Array.isArray(card.prescription) && card.prescription.length > 0,
+      "Expected workout is missing its session prescription",
+    );
+  }
   assert.deepEqual(
     snapshot.actual,
     snapshot.expected,
@@ -35,8 +46,123 @@ export function assertSnapshot(snapshot, expectedEntry) {
   );
 }
 
+export function expectedWorkoutCards(
+  programs,
+  plans,
+  entries,
+  libraryPlans = [],
+) {
+  const logged = new Set(
+    entries
+      .flatMap((entry) => [entry, ...(entry.exercises || [])])
+      .filter((entry) => entry.workout_plan_assignment_id != null)
+      .map((entry) => String(entry.workout_plan_assignment_id)),
+  );
+  const eligible = (session) =>
+    !session.assignments.every((assignment) =>
+      logged.has(String(assignment.id)),
+    );
+  const card = (plan, session, plannedSession = null) => ({
+    workoutSessionId: session.id,
+    workoutPlanId: String(plan.id),
+    trainingProgramSessionId: plannedSession?.id ?? null,
+    prescription: session.assignments,
+  });
+  const plannedSessions = programs.flatMap((program) =>
+    program.phases.flatMap((phase) =>
+      phase.weeks.flatMap((week) => week.sessions),
+    ),
+  );
+  const linkedPlanIds = new Set(
+    plannedSessions.map((session) => String(session.workout_plan_id)),
+  );
+  const candidates = new Map(plans.map((plan) => [String(plan.id), plan]));
+  for (const plan of libraryPlans) {
+    const ownedAndBound = programs.some(
+      (program) =>
+        program.user_id === plan.user_id &&
+        program.phases.some((phase) =>
+          phase.weeks.some((week) =>
+            week.sessions.some(
+              (session) => String(session.workout_plan_id) === String(plan.id),
+            ),
+          ),
+        ),
+    );
+    if (ownedAndBound && !candidates.has(String(plan.id))) {
+      candidates.set(String(plan.id), plan);
+    }
+  }
+  const byId = new Map(
+    [...candidates.values()].flatMap((plan) =>
+      plan.sessions.map((session) => [session.id, { plan, session }]),
+    ),
+  );
+  // Choose the whole earliest day before filtering logged prescriptions, just
+  // as the dashboard does; never promote a later day when today's cards are logged.
+  const pending = plannedSessions
+    .filter((session) => {
+      const candidate = byId.get(session.workout_session_id);
+      return (
+        session.status === "planned" &&
+        candidate &&
+        String(candidate.plan.id) === String(session.workout_plan_id)
+      );
+    })
+    .sort((left, right) =>
+      left.effective_date.localeCompare(right.effective_date),
+    );
+  const expected = [];
+  const nextDate = pending[0]?.effective_date;
+  for (const planned of pending) {
+    if (planned.effective_date !== nextDate) break;
+    const { plan, session } = byId.get(planned.workout_session_id);
+    if (eligible(session)) expected.push(card(plan, session, planned));
+  }
+  for (const plan of plans) {
+    const session = plan.next_session;
+    if (session && eligible(session) && !linkedPlanIds.has(String(plan.id))) {
+      expected.push(card(plan, session));
+    }
+  }
+  return expected;
+}
+
+// Also used as the browser wait predicate: no label or whole-plan fallback.
+export function readWorkoutCards(expected) {
+  const actual = [...document.querySelectorAll("button")]
+    .filter((button) => button.textContent.trim() === "Start Workout")
+    .map((button) => {
+      const root = button.closest("[data-workout-session-id]");
+      return {
+        workoutSessionId: root?.getAttribute("data-workout-session-id") ?? null,
+        workoutPlanId: root?.getAttribute("data-workout-plan-id") ?? null,
+        trainingProgramSessionId:
+          root?.getAttribute("data-training-program-session-id") || null,
+        prescription: JSON.parse(
+          root?.getAttribute("data-workout-session-prescription") || "null",
+        ),
+      };
+    });
+  if (expected === undefined) return actual;
+  const canonical = (value) => {
+    if (Array.isArray(value)) return value.map(canonical);
+    if (value !== null && typeof value === "object") {
+      return Object.fromEntries(
+        Object.keys(value)
+          .sort()
+          .map((key) => [key, canonical(value[key])]),
+      );
+    }
+    return value;
+  };
+  return (
+    JSON.stringify(canonical(actual)) === JSON.stringify(canonical(expected))
+  );
+}
+
 async function snapshot(page) {
-  return page.evaluate(async () => {
+  const data = await page.evaluate(async () => {
     async function get(path) {
       const response = await fetch(`/api${path}`, { credentials: "include" });
       if (!response.ok)
@@ -47,56 +173,12 @@ async function snapshot(page) {
     }
     const date = new Date();
     const today = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
-    const [programs, plans, entries] = await Promise.all([
+    const [programs, plans, entries, libraryPlans] = await Promise.all([
       get("/training-programs"),
       get(`/workout-plan-templates/active/${today}`),
       get(`/v2/exercise-entries/by-date?selectedDate=${today}`),
+      get("/workout-plan-templates"),
     ]);
-    const logged = new Set(
-      entries
-        .flatMap((entry) => [entry, ...(entry.exercises || [])])
-        .filter((entry) => entry.workout_plan_assignment_id != null)
-        .map((entry) => String(entry.workout_plan_assignment_id)),
-    );
-    const eligible = plans.filter(
-      (plan) =>
-        plan.next_assignment &&
-        !(plan.assignments || []).some((assignment) =>
-          logged.has(String(assignment.id)),
-        ),
-    );
-    const sessions = programs.flatMap((program) =>
-      program.phases.flatMap((phase) =>
-        phase.weeks.flatMap((week) => week.sessions),
-      ),
-    );
-    const linkedIds = new Set(
-      sessions.map((session) => String(session.workout_plan_id)),
-    );
-    const pending = sessions
-      .filter((session) => session.status === "planned")
-      .sort((left, right) =>
-        left.effective_date.localeCompare(right.effective_date),
-      );
-    const rankedIds = [
-      ...new Set(pending.map((session) => String(session.workout_plan_id))),
-    ];
-    const byId = new Map(eligible.map((plan) => [String(plan.id), plan]));
-    const nextId = rankedIds.find((id) => byId.has(id));
-    const expected = [
-      ...(nextId === undefined ? [] : [byId.get(nextId).plan_name]),
-      ...eligible
-        .filter((plan) => !linkedIds.has(String(plan.id)))
-        .map((plan) => plan.plan_name),
-    ];
-    const actual = [...document.querySelectorAll("button")]
-      .filter((button) => button.textContent.trim() === "Start Workout")
-      .map((button) =>
-        button
-          .closest("div.mb-3")
-          ?.querySelector("p")
-          ?.textContent.replace(/^(Sequential|Active) plan: /, ""),
-      );
     return {
       entry: new URL(
         document.querySelector('script[type="module"][src]')?.src ||
@@ -106,10 +188,18 @@ async function snapshot(page) {
       unobstructed: !document.querySelector(
         '[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"]',
       ),
-      expected,
-      actual,
+      programs,
+      plans,
+      entries,
+      libraryPlans,
     };
   });
+  const { programs, plans, entries, libraryPlans, ...surface } = data;
+  return {
+    ...surface,
+    expected: expectedWorkoutCards(programs, plans, entries, libraryPlans),
+    actual: await page.evaluate(readWorkoutCards),
+  };
 }
 
 async function main() {
@@ -128,7 +218,8 @@ async function main() {
 
 Use a dedicated Chrome profile, signed in to the public-origin Diary in English.
 Run warm BEFORE deployment and verify AFTER deployment, with the same browser and output directory.
-Verify compares the loaded entry asset with the running container and checks the next program workout plus standalone plans.
+Verify compares the loaded entry asset with the running container and checks exact session UUIDs and prescriptions for every earliest-day Program workout plus unrelated active standalone plans.
+Inactive owner plans bound by a Program remain eligible; shared or unbound inactive plans do not become standalone previews.
 Caching remains enabled. Stale builds trigger a normal service-worker update and one reload.
 The browser stays open. Reports and screenshots contain private workout data, but no cookies.`);
     return;
@@ -254,29 +345,15 @@ The browser stays open. Reports and screenshots contain private workout data, bu
         await page.reload({ waitUntil: "networkidle2" });
         report.workerUpdated = true;
       }
-      // Wait for the Training Program query to replace the initial active-plan order.
+      // Wait for the exact-session Program query and prescription to render.
       const expected = (await snapshot(page)).expected;
-      await page.waitForFunction(
-        (names) => {
-          const actual = [...document.querySelectorAll("button")]
-            .filter((button) => button.textContent.trim() === "Start Workout")
-            .map((button) =>
-              button
-                .closest("div.mb-3")
-                ?.querySelector("p")
-                ?.textContent.replace(/^(Sequential|Active) plan: /, ""),
-            );
-          return JSON.stringify(actual) === JSON.stringify(names);
-        },
-        {},
-        expected,
-      );
+      await page.waitForFunction(readWorkoutCards, {}, expected);
       report.final = await snapshot(page);
       assertSnapshot(report.final, expectedEntry);
       await page.evaluate(() =>
         [...document.querySelectorAll("button")]
           .find((button) => button.textContent.trim() === "Start Workout")
-          .closest("div.mb-3")
+          .closest("[data-workout-session-id]")
           .scrollIntoView({ block: "start" }),
       );
       await page.screenshot({ path: resolve(output, "upcoming-workouts.png") });

@@ -1,10 +1,11 @@
 # Database Schema & Migrations
 
-*Last updated: 2026-09-01*
+_Last updated: 2026-09-01_
 
 This document covers the database structure, schema design, and migration process for SparkyFitness.
 
-**Note:** 
+**Note:**
+
 - For **authoritative table definitions**, see `db_schema_backup.sql` (SQL source) or `shared/src/schemas/database/` (TypeScript Zod schemas).
 - For **security tier classifications and permission mappings**, see [Database Security Tiers](./database-security-tiers).
 
@@ -19,13 +20,16 @@ SparkyFitness uses PostgreSQL 15+ with Row Level Security (RLS) to ensure data i
 ## Schema Design Principles
 
 ### Naming Conventions
+
 - **Tables**: Snake case, plural (e.g., `food_entries`, `user_preferences`)
 - **Columns**: Snake case (e.g., `created_at`, `user_id`, `total_calories`)
 - **Foreign Keys**: `{table_name}_id` format (e.g., `user_id`, `food_item_id`)
 - **Indexes**: Descriptive names (e.g., `idx_food_entries_user_date`, `idx_measurements_user_type`)
 
 ### Standard Fields
+
 All tables include these audit fields:
+
 - `id` - UUID primary key using `gen_random_uuid()`
 - `created_at` - Timestamp with timezone, defaults to `NOW()`
 - `updated_at` - Timestamp with timezone, updated via triggers
@@ -49,6 +53,7 @@ CREATE POLICY modify_policy ON public.food_entries FOR ALL TO PUBLIC
 ```
 
 **Key functions:**
+
 - `current_user_id()` — active profile context (may differ during family delegation; from `app.user_id`)
 - `authenticated_user_id()` — the true logged-in actor (never changes; from `app.authenticated_user_id`)
 - `can_access_user_data(target_user_id, permission_type, authenticated_user_id())` — resolves a logical permission (`diary`, `checkin`, `medications`, `reports`, plus `*_read` variants) against the `family_access` grant. Domain shortcuts wrap it: `has_diary_read_access`, `has_diary_access`, `has_checkin_read_access`, `has_medication_access`, `has_family_access`.
@@ -62,37 +67,39 @@ Cycle and pregnancy tables are owner-only (no delegation). See `SparkyFitnessSer
 Quick reference of all tables by domain and purpose. For detailed security tier, permission type, and access rules, see [Database Security Tiers](./database-security-tiers).
 
 ### Authentication & Identity (Tier 1: Owner-Only)
-| Table | Purpose |
-|-------|---------|
-| `user` | Account identity, password hash, email |
-| `session` | Active authentication sessions |
-| `api_key` | User-generated API keys for external access |
-| `passkey` | Passwordless login credentials |
-| `two_factor` | 2FA recovery codes and secrets |
-| `verification` | Email verification tokens |
-| `account` | Auth credentials and email accounts |
+
+| Table          | Purpose                                     |
+| -------------- | ------------------------------------------- |
+| `user`         | Account identity, password hash, email      |
+| `session`      | Active authentication sessions              |
+| `api_key`      | User-generated API keys for external access |
+| `passkey`      | Passwordless login credentials              |
+| `two_factor`   | 2FA recovery codes and secrets              |
+| `verification` | Email verification tokens                   |
+| `account`      | Auth credentials and email accounts         |
 
 ### Food & Nutrition (Tier 2/3: Owner-Write, Delegate-Read/Write)
-| Table | Purpose |
-|-------|---------|
-| `foods` | Custom food items created by user |
-| `food_variants` | Serving size options for foods |
-| `food_entries` | Logged meals/calories for the day |
-| `food_entry_meals` | Meal details associated with logged entries |
-| `meals` | Custom meal templates |
-| `meal_foods` | Ingredients assigned to meals |
-| `meal_types` | Custom meal type definitions (breakfast, lunch, etc.) |
-| `meal_plans` | Weekly meal planning schedules |
-| `meal_plan_templates` | Reusable meal plan templates (supports multiple active plans per user) |
-| `meal_plan_template_assignments` | Scheduled meal templates to calendar |
-| `meal_plan_assignment_sets` | Sets within assigned meal plans |
+
+| Table                            | Purpose                                                                |
+| -------------------------------- | ---------------------------------------------------------------------- |
+| `foods`                          | Custom food items created by user                                      |
+| `food_variants`                  | Serving size options for foods                                         |
+| `food_entries`                   | Logged meals/calories for the day                                      |
+| `food_entry_meals`               | Meal details associated with logged entries                            |
+| `meals`                          | Custom meal templates                                                  |
+| `meal_foods`                     | Ingredients assigned to meals                                          |
+| `meal_types`                     | Custom meal type definitions (breakfast, lunch, etc.)                  |
+| `meal_plans`                     | Weekly meal planning schedules                                         |
+| `meal_plan_templates`            | Reusable meal plan templates (supports multiple active plans per user) |
+| `meal_plan_template_assignments` | Scheduled meal templates to calendar                                   |
+| `meal_plan_assignment_sets`      | Sets within assigned meal plans                                        |
 
 ### Exercise & Workouts (Tier 2/3: Owner-Write, Delegate-Read/Write)
 | Table | Purpose |
 |-------|---------|
 | `exercises` | Custom exercises created by user |
 | `exercise_entries` | Logged exercises for the day |
-| `exercise_preset_entries` | Logged workout presets for the day |
+| `exercise_preset_entries` | Logged workout presets with frozen workout format and nullable time cap |
 | `exercise_entry_sets` | Reps, weights, and sets completed |
 | `exercise_entry_activity_details` | Heart rate, distance, activity data |
 | `exercise_entry_laps` | Lap split intervals for workouts |
@@ -102,122 +109,131 @@ Quick reference of all tables by domain and purpose. For detailed security tier,
 | `workout_preset_exercises` | Exercises assigned to presets |
 | `workout_preset_exercise_sets` | Reps/sets configured in presets |
 | `workout_plan_templates` | Templates for weekly and sequential workout schedules |
-| `workout_plan_template_assignments` | Scheduled workout templates (weekday or ordered sequence) |
-| `workout_plan_assignment_sets` | Sets within assigned workout plans |
+| `workout_plan_sessions` | Stable owner-consistent sessions with independent prescriptions, optional weekdays and authored order |
+| `workout_plan_template_assignments` | Ordered exercise/preset assignments belonging to an exact Workout Session; presets execute from local snapshots |
+| `workout_plan_assignment_sets` | Individual exercise prescriptions; distance and JSONB extension fields retain effort/ranges and per-side instructions |
 | `workout_feedback` | Session / per-exercise workout feedback (difficulty, pain flag and note) behind adaptive suggestions |
 | `cardio_test_attempts` | Dated Test Attempts for Cooper run and other supported Cardio Tests |
 
 ### Training Programs (Tier 1: Owner-Only)
-| Table | Purpose |
-|-------|---------|
-| `training_programs` | Goal and inclusive fixed date range for a multi-week Program |
-| `training_program_phases` | Ordered goal-bearing Program Phases |
-| `training_program_weeks` | Chronological, nonoverlapping weeks within phases |
-| `training_program_sessions` | Dated Planned Sessions referencing existing Workout Plans |
 
-All four tables use `create_owner_policy` and composite foreign keys preserve owner identity throughout the hierarchy. `training_program_sessions(workout_plan_id, user_id)` references `workout_plan_templates(id, user_id)`; a Program cannot use another user's plan. Deleting a referenced Workout Plan is refused with HTTP 409 before diary cleanup; remove the references first. Program deletion cascades through its hierarchy but leaves Workout Plans intact.
+| Table                       | Purpose                                                            |
+| --------------------------- | ------------------------------------------------------------------ |
+| `training_programs`         | Goal and inclusive fixed date range for a multi-week Program       |
+| `training_program_phases`   | Ordered goal-bearing Program Phases                                |
+| `training_program_weeks`    | Chronological, nonoverlapping weeks within phases                  |
+| `training_program_sessions` | Dated Planned Sessions referencing exact existing Workout Sessions |
+
+All four tables use `create_owner_policy` and composite foreign keys preserve owner identity throughout the hierarchy. `training_program_sessions(workout_session_id, user_id)` references `workout_plan_sessions(id, user_id)`; a Program cannot use another user's session. The session's plan ID/name are derived display-only API fields. Removing a Program-referenced session/plan or a diary-linked assignment is refused with HTTP 409, atomically. Program deletion cascades through its hierarchy but leaves Workout Plans and their prescriptions intact.
 
 ### Measurements & Health (Tier 1/3: Owner-Only or Delegate-Write)
-| Table | Purpose |
-|-------|---------|
-| `check_in_measurements` | Weight, body composition, BMR, and circumference measurements |
-| `check_in_photos` | Progress photos |
-| `custom_measurements` | User-defined custom measurement types |
-| `custom_categories` | User-defined measurement categories |
-| `water_intake` | Total water logged for the day |
-| `water_intake_entries` | Individual logged water cups |
-| `water_containers` | Configured container sizes |
-| `sleep_entries` | Sleep logs (bedtime, wake time) |
-| `sleep_entry_stages` | Sleep stage breakdowns (REM, Deep, Light) |
-| `sleep_need_calculations` | AI sleep need calculations |
-| `daily_sleep_need` | Sleep goals calculated for the day |
-| `health_metric_samples` | Intraday wearable telemetry — heart rate, HRV, respiration, SpO2, stress, body battery, skin temperature. One JSONB-bucketed row per user/metric/day/provider (not one row per sample) |
-| `vitals_entries` | Blood pressure, blood glucose, and temperature logs |
-| `daily_health_metrics` | Daily automated wearable summary, scores, and source-timed total calories |
+
+| Table                     | Purpose                                                                                                                                                                                |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `check_in_measurements`   | Weight, body composition, BMR, and circumference measurements                                                                                                                          |
+| `check_in_photos`         | Progress photos                                                                                                                                                                        |
+| `custom_measurements`     | User-defined custom measurement types                                                                                                                                                  |
+| `custom_categories`       | User-defined measurement categories                                                                                                                                                    |
+| `water_intake`            | Total water logged for the day                                                                                                                                                         |
+| `water_intake_entries`    | Individual logged water cups                                                                                                                                                           |
+| `water_containers`        | Configured container sizes                                                                                                                                                             |
+| `sleep_entries`           | Sleep logs (bedtime, wake time)                                                                                                                                                        |
+| `sleep_entry_stages`      | Sleep stage breakdowns (REM, Deep, Light)                                                                                                                                              |
+| `sleep_need_calculations` | AI sleep need calculations                                                                                                                                                             |
+| `daily_sleep_need`        | Sleep goals calculated for the day                                                                                                                                                     |
+| `health_metric_samples`   | Intraday wearable telemetry — heart rate, HRV, respiration, SpO2, stress, body battery, skin temperature. One JSONB-bucketed row per user/metric/day/provider (not one row per sample) |
+| `vitals_entries`          | Blood pressure, blood glucose, and temperature logs                                                                                                                                    |
+| `daily_health_metrics`    | Daily automated wearable summary, scores, and source-timed total calories                                                                                                              |
 
 ### Fasting, Mood, Medications, & Symptoms (Tier 1/3: Owner-Only or Delegate-Write)
-| Table | Purpose |
-|-------|---------|
-| `fasting_logs` | Fasting timeline logs (start/end fast) |
-| `user_fasting_preferences` | Intermittent fasting targets, auto-calculation config, and alert timing |
-| `mood_entries` | Logged mood and energy levels |
-| `mindfulness_sessions` | Logged mindfulness, meditation, and breathwork sessions |
-| `user_custom_moods` | User-defined mood tags (icon/color) |
-| `medications` | Custom medication inventory lists |
-| `medication_schedules` | Reminders and schedules for medications |
-| `medication_entries` | Logs of medications taken |
-| `medication_pens` | Trackers for medication delivery pens |
-| `medication_titration_steps` | Automated titration dosage plans |
-| `injection_entries` | Injection logs (site, time, etc.) |
-| `user_custom_symptoms` | Symptom definitions (template, sections, custom fields) |
-| `symptom_entries` | Symptom quick logs and episodes (also holds cycle-hub symptoms, `source = 'cycle'`) |
-| `user_symptom_options` | Pick-list library: locations, qualities, associated symptoms, triggers, relief methods |
-| `symptom_entry_treatments` | Medications and relief methods used for a symptom entry, with effectiveness |
-| `symptom_entry_photos` | Photos attached to a symptom entry |
-| `symptom_free_days` | Explicit "no symptoms today" markers |
+
+| Table                        | Purpose                                                                                |
+| ---------------------------- | -------------------------------------------------------------------------------------- |
+| `fasting_logs`               | Fasting timeline logs (start/end fast)                                                 |
+| `user_fasting_preferences`   | Intermittent fasting targets, auto-calculation config, and alert timing                |
+| `mood_entries`               | Logged mood and energy levels                                                          |
+| `mindfulness_sessions`       | Logged mindfulness, meditation, and breathwork sessions                                |
+| `user_custom_moods`          | User-defined mood tags (icon/color)                                                    |
+| `medications`                | Custom medication inventory lists                                                      |
+| `medication_schedules`       | Reminders and schedules for medications                                                |
+| `medication_entries`         | Logs of medications taken                                                              |
+| `medication_pens`            | Trackers for medication delivery pens                                                  |
+| `medication_titration_steps` | Automated titration dosage plans                                                       |
+| `injection_entries`          | Injection logs (site, time, etc.)                                                      |
+| `user_custom_symptoms`       | Symptom definitions (template, sections, custom fields)                                |
+| `symptom_entries`            | Symptom quick logs and episodes (also holds cycle-hub symptoms, `source = 'cycle'`)    |
+| `user_symptom_options`       | Pick-list library: locations, qualities, associated symptoms, triggers, relief methods |
+| `symptom_entry_treatments`   | Medications and relief methods used for a symptom entry, with effectiveness            |
+| `symptom_entry_photos`       | Photos attached to a symptom entry                                                     |
+| `symptom_free_days`          | Explicit "no symptoms today" markers                                                   |
 
 ### Cycle & Pregnancy (Tier 1: Owner-Only)
-| Table | Purpose |
-|-------|---------|
-| `cycles` | Menstrual cycle history records |
-| `cycle_settings` | Cycle hub settings (mode, parameters) |
-| `cycle_daily_entries` | Per-day cycle logs (flow, BBT, mood, etc.) |
-| `cycle_test_entries` | Ovulation and pregnancy test logs |
-| `pregnancies` | Pregnancy records (due date, status) |
-| `pregnancy_kick_sessions` | Fetal kick-counter sessions |
-| `pregnancy_contractions` | Contraction timer logs |
-| `pregnancy_photos` | Bump photo journal |
-| `pregnancy_checklist_state` | Weekly pregnancy checklist completion |
-| `health_appointments` | Prenatal and other health appointments |
+
+| Table                       | Purpose                                    |
+| --------------------------- | ------------------------------------------ |
+| `cycles`                    | Menstrual cycle history records            |
+| `cycle_settings`            | Cycle hub settings (mode, parameters)      |
+| `cycle_daily_entries`       | Per-day cycle logs (flow, BBT, mood, etc.) |
+| `cycle_test_entries`        | Ovulation and pregnancy test logs          |
+| `pregnancies`               | Pregnancy records (due date, status)       |
+| `pregnancy_kick_sessions`   | Fetal kick-counter sessions                |
+| `pregnancy_contractions`    | Contraction timer logs                     |
+| `pregnancy_photos`          | Bump photo journal                         |
+| `pregnancy_checklist_state` | Weekly pregnancy checklist completion      |
+| `health_appointments`       | Prenatal and other health appointments     |
 
 ### User Preferences & Settings (Tier 2: Owner-Only Write, Delegate-Read)
-| Table | Purpose |
-|-------|---------|
-| `profiles` | User full name, height, display metrics |
-| `user_preferences` | Unit, formatting, and chart display preferences |
-| `user_nutrient_display_preferences` | Nutrient column display preferences |
-| `user_meal_visibilities` | Visibility settings for meals |
-| `user_goals` | Active daily calorie/macro goals |
-| `user_custom_nutrients` | Custom nutrient definitions |
-| `user_nutrient_goal_preferences` | Per-user minimum/maximum/target goal direction override per nutrient (predefined or custom) |
-| `user_water_containers` | Configured container sizes |
-| `user_dashboard_layouts` | Rearranged dashboard widget positions |
-| `user_medication_display_preferences` | GLP-1/Medication display preferences |
-| `user_mood_display_preferences` | Mood picker visibility settings |
-| `user_cycle_display_preferences` | Cycle dashboard tile visibility |
-| `user_allergen_preferences` | Allergen preferences |
-| `user_ignored_updates` | Records of skipped release updates |
+
+| Table                                 | Purpose                                                                                     |
+| ------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `profiles`                            | User full name, height, display metrics                                                     |
+| `user_preferences`                    | Unit, formatting, and chart display preferences                                             |
+| `user_nutrient_display_preferences`   | Nutrient column display preferences                                                         |
+| `user_meal_visibilities`              | Visibility settings for meals                                                               |
+| `user_goals`                          | Active daily calorie/macro goals                                                            |
+| `user_custom_nutrients`               | Custom nutrient definitions                                                                 |
+| `user_nutrient_goal_preferences`      | Per-user minimum/maximum/target goal direction override per nutrient (predefined or custom) |
+| `user_water_containers`               | Configured container sizes                                                                  |
+| `user_dashboard_layouts`              | Rearranged dashboard widget positions                                                       |
+| `user_medication_display_preferences` | GLP-1/Medication display preferences                                                        |
+| `user_mood_display_preferences`       | Mood picker visibility settings                                                             |
+| `user_cycle_display_preferences`      | Cycle dashboard tile visibility                                                             |
+| `user_allergen_preferences`           | Allergen preferences                                                                        |
+| `user_ignored_updates`                | Records of skipped release updates                                                          |
 
 ### AI & Chat (Tier 1: Owner-Only)
-| Table | Purpose |
-|-------|---------|
-| `sparky_chat_history` | AI Assistant chat messages and history |
+
+| Table                 | Purpose                                      |
+| --------------------- | -------------------------------------------- |
+| `sparky_chat_history` | AI Assistant chat messages and history       |
 | `ai_service_settings` | User-defined custom assistant configurations |
 
 ### Admin & System (Tier 1: Admin-Only or Public)
-| Table | Purpose |
-|-------|---------|
-| `global_settings` | Application feature flags and config |
-| `sso_provider` | Active Single Sign-On providers |
-| `oidc_providers` | OpenID Connect integration settings |
-| `external_provider_types` | Search provider configurations (FatSecret, USDA, Canadian Nutrient File) |
-| `external_data_providers` | Configured API integration credentials, including personal or global Open Food Facts accounts |
-| `openfoodfacts_product_read_rate_limit` | Singleton lease and cooldown coordinating Open Food Facts product reads across server instances |
-| `openfoodfacts_sync_queue` | Dormant revision-aware automatic upload state and retained history; unused by manual contributions |
-| `rate_limit` | Sign-in rate limit counters shared across server instances |
-| `medication_types` | Medication categories lookup |
-| `medication_route_types` | Medication administration routes lookup |
-| `medication_schedule_types` | Medication scheduling frequencies lookup |
-| `admin_activity_logs` | Admin action audits |
-| `day_classification_cache` | Daily summary caching logs |
+
+| Table                                   | Purpose                                                                                            |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `global_settings`                       | Application feature flags and config                                                               |
+| `sso_provider`                          | Active Single Sign-On providers                                                                    |
+| `oidc_providers`                        | OpenID Connect integration settings                                                                |
+| `external_provider_types`               | Search provider configurations (FatSecret, USDA, Canadian Nutrient File)                           |
+| `external_data_providers`               | Configured API integration credentials, including personal or global Open Food Facts accounts      |
+| `openfoodfacts_product_read_rate_limit` | Singleton lease and cooldown coordinating Open Food Facts product reads across server instances    |
+| `openfoodfacts_sync_queue`              | Dormant revision-aware automatic upload state and retained history; unused by manual contributions |
+| `rate_limit`                            | Sign-in rate limit counters shared across server instances                                         |
+| `medication_types`                      | Medication categories lookup                                                                       |
+| `medication_route_types`                | Medication administration routes lookup                                                            |
+| `medication_schedule_types`             | Medication scheduling frequencies lookup                                                           |
+| `admin_activity_logs`                   | Admin action audits                                                                                |
+| `day_classification_cache`              | Daily summary caching logs                                                                         |
 
 ### Internal & Shared (Tier 2: Owner-Only or System)
-| Table | Purpose |
-|-------|---------|
-| `onboarding_data` | Initial user onboarding metrics |
-| `onboarding_status` | User onboarding status |
-| `family_access` | Sharing rules and delegation credentials |
-| `backup_settings` | Automated database backup settings |
+
+| Table               | Purpose                                  |
+| ------------------- | ---------------------------------------- |
+| `onboarding_data`   | Initial user onboarding metrics          |
+| `onboarding_status` | User onboarding status                   |
+| `family_access`     | Sharing rules and delegation credentials |
+| `backup_settings`   | Automated database backup settings       |
 
 ---
 
@@ -274,7 +290,7 @@ Two supported paths, depending on what you need:
 - **A user's providers, for the UI or a service.** Use
   `externalProviderRepository.getExternalDataProviders(userId)`. It decrypts on the
   way out and returns the plaintext on the `app_id` / `app_key` properties of the
-  returned object — so those *field names* are populated even though the *columns*
+  returned object — so those _field names_ are populated even though the _columns_
   of the same name are `NULL`. Failed decryption is logged and yields `null` rather
   than throwing, so treat a `null` credential as "unusable", not "absent".
 
@@ -303,14 +319,26 @@ SparkyFitness uses a custom migration system that runs automatically on server s
 ### Migration Process
 
 The migration system:
+
 1. **Checks current database version** on startup
 2. **Applies pending migrations** in order
 3. **Tracks applied migrations** in the `migrations` table
 4. **Logs migration results** for debugging
 
+`SparkyFitnessServer/index.ts` loads configuration, awaits database initialization
+and RLS, and only then dynamically imports the server. Preserve that ordering:
+an import-time failure after migrations does not imply migration failure.
+The exercise repository aggregator uses static named function imports from
+`exerciseTemplate.ts`; those function declarations are initialized during ESM
+linking. Do not restore a top-level awaited dynamic import on the
+repository → template → service → repository cycle, or eagerly read the
+template's default object within that cycle: the former prevents server import
+from settling, and the latter can access an uninitialized binding.
+
 ### Migration Structure
 
 Migrations are stored in `SparkyFitnessServer/db/migrations/` with the naming pattern:
+
 ```
 YYYYMMDDHHMMSS_description.sql
 ```
@@ -320,6 +348,7 @@ Example: `20240315103000_add_exercise_tracking.sql`
 ### Creating a New Migration
 
 1. **Create the migration file** in the migrations directory:
+
    ```bash
    cd SparkyFitnessServer/db/migrations/
    touch 20240315142000_add_meal_planning.sql
@@ -334,12 +363,14 @@ Example: `20240315103000_add_exercise_tracking.sql`
 ### Migration Best Practices
 
 #### Backwards Compatibility
+
 - **Add columns** with default values to avoid breaking existing code
 - **Create new tables** rather than modifying existing ones when possible
 - **Use transactions** to ensure atomic migrations
 - **Test migrations** on development data first
 
 #### Transaction Management
+
 ```sql
 BEGIN;
 -- All migration statements here
@@ -348,13 +379,15 @@ COMMIT;
 ```
 
 #### Index Creation
+
 ```sql
 -- Create indexes concurrently to avoid blocking
-CREATE INDEX CONCURRENTLY idx_food_entries_user_date 
+CREATE INDEX CONCURRENTLY idx_food_entries_user_date
 ON food_entries(user_id, created_at);
 ```
 
 #### Data Migration
+
 ```sql
 BEGIN;
 -- Create new table
@@ -379,25 +412,248 @@ While not automated, rollback migrations can be created:
 3. **Test rollback procedures** in development
 4. **Backup database** before applying production migrations
 
+### Workout Session cutover: preflight and explicit mapping
+
+Migration `20261011110000_workout_plan_sessions.sql` is a clean transactional
+cutover, not a live Program-consolidation operation. Do not deploy old consumers
+against the new schema. The integration owner rehearses this on an explicitly
+disposable database before any separately approved live operation.
+
+Legacy grouping uses weekly `day_of_week` (including a distinct unscheduled null
+group), or sequential `COALESCE(session_index, 1)`, never `session_name`. A legacy
+plan with no assignments gets one empty session, so existing Program links can
+retain their zero prescriptions without inventing work. Stable assignment/set
+IDs, assignment and Planned Session audit timestamps, Program/phase/week/Planned Session IDs, authored
+and effective dates, order, outcome JSON, existing name snapshots, completion FKs
+and diary assignment links are retained. Presets freeze their full current
+prescription once; no historical diary/outcome values are refreshed.
+Logged preset parents gain nullable `time_cap_seconds` without a history
+backfill. Execution's explicit frozen format/cap wins over mutable library
+metadata; explicit null means no cap. Diary edits retain both timer fields unless
+supplied explicitly. Explicit plan deletion rejects all linked diary history,
+including incomplete prefill, before any deletion and never cleans up/unlinks it.
+The binding backfill changes only the new Planned Session `workout_session_id`
+and `workout_session_name_snapshot`; legacy `created_at`/`updated_at` and outcome
+fields are untouched. Its queued legacy plan-FK checks are explicitly validated
+with `SET CONSTRAINTS training_program_sessions_workout_plan_fk IMMEDIATE` before
+the final table alteration. No constraint trigger is disabled; the new session
+FK remains `DEFERRABLE INITIALLY DEFERRED`.
+
+#### 1. Read-only preflight on the legacy schema
+
+Use a migration/admin connection to a **disposable legacy baseline**, containing
+all migrations before `20261011110000` (including name-only #10 if integrated).
+Run this before invoking the session migration:
+
+```sql
+WITH candidate_groups AS (
+  SELECT p.id AS workout_plan_id, p.user_id, p.schedule_type,
+    CASE WHEN p.schedule_type = 'weekly' THEN a.day_of_week
+      ELSE COALESCE(a.session_index, 1) END AS legacy_group_key,
+    COALESCE(jsonb_agg(a.id ORDER BY a.sort_order NULLS LAST, a.id)
+      FILTER (WHERE a.id IS NOT NULL), '[]'::jsonb) AS assignment_anchors,
+    count(a.id) = 0 AS empty_plan
+  FROM workout_plan_templates p
+  LEFT JOIN workout_plan_template_assignments a ON a.template_id = p.id
+  GROUP BY p.id, p.user_id, p.schedule_type, legacy_group_key
+), candidates AS (
+  SELECT workout_plan_id, user_id, count(*) AS candidate_count,
+    jsonb_agg(jsonb_build_object('schedule_type', schedule_type,
+      'legacy_group_key', legacy_group_key, 'assignment_anchors', assignment_anchors,
+      'empty_plan', empty_plan) ORDER BY legacy_group_key NULLS LAST) AS groups
+  FROM candidate_groups GROUP BY workout_plan_id, user_id
+)
+SELECT s.id AS planned_session_id, s.program_id, s.workout_plan_id,
+  s.scheduled_date, s.effective_date, s.sort_order, s.status,
+  c.candidate_count, c.groups, c.candidate_count <> 1 AS requires_mapping
+FROM training_program_sessions s
+JOIN candidates c ON c.workout_plan_id = s.workout_plan_id AND c.user_id = s.user_id
+ORDER BY s.program_id, s.scheduled_date, s.sort_order, s.id;
+```
+
+For **each** ambiguous Planned Session choose an assignment anchor from its
+intended legacy group. The map is keyed by Planned Session UUID, not plan ID,
+label or current progression. Reuse of a plan by another Program therefore
+requires its own explicit decisions. One-group and empty plans auto-bind only
+their unique target. Weekly null weekdays remain unscheduled; standalone
+progression does not select them by weekday.
+
+#### 2. Mapping interface and fail-closed error
+
+The exact PostgreSQL setting is `app.workout_session_upgrade_mapping`. Its JSON
+object maps a Planned Session UUID to a legacy **integer assignment ID**; both
+JSON numeric values and decimal strings resolve through their text value:
+
+```json
+{
+  "00000000-0000-4000-8000-000000000101": 7001,
+  "00000000-0000-4000-8000-000000000102": 7002
+}
+```
+
+With an absent/incomplete mapping, the migration raises SQLSTATE `P0001` **before
+creating tables or changing rows**. The following is the expected shape, not
+recorded rehearsal output (JSON key/row order is not guaranteed):
+
+```text
+ERROR: Workout Session preflight requires explicit operator mapping: [{"planned_session_id": "...", "workout_plan_id": 42, "candidate_count": 2}]
+HINT: Set app.workout_session_upgrade_mapping to {"planned-session-uuid": legacy-assignment-id}. No first/current/label fallback is permitted.
+```
+
+An unknown Planned Session, or anchor from another plan/owner, raises:
+
+```text
+ERROR: Workout Session preflight mapping contains an unknown Planned Session or an assignment from another plan/owner
+```
+
+Missing mappings for ambiguous references are reported first. A non-object JSON
+value, invalid weekly weekday, or inaccessible private legacy preset/exercise
+also aborts preflight. Owner/public/family library access is checked before the
+admin connection copies prescription data.
+
+Apply from the repository root on the **disposable database only**, replacing
+the UUIDs/assignment IDs with reviewed preflight output:
+
+```bash
+: "${DISPOSABLE_DATABASE_URL:?Set an explicitly disposable legacy database URL}"
+psql "$DISPOSABLE_DATABASE_URL" -X -v ON_ERROR_STOP=1 \
+  -v mapping='{"00000000-0000-4000-8000-000000000101":7001,"00000000-0000-4000-8000-000000000102":7002}' <<'SQL'
+SELECT set_config('app.workout_session_upgrade_mapping', :'mapping', false);
+\i SparkyFitnessServer/db/migrations/20261011110000_workout_plan_sessions.sql
+\i SparkyFitnessServer/db/rls_policies.sql
+SQL
+```
+
+`set_config(..., false)` is required here: the migration opens its own transaction,
+so the map must exist in the same connection before `BEGIN`. For a migration
+runner already inside a transaction, the equivalent syntax is
+`SET LOCAL app.workout_session_upgrade_mapping = '{"planned-session-uuid":7001}';`.
+Manual rehearsal application does not mark the normal startup migration tracking
+row; explicit replay of this SQL is safe after its successful cutover. Do not
+modify migration tracking in production as a substitute for an approved cutover.
+
+#### 3. Minimal legacy seed for isolated rehearsal
+
+Run the following in `psql` as the migration role on that disposable **pre-#11**
+schema. It creates two same-label independently prescribed sequential groups,
+two weekly groups (different labels on Monday still form one group), an empty
+referenced plan, a public preset owned by a second user, and completed history:
+
+```sql
+BEGIN;
+INSERT INTO public."user"(id,email,email_verified,name,created_at,updated_at)
+VALUES ('00000000-0000-4000-8000-000000000001','session-owner@example.invalid',true,'Session owner',now(),now()),
+       ('00000000-0000-4000-8000-000000000002','session-provider@example.invalid',true,'Preset provider',now(),now());
+INSERT INTO exercises(name,category,user_id,is_custom,source,shared_with_public)
+VALUES ('Split squat','Strength','00000000-0000-4000-8000-000000000001',true,'custom',true)
+RETURNING id AS exercise_id \gset
+INSERT INTO workout_plan_templates(user_id,plan_name,schedule_type,entry_mode,start_date,end_date,is_active)
+VALUES ('00000000-0000-4000-8000-000000000001','Sequential legacy','sequential','prompt','2026-10-11','2026-10-17',false)
+RETURNING id AS sequential_plan_id \gset
+INSERT INTO workout_plan_templates(user_id,plan_name,schedule_type,entry_mode,is_active)
+VALUES ('00000000-0000-4000-8000-000000000001','Weekly legacy','weekly','prompt',false)
+RETURNING id AS weekly_plan_id \gset
+INSERT INTO workout_plan_templates(user_id,plan_name,schedule_type,entry_mode,is_active)
+VALUES ('00000000-0000-4000-8000-000000000001','Empty legacy','sequential','prompt',false)
+RETURNING id AS empty_plan_id \gset
+INSERT INTO workout_plan_template_assignments(template_id,session_index,session_name,exercise_id,sort_order)
+VALUES (:sequential_plan_id,1,'A',:'exercise_id',0) RETURNING id AS a2_anchor \gset
+INSERT INTO workout_plan_template_assignments(template_id,session_index,session_name,exercise_id,sort_order)
+VALUES (:sequential_plan_id,2,'A',:'exercise_id',0) RETURNING id AS a3_anchor \gset
+INSERT INTO workout_plan_assignment_sets(assignment_id,set_number,set_type,reps,weight,rest_time,notes)
+SELECT :a2_anchor,n,'Working Set',8,NULL,90,'RPE 7; 8-10 reps; per side' FROM generate_series(1,2) n;
+INSERT INTO workout_plan_assignment_sets(assignment_id,set_number,set_type,reps,weight,rest_time,notes)
+SELECT :a3_anchor,n,'Working Set',8,NULL,120,'RIR 2; per side' FROM generate_series(1,3) n;
+INSERT INTO workout_plan_template_assignments(template_id,day_of_week,session_name,exercise_id,sort_order)
+VALUES (:weekly_plan_id,1,'A',:'exercise_id',0) RETURNING id AS monday_anchor \gset
+INSERT INTO workout_plan_template_assignments(template_id,day_of_week,session_name,exercise_id,sort_order)
+VALUES (:weekly_plan_id,1,'Different label, same explicit day',:'exercise_id',1),
+       (:weekly_plan_id,3,'A',:'exercise_id',0);
+INSERT INTO workout_presets(user_id,name,description,is_public,workout_format)
+VALUES ('00000000-0000-4000-8000-000000000002','Shared legacy preset',NULL,true,'standard')
+RETURNING id AS preset_id \gset
+INSERT INTO workout_preset_exercises(workout_preset_id,exercise_id,sort_order)
+VALUES (:preset_id,:'exercise_id',0) RETURNING id AS preset_exercise_id \gset
+INSERT INTO workout_preset_exercise_sets(workout_preset_exercise_id,set_number,reps,weight,rest_time,notes)
+VALUES (:preset_exercise_id,1,8,NULL,60,'Do not refresh historical values');
+INSERT INTO workout_plan_template_assignments(template_id,session_index,session_name,workout_preset_id,sort_order)
+VALUES (:sequential_plan_id,2,'A',:preset_id,1);
+INSERT INTO training_programs(id,user_id,name,goal,start_date,end_date)
+VALUES ('00000000-0000-4000-8000-000000000010','00000000-0000-4000-8000-000000000001','Legacy Program','Preserve identity','2026-10-11','2026-10-17');
+INSERT INTO training_program_phases(id,program_id,user_id,name,goal,sort_order)
+VALUES ('00000000-0000-4000-8000-000000000020','00000000-0000-4000-8000-000000000010','00000000-0000-4000-8000-000000000001','Phase','Preserve identity',0);
+INSERT INTO training_program_weeks(id,program_id,phase_id,user_id,start_date,end_date,sort_order)
+VALUES ('00000000-0000-4000-8000-000000000030','00000000-0000-4000-8000-000000000010','00000000-0000-4000-8000-000000000020','00000000-0000-4000-8000-000000000001','2026-10-11','2026-10-17',0);
+INSERT INTO training_program_sessions(id,program_id,week_id,user_id,name,scheduled_date,effective_date,workout_plan_id,sort_order)
+VALUES
+('00000000-0000-4000-8000-000000000101','00000000-0000-4000-8000-000000000010','00000000-0000-4000-8000-000000000030','00000000-0000-4000-8000-000000000001','A','2026-10-11','2026-10-11',:sequential_plan_id,0),
+('00000000-0000-4000-8000-000000000102','00000000-0000-4000-8000-000000000010','00000000-0000-4000-8000-000000000030','00000000-0000-4000-8000-000000000001','A','2026-10-12','2026-10-12',:sequential_plan_id,1),
+('00000000-0000-4000-8000-000000000103','00000000-0000-4000-8000-000000000010','00000000-0000-4000-8000-000000000030','00000000-0000-4000-8000-000000000001','Weekly','2026-10-12','2026-10-12',:weekly_plan_id,2),
+('00000000-0000-4000-8000-000000000104','00000000-0000-4000-8000-000000000010','00000000-0000-4000-8000-000000000030','00000000-0000-4000-8000-000000000001','Empty','2026-10-13','2026-10-13',:empty_plan_id,3);
+INSERT INTO exercise_entries(user_id,exercise_id,exercise_name,entry_date,duration_minutes,calories_burned,workout_plan_assignment_id,source)
+VALUES ('00000000-0000-4000-8000-000000000001',:'exercise_id','Historical label','2026-10-11',30,200,:a2_anchor,'manual')
+RETURNING id AS diary_id \gset
+UPDATE training_program_sessions SET status='completed',outcome_at='2026-10-11T12:00:00Z',
+  exercise_entry_id=:'diary_id',workout_plan_name_snapshot='Historical plan label',
+  completed_workout=jsonb_build_object('type','individual','id',:'diary_id','name','Historical label','entry_date','2026-10-11')
+WHERE id='00000000-0000-4000-8000-000000000101';
+COMMIT;
+SELECT jsonb_build_object(
+  '00000000-0000-4000-8000-000000000101',:a2_anchor,
+  '00000000-0000-4000-8000-000000000102',:a3_anchor,
+  '00000000-0000-4000-8000-000000000103',:monday_anchor
+) AS reviewed_fixture_mapping;
+```
+
+Copy that last JSON into the `-v mapping=...` invocation. First run without a map
+to rehearse fail-closed ambiguity; then apply with the explicit map. Compare
+full prescription rows and all retained IDs/links/outcome JSON against the
+pre-upgrade export, not just counts. Confirm the empty Planned Session binds one
+empty session, Monday retains both assignments, Wednesday is a separate session,
+and A 2×8 / A 3×8 remain different sessions. Repeat with a private unshared preset
+to require preflight rejection; repeat with an active exercise-library family
+grant to permit the same prescription without granting Program access.
+
+#### 4. Verification and rollback boundaries
+
+Rehearsal and runtime checks are owned by the integration owner; these commands
+are instructions, not claimed passing evidence. After upgrade, run the persisted
+authenticated Program/plan scenarios and actual session start paths: exact bind,
+isolated local snapshot edits, unchanged completed history, foreign ID rejection,
+sharing, weekly/sequential standalone progression, and idempotent weekly prefill.
+`dashboardWorkoutPlans.test.ts` covers same-day exact-session cards and missing
+binding safety; the other affected server contract tests are migrated with the
+consumer slice.
+
+Any preflight/apply failure rolls the migration transaction back; retry from the
+unchanged legacy baseline after resolving the reported mapping/access problem.
+After a successful cutover, rollback requires restoring the rehearsed
+pre-cutover backup plus the matching old consumer build. Do not reconstruct the
+removed flat grouping columns from session names or silently replace session
+identity with the first/current workout.
+
 ### Troubleshooting Migrations
 
 #### Migration Fails
+
 1. **Check migration logs** in application startup
 2. **Verify database connection** and permissions
 3. **Check for syntax errors** in migration SQL
 4. **Ensure migration dependencies** are met
 
 #### Migration Tracking Issues
+
 ```sql
 -- Check applied migrations
 SELECT * FROM migrations ORDER BY applied_at;
 
 -- Manually mark migration as applied (if needed)
-INSERT INTO migrations (version, applied_at) 
+INSERT INTO migrations (version, applied_at)
 VALUES ('20240315142000', NOW());
 ```
 
 #### Database State Issues
+
 ```sql
 -- Check table structure
 \d table_name
@@ -406,7 +662,7 @@ VALUES ('20240315142000', NOW());
 SELECT * FROM pg_policies WHERE tablename = 'table_name';
 
 -- Check indexes
-SELECT indexname, indexdef FROM pg_indexes 
+SELECT indexname, indexdef FROM pg_indexes
 WHERE tablename = 'table_name';
 ```
 
@@ -415,11 +671,13 @@ WHERE tablename = 'table_name';
 ## Database Maintenance
 
 ### Performance Monitoring
+
 - **Query performance**: Use `EXPLAIN ANALYZE` for slow queries
 - **Index usage**: Monitor index usage with `pg_stat_user_indexes`
 - **Connection monitoring**: Track connection pool usage
 
 ### Regular Maintenance
+
 - **VACUUM**: Regular vacuuming for performance
 - **ANALYZE**: Update table statistics
 - **Index maintenance**: Rebuild indexes if needed

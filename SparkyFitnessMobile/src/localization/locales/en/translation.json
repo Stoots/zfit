@@ -4454,6 +4454,7 @@
     "clearAndStart": "Clear & Start",
     "nothingToStart": "Nothing to start",
     "noExercises": "This preset has no exercises.",
+    "startFailed": "Unable to start the selected workout session.",
     "noServerTitle": "No Server Connected",
     "noServerMessage": "Configure your server connection in Settings to start a workout."
   },

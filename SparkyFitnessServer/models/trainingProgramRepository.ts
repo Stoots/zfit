@@ -57,8 +57,12 @@ async function queryProgramRows(
     [userId, ids]
   );
   const sessions = await client.query<SessionRow>(
-    `SELECT s.id, s.program_id, s.week_id, s.name, s.scheduled_date::text, s.effective_date::text, s.status, s.outcome_at, s.completed_workout, s.workout_plan_id, s.sort_order, COALESCE(s.workout_plan_name_snapshot, p.plan_name) AS workout_plan_name
-     FROM training_program_sessions s JOIN workout_plan_templates p ON p.id = s.workout_plan_id AND p.user_id = s.user_id
+    `SELECT s.id, s.program_id, s.week_id, s.name, s.scheduled_date::text, s.effective_date::text, s.status, s.outcome_at, s.completed_workout, s.workout_session_id, s.sort_order,
+       ws.template_id AS workout_plan_id, COALESCE(s.workout_plan_name_snapshot, p.plan_name) AS workout_plan_name,
+       COALESCE(s.workout_session_name_snapshot, ws.name) AS workout_session_name
+     FROM training_program_sessions s
+     JOIN workout_plan_sessions ws ON ws.id = s.workout_session_id AND ws.user_id = s.user_id
+     JOIN workout_plan_templates p ON p.id = ws.template_id AND p.user_id = ws.user_id
      WHERE s.user_id = $1 AND s.program_id = ANY($2::uuid[]) ORDER BY s.sort_order, s.id`,
     [userId, ids]
   );
@@ -181,10 +185,10 @@ function validateRecordedSessions(
           !edited ||
           edited.name !== session.name ||
           edited.scheduled_date !== session.scheduled_date ||
-          edited.workout_plan_id !== session.workout_plan_id
+          edited.workout_session_id !== session.workout_session_id
         ) {
           throw new HttpError(
-            'Recorded sessions cannot be removed or rewritten. Keep their IDs, names, authored dates and Workout Plans.',
+            'Recorded sessions cannot be removed or rewritten. Keep their IDs, names, authored dates and exact Workout Sessions.',
             409
           );
         }
@@ -193,31 +197,6 @@ function validateRecordedSessions(
   }
 }
 
-async function assertPlansOwned(
-  client: PoolClient,
-  userId: string,
-  input: TrainingProgramInput
-): Promise<void> {
-  const planIds = [
-    ...new Set(
-      input.phases.flatMap((phase) =>
-        phase.weeks.flatMap((week) =>
-          week.sessions.map((session) => session.workout_plan_id)
-        )
-      )
-    ),
-  ];
-  if (!planIds.length) return;
-  const plans = await client.query<{ id: number }>(
-    'SELECT id FROM workout_plan_templates WHERE user_id = $1 AND id = ANY($2::integer[]) FOR KEY SHARE',
-    [userId, planIds]
-  );
-  if (plans.rows.length !== planIds.length)
-    throw new HttpError(
-      'Every Planned Session must use one of your existing Workout Plans.',
-      400
-    );
-}
 
 async function upsertProgramRow(
   client: PoolClient,
@@ -283,8 +262,8 @@ async function upsertProgramStructure(
         const sessionId = session.id ?? randomUUID();
         ids.sessionIds.push(sessionId);
         await client.query(
-          `INSERT INTO training_program_sessions (id, program_id, week_id, user_id, name, scheduled_date, effective_date, workout_plan_id, sort_order) VALUES ($1,$2,$3,$4,$5,$6,$6,$7,$8)
-            ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, effective_date = CASE WHEN training_program_sessions.scheduled_date = EXCLUDED.scheduled_date THEN training_program_sessions.effective_date ELSE EXCLUDED.scheduled_date END, scheduled_date = EXCLUDED.scheduled_date, workout_plan_id = EXCLUDED.workout_plan_id, sort_order = EXCLUDED.sort_order, updated_at = now()`,
+          `INSERT INTO training_program_sessions (id, program_id, week_id, user_id, name, scheduled_date, effective_date, workout_session_id, sort_order) VALUES ($1,$2,$3,$4,$5,$6,$6,$7,$8)
+            ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, effective_date = CASE WHEN training_program_sessions.scheduled_date = EXCLUDED.scheduled_date THEN training_program_sessions.effective_date ELSE EXCLUDED.scheduled_date END, scheduled_date = EXCLUDED.scheduled_date, workout_session_id = EXCLUDED.workout_session_id, sort_order = EXCLUDED.sort_order, updated_at = now()`,
           [
             sessionId,
             programId,
@@ -292,7 +271,7 @@ async function upsertProgramStructure(
             userId,
             session.name,
             session.scheduled_date,
-            session.workout_plan_id,
+            session.workout_session_id,
             s,
           ]
         );
@@ -345,7 +324,29 @@ export async function saveTrainingProgram(
     }
     validateChildIds(input, existing);
     validateRecordedSessions(input, existing);
-    await assertPlansOwned(client, userId, input);
+    const workoutSessionIds = [
+      ...new Set(
+        input.phases.flatMap((phase) =>
+          phase.weeks.flatMap((week) =>
+            week.sessions.map((session) => session.workout_session_id)
+          )
+        )
+      ),
+    ];
+    if (workoutSessionIds.length) {
+      const workouts = await client.query<{ id: string }>(
+        `SELECT ws.id FROM workout_plan_sessions ws JOIN workout_plan_templates p
+          ON p.id = ws.template_id AND p.user_id = ws.user_id
+         WHERE ws.user_id = $1 AND ws.id = ANY($2::uuid[])
+         ORDER BY p.id, ws.id FOR KEY SHARE OF p, ws`,
+        [userId, workoutSessionIds]
+      );
+      if (workouts.rows.length !== workoutSessionIds.length)
+        throw new HttpError(
+          'Every Planned Session must select one of your exact existing Workout Sessions.',
+          400
+        );
+    }
     const programId = id ?? randomUUID();
     await upsertProgramRow(client, userId, programId, input, Boolean(id));
     const ids = await upsertProgramStructure(client, userId, programId, input);

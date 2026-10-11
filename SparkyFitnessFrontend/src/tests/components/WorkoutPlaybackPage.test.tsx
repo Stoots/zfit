@@ -471,4 +471,67 @@ describe('WorkoutPlaybackPage', () => {
 
     expect(screen.getByLabelText('Pause')).toBeInTheDocument();
   });
+  it('keeps a frozen session’s authored loads and full prescription through playback and completion', async () => {
+    const preset = {
+      ...presetFixture,
+      workout_session_id: '10000000-0000-4000-8000-000000000001',
+      exercises: [
+        {
+          exercise_id: 'exercise-1',
+          exercise_name: 'Bench Press',
+          ramp_increment: 20,
+          workout_plan_assignment_id: 101,
+          sets: [1, 2].map((set_number) => ({
+            set_number,
+            reps: 8,
+            weight: 60,
+            duration: null,
+            distance: 0.2,
+            rest_time: null,
+            rpe: 7,
+            rir: 3,
+            notes: '8–10 per side',
+          })),
+        },
+      ],
+    } as WorkoutPreset;
+    mockLocationState = {
+      draft: createWorkoutPlaybackDraftFromPreset(preset, '2026-04-27'),
+    };
+    render(<WorkoutPlaybackPage />);
+    await waitFor(() =>
+      expect(
+        loadWorkoutPlaybackDraftFromStorage(
+          '2026-04-27'
+        )?.exercises[0]?.sets.map((set) => set.weight)
+      ).toEqual([60, 60])
+    );
+    fireEvent.click(screen.getByLabelText('Complete set 1'));
+    fireEvent.click(screen.getByLabelText('Complete set 2'));
+    await waitFor(() => {
+      const saved = loadWorkoutPlaybackDraftFromStorage('2026-04-27')!;
+      const payload = buildPresetSessionCreateRequestFromDraft(saved, 'UTC');
+      expect(payload.exercises?.[0]?.workout_plan_assignment_id).toBe(101);
+      expect(payload.exercises?.[0]?.sets).toMatchObject([
+        {
+          reps: 8,
+          weight: 60,
+          distance: 0.2,
+          rest_time: null,
+          rpe: 7,
+          rir: 3,
+          notes: '8–10 per side',
+        },
+        {
+          reps: 8,
+          weight: 60,
+          distance: 0.2,
+          rest_time: null,
+          rpe: 7,
+          rir: 3,
+          notes: '8–10 per side',
+        },
+      ]);
+    });
+  });
 });

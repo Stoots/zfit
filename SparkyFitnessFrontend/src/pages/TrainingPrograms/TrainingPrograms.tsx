@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/hooks/useAuth';
 import { useActiveUser } from '@/contexts/ActiveUserContext';
+import { exerciseByIdOptions } from '@/hooks/Exercises/useExercises';
 import { useTrainingPrograms } from '@/hooks/TrainingPrograms/useTrainingPrograms';
 import { Button } from '@/components/ui/button';
 import {
@@ -15,12 +17,14 @@ import {
   AlertDialogCancel,
   AlertDialogAction,
 } from '@/components/ui/alert-dialog';
+import { createWorkoutPlaybackRouteState } from '@/utils/workoutPlayback';
+import { buildWorkoutPlanSessionPreset } from '@/utils/workoutPlanSession';
+import type { TrainingProgram } from '@workspace/shared';
 import TrainingProgramEditor from './TrainingProgramEditor';
 import ProgramSessionOutcome from './ProgramSessionOutcome';
 import ProgramList from './ProgramList';
 import ProgramDetail from './ProgramDetail';
 import type { ProgramSession, OutcomeStatus } from './programTypes';
-
 export default function TrainingPrograms() {
   const { user } = useAuth();
   const { isActingOnBehalf } = useActiveUser();
@@ -39,6 +43,10 @@ export default function TrainingPrograms() {
 
 function ProgramWorkspace({ userId }: { userId: string }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [startingSession, setStartingSession] = useState<string | null>(null);
+  const [startError, setStartError] = useState<string | null>(null);
   const [params, setParams] = useSearchParams();
   const id = params.get('program') ?? undefined;
   const [editing, setEditing] = useState(false);
@@ -51,6 +59,50 @@ function ProgramWorkspace({ userId }: { userId: string }) {
   const { programs, program, plans, save, remove, outcome } =
     useTrainingPrograms(userId, true, id);
   const selected = program.data;
+  const startWorkout = async (
+    session: TrainingProgram['phases'][number]['weeks'][number]['sessions'][number]
+  ) => {
+    setStartingSession(session.id);
+    setStartError(null);
+    try {
+      const plan = plans.data?.find((item) =>
+        item.sessions.some(
+          (workout) => workout.id === session.workout_session_id
+        )
+      );
+      if (!plan)
+        throw new Error(
+          t(
+            'trainingPrograms.sessionUnavailable',
+            'The selected Workout Session is unavailable. Reload the plans or choose its exact replacement.'
+          )
+        );
+      const preset = await buildWorkoutPlanSessionPreset(
+        plan,
+        session.workout_session_id,
+        userId,
+        (exerciseId) => queryClient.fetchQuery(exerciseByIdOptions(exerciseId))
+      );
+      navigate(`/workout-playback?date=${session.effective_date}`, {
+        state: createWorkoutPlaybackRouteState(
+          preset,
+          session.effective_date,
+          `${window.location.pathname}${window.location.search}`
+        ),
+      });
+    } catch (error) {
+      setStartError(
+        error instanceof Error
+          ? error.message
+          : t(
+              'trainingPrograms.startError',
+              'Could not start the selected workout.'
+            )
+      );
+    } finally {
+      setStartingSession(null);
+    }
+  };
   const back = () => {
     setEditing(false);
     setCreating(false);
@@ -77,6 +129,11 @@ function ProgramWorkspace({ userId }: { userId: string }) {
           </Link>
         </Button>
       </header>
+      {startError && (
+        <p role="alert" className="text-destructive">
+          {startError}
+        </p>
+      )}
       {creating || editing ? (
         <>
           {plans.isPending ? (
@@ -133,6 +190,8 @@ function ProgramWorkspace({ userId }: { userId: string }) {
               <ProgramDetail
                 selected={selected}
                 outcomePending={outcome.isPending}
+                startingSessionId={startingSession}
+                onStartSession={startWorkout}
                 onEdit={() => setEditing(true)}
                 onDelete={() => {
                   remove.reset();

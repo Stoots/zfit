@@ -44,8 +44,9 @@ import type { CheckInMeasurement } from '../types/measurements';
 import type { WorkoutPreset } from '../types/workoutPresets';
 import { useWorkoutPresets } from './useWorkoutPresets';
 import { getActiveServerConfigId } from '../services/storage';
-import { useActiveWorkoutPlans } from './useActiveWorkoutPlan';
+import { useWorkoutPlanCandidates } from './useActiveWorkoutPlan';
 import { scheduledWorkoutsForWatch } from '../utils/workoutPlanSchedule';
+import { selectDashboardWorkoutPlans } from '@workspace/shared';
 
 /** Saved workouts the watch may start. Presets with no exercises are omitted:
  * the server rejects a session that has none. */
@@ -57,7 +58,8 @@ export function watchDistanceUnit(
 }
 
 export function startableWorkoutsForWatch(
-  presets: readonly Pick<WorkoutPreset, 'id' | 'name' | 'exercises'>[]
+  presets: readonly Pick<WorkoutPreset, 'id' | 'name' | 'exercises'>[],
+  scheduled: readonly { presetId: string; name: string }[] = []
 ): { presetId: string; name: string }[] {
   return presets
     .filter(
@@ -65,7 +67,8 @@ export function startableWorkoutsForWatch(
     )
     .slice()
     .sort((a, b) => a.name.localeCompare(b.name))
-    .map((preset) => ({ presetId: String(preset.id), name: preset.name }));
+    .map((preset) => ({ presetId: String(preset.id), name: preset.name }))
+    .concat(scheduled.map(({ presetId, name }) => ({ presetId, name })));
 }
 
 /** Clamps a goal-progress fraction to 0...1 — passing a goal always reads as 1. */
@@ -231,10 +234,6 @@ export function useWatchCheckInBridge(enabled: boolean): void {
   // shows metres, or yards when the phone is set to miles.
   const distanceUnit = watchDistanceUnit(preferences?.default_distance_unit);
   const { presets } = useWorkoutPresets({ enabled });
-  const startableWorkouts = useMemo(
-    () => startableWorkoutsForWatch(presets),
-    [presets]
-  );
 
   // The calendar day everything below describes.
   //
@@ -270,30 +269,36 @@ export function useWatchCheckInBridge(enabled: boolean): void {
     enabled,
   });
 
-  // What the diary's plan banner offers today, so the watch's workout page can
-  // put it first. Same query and completion rule as that banner.
-  const { plans: activePlans } = useActiveWorkoutPlans(summaryDate, {
-    enabled,
-  });
+  // Exact scheduled-session tokens from the diary's nested plan contract.
+  // Library presets above retain numeric tokens and never imply plan membership.
+  const {
+    plans: activePlans,
+    programs: trainingPrograms,
+    isLoading: plansLoading,
+  } = useWorkoutPlanCandidates(summaryDate, { enabled });
   const dayExerciseEntries = dailySummary?.exerciseEntries;
-  const scheduledWorkouts = useMemo(
-    () =>
-      dayExerciseEntries === undefined
-        ? []
-        : scheduledWorkoutsForWatch(activePlans, dayExerciseEntries, {
-            scheduledToday: t(
-              'exerciseSummary.scheduledToday',
-              'Scheduled Today'
-            ),
-            sessionOf: (current, total) =>
-              t(
-                'exerciseSummary.sessionNumber',
-                'Session {{current}} of {{total}}',
-                { current, total }
-              ),
-          }),
-    [activePlans, dayExerciseEntries, t]
-  );
+  const scheduledWorkouts = useMemo(() => {
+    if (dayExerciseEntries === undefined || plansLoading) return [];
+    const selected = selectDashboardWorkoutPlans(
+      activePlans,
+      trainingPrograms ?? []
+    );
+    const eligible = [
+      ...(selected.programPlan ? [selected.programPlan] : []),
+      ...selected.standalonePlans,
+    ];
+    return scheduledWorkoutsForWatch(eligible, dayExerciseEntries, {
+      scheduledToday: t(
+        'exerciseSummary.scheduledToday',
+        'Scheduled Today'
+      ),
+      sessionOf: (current, total) =>
+        t('exerciseSummary.sessionNumber', 'Session {{current}} of {{total}}', {
+          current,
+          total,
+        }),
+    });
+  }, [activePlans, dayExerciseEntries, trainingPrograms, plansLoading, t]);
 
   // EVERY calorie figure sent to the watch comes from this one object — the
   // same one the phone's own summary bar (DiaryCalorieMacroSummary) and the
@@ -585,7 +590,11 @@ export function useWatchCheckInBridge(enabled: boolean): void {
         hapticsEnabled,
         restAlertsEnabled,
         doubleTapEnabled: watchDoubleTapEnabled,
-        startableWorkouts,
+        // The native picker admits scheduled tokens only when also startable.
+        startableWorkouts: startableWorkoutsForWatch(
+          presets,
+          today === summaryDate ? scheduledWorkouts : []
+        ),
         // Built for `summaryDate`; a push that has crossed midnight before the
         // hook re-rendered must not carry yesterday's plan.
         scheduledWorkouts: today === summaryDate ? scheduledWorkouts : [],
@@ -618,7 +627,7 @@ export function useWatchCheckInBridge(enabled: boolean): void {
     hapticsEnabled,
     restAlertsEnabled,
     watchDoubleTapEnabled,
-    startableWorkouts,
+    presets,
     scheduledWorkouts,
     waterGoalMl,
     waterDisplayUnit,

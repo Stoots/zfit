@@ -182,11 +182,14 @@ router.use(checkPermissionMiddleware('diary'));
  */
 router.get('/by-date', authenticate, async (req, res, next) => {
   const { selectedDate } = req.query;
-  if (!selectedDate) {
+  if (typeof selectedDate !== 'string' || !selectedDate) {
     return res.status(400).json({ error: 'Selected date is required.' });
   }
   try {
     const { userId } = req.query; // Check for userId param
+    if (userId !== undefined && typeof userId !== 'string') {
+      return res.status(400).json({ error: 'User ID must be a string.' });
+    }
 
     const targetUserId = userId || req.userId;
 

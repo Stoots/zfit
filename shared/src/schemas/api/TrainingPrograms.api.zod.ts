@@ -14,7 +14,7 @@ const sessionInput = z.strictObject({
   id: childId,
   name: title,
   scheduled_date: day,
-  workout_plan_id: z.number().int().positive(),
+  workout_session_id: z.uuid(),
 });
 const weekInput = z.strictObject({
   id: childId,
@@ -129,6 +129,8 @@ const session = sessionInput
   .extend({
     id: z.uuid(),
     sort_order: z.number().int().nonnegative(),
+    workout_session_name: z.string(),
+    workout_plan_id: z.number().int().positive(),
     workout_plan_name: z.string(),
     effective_date: day,
     status: z.enum(["planned", "completed", "missed"]),

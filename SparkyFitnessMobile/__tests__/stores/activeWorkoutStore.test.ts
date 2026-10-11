@@ -249,6 +249,25 @@ describe('activeWorkoutStore', () => {
   });
 
   describe('startWorkout', () => {
+    it('uses returned frozen timing over stale start options, including an explicitly uncapped prescription', () => {
+      useActiveWorkoutStore
+        .getState()
+        .startWorkout(
+          makeSession({ workout_format: 'amrap', time_cap_seconds: 600 }),
+          { workoutFormat: 'tabata', timeCapSeconds: 90 }
+        );
+      expect(useActiveWorkoutStore.getState().workoutFormat).toBe('amrap');
+      expect(useActiveWorkoutStore.getState().timeCapSeconds).toBe(600);
+      useActiveWorkoutStore
+        .getState()
+        .startWorkout(
+          makeSession({ workout_format: 'amrap', time_cap_seconds: null }),
+          { workoutFormat: 'tabata', timeCapSeconds: 90 }
+        );
+      expect(useActiveWorkoutStore.getState().workoutFormat).toBe('amrap');
+      expect(useActiveWorkoutStore.getState().timeCapSeconds).toBeNull();
+    });
+
     it('builds steps in order across all exercises', () => {
       useActiveWorkoutStore.getState().startWorkout(makeSession());
       const { steps, sessionId } = useActiveWorkoutStore.getState();
@@ -435,6 +454,20 @@ describe('activeWorkoutStore', () => {
   });
 
   describe('startWorkoutAtSet', () => {
+    it('retains saved timing when restarting a diary workout at a set', () => {
+      useActiveWorkoutStore
+        .getState()
+        .startWorkoutAtSet(
+          makeSession({ workout_format: 'amrap', time_cap_seconds: 600 }),
+          '102'
+        );
+      const state = useActiveWorkoutStore.getState();
+      expect(state.workoutFormat).toBe('amrap');
+      expect(state.timeCapSeconds).toBe(600);
+      expect(state.activeSetId).toBe('102');
+      expect(state.completedSetIds).toEqual({ '101': FIXED_NOW });
+    });
+
     it('seeds all strictly-prior set IDs as completed and sets activeSetId to target', () => {
       useActiveWorkoutStore.getState().startWorkoutAtSet(makeSession(), '102');
       const state = useActiveWorkoutStore.getState();

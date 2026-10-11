@@ -227,16 +227,20 @@ export const SortableExerciseItem = ({
   const hasSets = Array.isArray(ex.sets) && ex.sets.length > 0;
 
   const displayName =
+    ('preset_snapshot' in ex && ex.preset_snapshot?.name) ||
     ('exercise_name' in ex && ex.exercise_name) ||
     ('workout_preset_name' in ex && ex.workout_preset_name) ||
     ('exercise_snapshot' in ex && ex.exercise_snapshot?.name) ||
     'Workout';
 
   const isWorkoutPreset =
-    'workout_preset_id' in ex && !!ex.workout_preset_id && !ex.exercise_id;
+    (('preset_snapshot' in ex && !!ex.preset_snapshot) ||
+      ('workout_preset_id' in ex && !!ex.workout_preset_id)) &&
+    !ex.exercise_id;
 
   const linkedPreset = useMemo(
     () =>
+      ('preset_snapshot' in ex && ex.preset_snapshot) ||
       workoutPresets?.find((p) => {
         const pId = p.id.toString();
         const exPresetId =
@@ -792,8 +796,10 @@ export const SortableExerciseItem = ({
 
       {isWorkoutPreset && (
         <p className="text-[11px] text-muted-foreground italic px-7">
-          Workout Preset block: Edit individual exercises within the preset
-          manager.
+          {t(
+            'addWorkoutPlanDialog.sessionPresetHelp',
+            'Edit this session’s preset prescription here. The library preset and other sessions stay unchanged.'
+          )}
         </p>
       )}
       {/* Progression & Overload Information Dialog */}

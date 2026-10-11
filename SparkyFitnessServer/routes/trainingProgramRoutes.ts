@@ -23,12 +23,12 @@ router.use(authenticate, onBehalfOfMiddleware, requireSelfActor);
  *     PlannedSessionInput:
  *       type: object
  *       additionalProperties: false
- *       required: [name, scheduled_date, workout_plan_id]
+ *       required: [name, scheduled_date, workout_session_id]
  *       properties:
  *         id: { type: string, format: uuid, description: Existing session ID on edits only. }
  *         name: { type: string, maxLength: 200 }
  *         scheduled_date: { type: string, format: date, description: Fixed calendar date within the week. }
- *         workout_plan_id: { type: integer, minimum: 1, description: An existing Workout Plan owned by the caller. }
+ *         workout_session_id: { type: string, format: uuid, description: The exact Workout Session inside a Workout Plan owned by the caller. }
  *     PlannedSession:
  *       type: object
  *       properties:
@@ -37,8 +37,10 @@ router.use(authenticate, onBehalfOfMiddleware, requireSelfActor);
  *         sort_order: { type: integer }
  *         scheduled_date: { type: string, format: date, description: Authored date within its week. }
  *         effective_date: { type: string, format: date, description: Resulting schedule date; may extend beyond the authored week or Program. }
- *         workout_plan_id: { type: integer }
- *         workout_plan_name: { type: string, description: Snapshotted for recorded outcomes. }
+ *         workout_session_id: { type: string, format: uuid }
+ *         workout_session_name: { type: string, description: Exact selected Workout Session label; snapshotted for recorded outcomes. }
+ *         workout_plan_id: { type: integer, description: Display-only parent plan ID; not accepted as a session selection input. }
+ *         workout_plan_name: { type: string, description: Display-only parent plan name; snapshotted for recorded outcomes. }
  *         status: { type: string, enum: [planned, completed, missed] }
  *         outcome_at: { type: string, format: date-time, nullable: true }
  *         completed_workout:

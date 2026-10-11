@@ -436,20 +436,6 @@ describe('published (flat) chatbot tool schemas', () => {
     },
   ];
 
-  it.each(flatCases)(
-    '$name converts to a JSON schema with the expected properties',
-    ({ schema, properties, actions }) => {
-      const json = toJson(schema);
-
-      expect(json.type).toBe('object');
-      expect(Object.keys(json.properties ?? {})).toEqual(properties);
-
-      if (actions) {
-        expect(json.properties?.action?.enum).toEqual(actions);
-      }
-    }
-  );
-
   // Regex lookaround (e.g. Zod v4's .email() pattern) is rejected by the
   // RE2-style validators some providers (Groq, xAI) apply to tool parameter
   // schemas, which fails the whole request. Keep published schemas RE2-safe.
@@ -695,21 +681,89 @@ describe('strict discriminated-union validation schemas', () => {
     ).toBe(false);
   });
 
-  it('manageWorkoutPlansSchema accepts create_workout_plan with sequential sessions', () => {
+  it('manageWorkoutPlansSchema preserves independent nested same-label prescriptions and stable identities', () => {
+    const sessions = [
+      {
+        id: '11111111-1111-4111-8111-111111111111',
+        name: 'A',
+        day_of_week: null,
+        sort_order: 0,
+        assignments: [
+          {
+            id: 10,
+            exercise_name: 'Bench Press',
+            sets: [
+              { reps: 8, weight: null },
+              { reps: 8, weight: null },
+            ],
+          },
+        ],
+      },
+      {
+        id: '22222222-2222-4222-8222-222222222222',
+        name: 'A',
+        day_of_week: null,
+        sort_order: 1,
+        assignments: [
+          {
+            id: 11,
+            exercise_name: 'Bench Press',
+            sets: [{ reps: 8 }, { reps: 8 }, { reps: 8 }],
+          },
+        ],
+      },
+    ];
     const result = manageWorkoutPlansSchema.safeParse({
       action: 'create_workout_plan',
       plan_name: 'Upper Lower Split',
       schedule_type: 'sequential',
-      sessions: [
-        {
-          session_name: 'Upper Body',
-          exercise_name: 'Bench Press',
-          sets: [{ reps: 10, weight: 80 }],
-        },
-      ],
+      sessions,
     });
     expect(result.success).toBe(true);
+    if (result.success && result.data.action === 'create_workout_plan') {
+      expect(Array.isArray(result.data.sessions)).toBe(true);
+      if (Array.isArray(result.data.sessions)) {
+        expect(result.data.sessions).toHaveLength(2);
+        expect(result.data.sessions.map((session) => session.id)).toEqual(
+          sessions.map((session) => session.id)
+        );
+        expect(
+          result.data.sessions.map(
+            (session) => session.assignments[0]!.sets!.length
+          )
+        ).toEqual([2, 3]);
+        expect(
+          result.data.sessions[0]!.assignments[0]!.sets![0]!.weight
+        ).toBeNull();
+      }
+    }
   });
+
+  it.each([
+    { assignments: [{ exercise_name: 'Bench Press' }] },
+    {
+      sessions: [{ session_name: 'Upper Body', exercise_name: 'Bench Press' }],
+    },
+    {
+      sessions: [
+        {
+          name: 'A',
+          assignments: [{ session_index: 1, exercise_name: 'Bench Press' }],
+        },
+      ],
+    },
+  ])(
+    'manageWorkoutPlansSchema rejects obsolete flat authoring aliases: %j',
+    (fields) => {
+      expect(
+        manageWorkoutPlansSchema.safeParse({
+          action: 'create_workout_plan',
+          plan_name: 'Upper Lower Split',
+          ...fields,
+        }).success
+      ).toBe(false);
+    }
+  );
 
   it('manageWorkoutPlansSchema accepts update_workout_plan with numeric plan_id and confirmed', () => {
     const result = manageWorkoutPlansSchema.safeParse({

@@ -1,465 +1,198 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import workoutPlanTemplateService from '../services/workoutPlanTemplateService.js';
 import workoutPlanTemplateRepository from '../models/workoutPlanTemplateRepository.js';
-import exerciseRepository from '../models/exerciseRepository.js';
+import type {
+  WorkoutPlanCreateRequest,
+  WorkoutPlanUpdateRequest,
+} from '@workspace/shared';
 
 vi.mock('../models/workoutPlanTemplateRepository.js', () => ({
   default: {
     createWorkoutPlanTemplate: vi.fn(),
-    getWorkoutPlanTemplatesByUserId: vi.fn(),
     getWorkoutPlanTemplateById: vi.fn(),
     updateWorkoutPlanTemplate: vi.fn(),
     deleteWorkoutPlanTemplate: vi.fn(),
     getWorkoutPlanTemplateOwnerId: vi.fn(),
-    getActiveWorkoutPlanForDate: vi.fn(),
-    unlinkExerciseEntriesByTemplateId: vi.fn(),
   },
 }));
-
-vi.mock('../models/workoutPresetRepository.js', () => ({
-  default: {
-    getWorkoutPresetById: vi.fn(),
-  },
-}));
-
-vi.mock('../models/exerciseRepository.js', () => ({
-  default: {
-    getExerciseById: vi.fn(),
-    createExerciseEntriesFromTemplate: vi.fn(),
-    deleteExerciseEntriesByTemplateId: vi.fn(),
-  },
-}));
-
-vi.mock('../config/logging.js', () => ({
-  log: vi.fn(),
-}));
-
 vi.mock('../utils/timezoneLoader.js', () => ({
-  resolveTemplateStartDay: vi.fn(async () => '2026-09-10'),
+  resolveTemplateStartDay: vi.fn(async () => '2026-10-25'),
 }));
 
-const USER_ID = 'user-uuid-1234';
-const OTHER_USER_ID = 'other-user-uuid-5678';
-const TEMPLATE_ID = 'template-uuid-9999';
+const OWNER = 'owner';
+const OTHER = 'other';
+const PLAN = 1;
+const SESSION = '11111111-1111-4111-8111-111111111111';
+const SECOND = '22222222-2222-4222-8222-222222222222';
+const EXERCISE = '33333333-3333-4333-8333-333333333333';
+const assignment = () => ({
+  id: 1,
+  exercise_id: EXERCISE,
+  sort_order: 0,
+  sets: [{ set_number: 1, reps: 8, weight: null }],
+});
+const planInput = (): WorkoutPlanCreateRequest => ({
+  plan_name: 'A sessions',
+  schedule_type: 'sequential',
+  sessions: [
+    {
+      id: SESSION,
+      name: 'A',
+      day_of_week: null,
+      sort_order: 0,
+      assignments: [assignment()],
+    },
+  ],
+});
 
-describe('workoutPlanTemplateService', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+describe('workoutPlanTemplateService authorization and nested validation', () => {
+  beforeEach(() => vi.clearAllMocks());
 
-  describe('getWorkoutPlanTemplateById', () => {
-    it('returns the template when found for the user', async () => {
-      const mockTemplate = {
-        id: TEMPLATE_ID,
-        user_id: USER_ID,
-        plan_name: 'Hypertrophy Block A',
-        is_active: true,
-        assignments: [],
-      };
+  it.each(['update', 'delete'] as const)(
+    'denies %s by a non-owner without mutating the plan',
+    async (action) => {
       vi.mocked(
-        workoutPlanTemplateRepository.getWorkoutPlanTemplateById
-      ).mockResolvedValue(mockTemplate);
-
+        workoutPlanTemplateRepository.getWorkoutPlanTemplateOwnerId
+      ).mockResolvedValue(OTHER);
       const result =
-        await workoutPlanTemplateService.getWorkoutPlanTemplateById(
-          USER_ID,
-          TEMPLATE_ID
-        );
-
-      expect(
-        workoutPlanTemplateRepository.getWorkoutPlanTemplateById
-      ).toHaveBeenCalledWith(TEMPLATE_ID, USER_ID);
-      expect(result).toEqual(mockTemplate);
-    });
-
-    it('throws "Workout plan template not found." when repository returns null', async () => {
-      vi.mocked(
-        workoutPlanTemplateRepository.getWorkoutPlanTemplateById
-      ).mockResolvedValue(null);
-
-      await expect(
-        workoutPlanTemplateService.getWorkoutPlanTemplateById(
-          USER_ID,
-          TEMPLATE_ID
-        )
-      ).rejects.toThrow('Workout plan template not found.');
-    });
-  });
-
-  describe('getWorkoutPlanTemplatesByUserId', () => {
-    it('delegates to repository getWorkoutPlanTemplatesByUserId', async () => {
-      const mockTemplates = [
-        { id: 't1', plan_name: 'Plan 1' },
-        { id: 't2', plan_name: 'Plan 2' },
-      ];
-      vi.mocked(
-        workoutPlanTemplateRepository.getWorkoutPlanTemplatesByUserId
-      ).mockResolvedValue(mockTemplates);
-
-      const result =
-        await workoutPlanTemplateService.getWorkoutPlanTemplatesByUserId(
-          USER_ID
-        );
-
-      expect(
-        workoutPlanTemplateRepository.getWorkoutPlanTemplatesByUserId
-      ).toHaveBeenCalledWith(USER_ID);
-      expect(result).toEqual(mockTemplates);
-    });
-  });
-
-  describe('updateWorkoutPlanTemplate', () => {
-    it('throws Forbidden when user does not own the template', async () => {
-      vi.mocked(
-        workoutPlanTemplateRepository.getWorkoutPlanTemplateOwnerId
-      ).mockResolvedValue(OTHER_USER_ID);
-
-      await expect(
-        workoutPlanTemplateService.updateWorkoutPlanTemplate(
-          USER_ID,
-          TEMPLATE_ID,
-          { plan_name: 'Updated Name' }
-        )
-      ).rejects.toThrow(
-        'Forbidden: You do not have permission to update this workout plan template.'
-      );
-    });
-
-    it('updates template when user is owner', async () => {
-      vi.mocked(
-        workoutPlanTemplateRepository.getWorkoutPlanTemplateOwnerId
-      ).mockResolvedValue(USER_ID);
-      vi.mocked(
-        workoutPlanTemplateRepository.updateWorkoutPlanTemplate
-      ).mockResolvedValue({
-        id: TEMPLATE_ID,
-        plan_name: 'Updated Name',
-        is_active: false,
-      });
-
-      const result = await workoutPlanTemplateService.updateWorkoutPlanTemplate(
-        USER_ID,
-        TEMPLATE_ID,
-        { plan_name: 'Updated Name' }
-      );
-
-      expect(
-        workoutPlanTemplateRepository.getWorkoutPlanTemplateOwnerId
-      ).toHaveBeenCalledWith(TEMPLATE_ID, USER_ID);
+        action === 'update'
+          ? workoutPlanTemplateService.updateWorkoutPlanTemplate(OWNER, PLAN, {
+              plan_name: 'Changed',
+            })
+          : workoutPlanTemplateService.deleteWorkoutPlanTemplate(OWNER, PLAN);
+      await expect(result).rejects.toMatchObject({ status: 403 });
       expect(
         workoutPlanTemplateRepository.updateWorkoutPlanTemplate
-      ).toHaveBeenCalledWith(
-        TEMPLATE_ID,
-        USER_ID,
-        {
-          plan_name: 'Updated Name',
-        },
-        false
-      );
-      expect(result.plan_name).toBe('Updated Name');
-    });
-  });
+      ).not.toHaveBeenCalled();
+      expect(
+        workoutPlanTemplateRepository.deleteWorkoutPlanTemplate
+      ).not.toHaveBeenCalled();
+    }
+  );
 
-  describe('deleteWorkoutPlanTemplate', () => {
-    it('throws not found when owner ID is not found', async () => {
+  it.each(['read', 'update', 'delete'] as const)(
+    'returns not-found for inaccessible %s identity',
+    async (action) => {
       vi.mocked(
         workoutPlanTemplateRepository.getWorkoutPlanTemplateOwnerId
       ).mockResolvedValue(null);
-
-      await expect(
-        workoutPlanTemplateService.deleteWorkoutPlanTemplate(
-          USER_ID,
-          TEMPLATE_ID
-        )
-      ).rejects.toThrow('Workout plan template not found.');
-    });
-
-    it('throws Forbidden when user does not own the template', async () => {
-      vi.mocked(
-        workoutPlanTemplateRepository.getWorkoutPlanTemplateOwnerId
-      ).mockResolvedValue(OTHER_USER_ID);
-
-      await expect(
-        workoutPlanTemplateService.deleteWorkoutPlanTemplate(
-          USER_ID,
-          TEMPLATE_ID
-        )
-      ).rejects.toThrow(
-        'Forbidden: You do not have permission to delete this workout plan template.'
-      );
-    });
-  });
-
-  describe('createWorkoutPlanTemplate', () => {
-    it('creates active weekly plan with entry_mode prefill and materializes entries', async () => {
-      const mockCreated = {
-        id: TEMPLATE_ID,
-        user_id: USER_ID,
-        plan_name: 'Weekly Plan',
-        is_active: true,
-        schedule_type: 'weekly' as const,
-        entry_mode: 'prefill' as const,
-      };
-      vi.mocked(
-        workoutPlanTemplateRepository.createWorkoutPlanTemplate
-      ).mockResolvedValue(mockCreated);
-
-      const result = await workoutPlanTemplateService.createWorkoutPlanTemplate(
-        USER_ID,
-        {
-          plan_name: 'Weekly Plan',
-          is_active: true,
-          schedule_type: 'weekly',
-          entry_mode: 'prefill',
-          assignments: [{ day_of_week: 1, sort_order: 0 }],
-        }
-      );
-
-      expect(result).toEqual(mockCreated);
-      expect(
-        exerciseRepository.createExerciseEntriesFromTemplate
-      ).toHaveBeenCalledWith(TEMPLATE_ID, USER_ID, '2026-09-10');
-    });
-
-    it('creates active weekly plan with entry_mode prompt and does NOT materialize entries', async () => {
-      const mockCreated = {
-        id: TEMPLATE_ID,
-        user_id: USER_ID,
-        plan_name: 'Weekly Plan Prompt Only',
-        is_active: true,
-        schedule_type: 'weekly' as const,
-        entry_mode: 'prompt' as const,
-      };
-      vi.mocked(
-        workoutPlanTemplateRepository.createWorkoutPlanTemplate
-      ).mockResolvedValue(mockCreated);
-
-      const result = await workoutPlanTemplateService.createWorkoutPlanTemplate(
-        USER_ID,
-        {
-          plan_name: 'Weekly Plan Prompt Only',
-          is_active: true,
-          schedule_type: 'weekly',
-          entry_mode: 'prompt',
-          assignments: [{ day_of_week: 1, sort_order: 0 }],
-        }
-      );
-
-      expect(result).toEqual(mockCreated);
-      expect(
-        exerciseRepository.createExerciseEntriesFromTemplate
-      ).not.toHaveBeenCalled();
-    });
-
-    it('creates active sequential plan and does NOT materialize entries', async () => {
-      const mockCreated = {
-        id: TEMPLATE_ID,
-        user_id: USER_ID,
-        plan_name: 'Sequential Plan',
-        is_active: true,
-        schedule_type: 'sequential' as const,
-        entry_mode: 'prompt' as const,
-      };
-      vi.mocked(
-        workoutPlanTemplateRepository.createWorkoutPlanTemplate
-      ).mockResolvedValue(mockCreated);
-
-      const result = await workoutPlanTemplateService.createWorkoutPlanTemplate(
-        USER_ID,
-        {
-          plan_name: 'Sequential Plan',
-          is_active: true,
-          schedule_type: 'sequential',
-          assignments: [{ day_of_week: null, sort_order: 0 }],
-        }
-      );
-
-      expect(result).toEqual(mockCreated);
-      expect(
-        exerciseRepository.createExerciseEntriesFromTemplate
-      ).not.toHaveBeenCalled();
-    });
-
-    it('defaults omitted schedule_type to sequential and entry_mode to prompt', async () => {
-      const mockCreated = {
-        id: TEMPLATE_ID,
-        user_id: USER_ID,
-        plan_name: 'Default Plan',
-        is_active: false,
-        schedule_type: 'sequential' as const,
-        entry_mode: 'prompt' as const,
-      };
-      vi.mocked(
-        workoutPlanTemplateRepository.createWorkoutPlanTemplate
-      ).mockResolvedValue(mockCreated);
-
-      const result = await workoutPlanTemplateService.createWorkoutPlanTemplate(
-        USER_ID,
-        {
-          plan_name: 'Default Plan',
-          assignments: [{ day_of_week: null, sort_order: 0 }],
-        }
-      );
-
-      expect(result).toEqual(mockCreated);
-      expect(
-        workoutPlanTemplateRepository.createWorkoutPlanTemplate
-      ).toHaveBeenCalledWith(
-        expect.objectContaining({
-          schedule_type: 'sequential',
-          entry_mode: 'prompt',
-        })
-      );
-    });
-
-    it('throws error when weekly plan has invalid day_of_week', async () => {
-      await expect(
-        workoutPlanTemplateService.createWorkoutPlanTemplate(USER_ID, {
-          plan_name: 'Invalid Weekly Plan',
-          is_active: true,
-          schedule_type: 'weekly',
-          assignments: [
-            { day_of_week: null as unknown as number, sort_order: 0 },
-          ],
-        })
-      ).rejects.toThrow(
-        'Weekly workout plan assignments must have a valid day_of_week (0-6).'
-      );
-    });
-  });
-
-  describe('updateWorkoutPlanTemplate - sequential vs weekly', () => {
-    it('throws error when changing schedule_type without providing assignments', async () => {
-      vi.mocked(
-        workoutPlanTemplateRepository.getWorkoutPlanTemplateOwnerId
-      ).mockResolvedValue(USER_ID);
       vi.mocked(
         workoutPlanTemplateRepository.getWorkoutPlanTemplateById
-      ).mockResolvedValue({
-        id: TEMPLATE_ID,
-        user_id: USER_ID,
-        plan_name: 'Existing Weekly',
-        is_active: true,
-        schedule_type: 'weekly',
-        assignments: [],
-      });
-
-      await expect(
-        workoutPlanTemplateService.updateWorkoutPlanTemplate(
-          USER_ID,
-          TEMPLATE_ID,
-          {
-            plan_name: 'Switched to Sequential',
-            schedule_type: 'sequential',
-          }
-        )
-      ).rejects.toThrow(
-        'Changing schedule_type requires providing updated assignments.'
-      );
-    });
-
-    it('switching weekly to sequential with assignments deletes old entries and skips materialization', async () => {
-      vi.mocked(
-        workoutPlanTemplateRepository.getWorkoutPlanTemplateOwnerId
-      ).mockResolvedValue(USER_ID);
-      vi.mocked(
-        workoutPlanTemplateRepository.getWorkoutPlanTemplateById
-      ).mockResolvedValue({
-        id: TEMPLATE_ID,
-        user_id: USER_ID,
-        plan_name: 'Existing Weekly',
-        is_active: true,
-        schedule_type: 'weekly',
-        assignments: [],
-      });
-      vi.mocked(
-        workoutPlanTemplateRepository.updateWorkoutPlanTemplate
-      ).mockResolvedValue({
-        id: TEMPLATE_ID,
-        plan_name: 'Switched to Sequential',
-        is_active: true,
-        schedule_type: 'sequential',
-      });
-
-      const result = await workoutPlanTemplateService.updateWorkoutPlanTemplate(
-        USER_ID,
-        TEMPLATE_ID,
-        {
-          plan_name: 'Switched to Sequential',
-          is_active: true,
-          schedule_type: 'sequential',
-          assignments: [{ session_index: 0, sort_order: 0 }],
-        }
-      );
-
-      expect(
-        exerciseRepository.deleteExerciseEntriesByTemplateId
-      ).toHaveBeenCalledWith(TEMPLATE_ID, USER_ID, '2026-09-10');
-      expect(
-        workoutPlanTemplateRepository.updateWorkoutPlanTemplate
-      ).toHaveBeenCalledWith(
-        TEMPLATE_ID,
-        USER_ID,
-        {
-          plan_name: 'Switched to Sequential',
-          is_active: true,
-          schedule_type: 'sequential',
-          entry_mode: 'prompt',
-          assignments: [{ session_index: 0, sort_order: 0, day_of_week: null }],
-        },
-        true
-      );
-      expect(
-        exerciseRepository.createExerciseEntriesFromTemplate
-      ).not.toHaveBeenCalled();
-      expect(result.schedule_type).toBe('sequential');
-    });
-
-    it('throws error when updating weekly plan with invalid day_of_week', async () => {
-      vi.mocked(
-        workoutPlanTemplateRepository.getWorkoutPlanTemplateOwnerId
-      ).mockResolvedValue(USER_ID);
-
-      await expect(
-        workoutPlanTemplateService.updateWorkoutPlanTemplate(
-          USER_ID,
-          TEMPLATE_ID,
-          {
-            schedule_type: 'weekly',
-            assignments: [{ day_of_week: 7, sort_order: 0 }],
-          }
-        )
-      ).rejects.toThrow(
-        'Weekly workout plan assignments must have a valid day_of_week (0-6).'
-      );
-    });
-  });
-
-  describe('getActiveWorkoutPlanForDate', () => {
-    it('delegates to repository getActiveWorkoutPlanForDate', async () => {
-      const mockActive = [
-        {
-          id: TEMPLATE_ID,
-          user_id: USER_ID,
-          schedule_type: 'sequential' as const,
-          next_assignment: { id: 1, sort_order: 0 },
-          sequence_position: { current: 1, total: 3 },
-        },
-      ];
-      vi.mocked(
-        workoutPlanTemplateRepository.getActiveWorkoutPlanForDate
-      ).mockResolvedValue(mockActive);
-
+      ).mockResolvedValue(null);
       const result =
-        await workoutPlanTemplateService.getActiveWorkoutPlanForDate(
-          USER_ID,
-          '2026-09-21'
-        );
-
+        action === 'read'
+          ? workoutPlanTemplateService.getWorkoutPlanTemplateById(OWNER, PLAN)
+          : action === 'update'
+            ? workoutPlanTemplateService.updateWorkoutPlanTemplate(
+                OWNER,
+                PLAN,
+                { plan_name: 'Changed' }
+              )
+            : workoutPlanTemplateService.deleteWorkoutPlanTemplate(OWNER, PLAN);
+      await expect(result).rejects.toMatchObject({ status: 404 });
       expect(
-        workoutPlanTemplateRepository.getActiveWorkoutPlanForDate
-      ).toHaveBeenCalledWith(USER_ID, '2026-09-21');
-      expect(result).toEqual(mockActive);
-    });
+        workoutPlanTemplateRepository.updateWorkoutPlanTemplate
+      ).not.toHaveBeenCalled();
+      expect(
+        workoutPlanTemplateRepository.deleteWorkoutPlanTemplate
+      ).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each(['create', 'update'] as const)(
+    'rejects duplicate session identities in %s before persistence',
+    async (action) => {
+      const input = planInput();
+      input.sessions.push({
+        ...input.sessions[0]!,
+        assignments: [],
+        sort_order: 1,
+      });
+      const result =
+        action === 'create'
+          ? workoutPlanTemplateService.createWorkoutPlanTemplate(OWNER, input)
+          : workoutPlanTemplateService.updateWorkoutPlanTemplate(
+              OWNER,
+              PLAN,
+              input
+            );
+      await expect(result).rejects.toMatchObject({ status: 400 });
+      expect(
+        workoutPlanTemplateRepository.createWorkoutPlanTemplate
+      ).not.toHaveBeenCalled();
+      expect(
+        workoutPlanTemplateRepository.updateWorkoutPlanTemplate
+      ).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each(['create', 'update'] as const)(
+    'rejects one assignment identity in two different sessions on %s',
+    async (action) => {
+      const input = planInput();
+      input.sessions.push({ ...input.sessions[0]!, id: SECOND, sort_order: 1 });
+      const result =
+        action === 'create'
+          ? workoutPlanTemplateService.createWorkoutPlanTemplate(OWNER, input)
+          : workoutPlanTemplateService.updateWorkoutPlanTemplate(
+              OWNER,
+              PLAN,
+              input
+            );
+      await expect(result).rejects.toMatchObject({ status: 400 });
+      expect(
+        workoutPlanTemplateRepository.createWorkoutPlanTemplate
+      ).not.toHaveBeenCalled();
+      expect(
+        workoutPlanTemplateRepository.updateWorkoutPlanTemplate
+      ).not.toHaveBeenCalled();
+    }
+  );
+
+  it.each([-1, 7])(
+    'rejects weekday %s without writing any sessions',
+    async (day) => {
+      const input = planInput();
+      input.schedule_type = 'weekly';
+      input.sessions[0]!.day_of_week = day;
+      await expect(
+        workoutPlanTemplateService.createWorkoutPlanTemplate(OWNER, input)
+      ).rejects.toMatchObject({ status: 400 });
+      await expect(
+        workoutPlanTemplateService.updateWorkoutPlanTemplate(OWNER, PLAN, input)
+      ).rejects.toMatchObject({ status: 400 });
+      expect(
+        workoutPlanTemplateRepository.createWorkoutPlanTemplate
+      ).not.toHaveBeenCalled();
+      expect(
+        workoutPlanTemplateRepository.updateWorkoutPlanTemplate
+      ).not.toHaveBeenCalled();
+    }
+  );
+
+  it('rejects the obsolete flat authoring body instead of silently discarding its assignments', async () => {
+    const legacy = {
+      plan_name: 'Legacy',
+      assignments: [{ exercise_id: EXERCISE, session_index: 1 }],
+    };
+    await expect(
+      workoutPlanTemplateService.createWorkoutPlanTemplate(
+        OWNER,
+        legacy as unknown as WorkoutPlanCreateRequest
+      )
+    ).rejects.toMatchObject({ status: 400 });
+    await expect(
+      workoutPlanTemplateService.updateWorkoutPlanTemplate(
+        OWNER,
+        PLAN,
+        legacy as unknown as WorkoutPlanUpdateRequest
+      )
+    ).rejects.toMatchObject({ status: 400 });
+    expect(
+      workoutPlanTemplateRepository.createWorkoutPlanTemplate
+    ).not.toHaveBeenCalled();
+    expect(
+      workoutPlanTemplateRepository.updateWorkoutPlanTemplate
+    ).not.toHaveBeenCalled();
   });
 });

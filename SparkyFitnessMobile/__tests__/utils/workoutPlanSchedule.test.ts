@@ -1,10 +1,15 @@
-import type { ExerciseSessionResponse } from '@workspace/shared';
+import {
+  selectDashboardWorkoutPlans,
+  type ExerciseSessionResponse,
+  type TrainingProgram,
+} from '@workspace/shared';
 import type {
-  WorkoutPlanAssignment,
+  WorkoutPlanSession,
   WorkoutPlanTemplate,
 } from '../../src/types/workoutPlans';
 import {
-  findDueAssignmentForPreset,
+  getWorkoutPlanCandidates,
+  getDuePlanSessions,
   getLoggedAssignmentIds,
   scheduledWorkoutsForWatch,
 } from '../../src/utils/workoutPlanSchedule';
@@ -14,165 +19,351 @@ const labels = {
   sessionOf: (current: number, total: number) =>
     `Session ${current} of ${total}`,
 };
-
-function assignment(
-  id: string,
-  overrides: Partial<WorkoutPlanAssignment> = {}
-): WorkoutPlanAssignment {
+const firstId = '11111111-1111-4111-8111-111111111111';
+const secondId = '22222222-2222-4222-8222-222222222222';
+function session(id: string, assignmentId: number): WorkoutPlanSession {
+  // Scheduling does not inspect unused audit/snapshot fields.
   return {
     id,
-    template_id: 'plan-1',
+    name: 'A',
     day_of_week: 1,
-    sort_order: 0,
-    workout_preset_id: `preset-${id}`,
-    workout_preset_name: `Workout ${id}`,
-    sets: [],
-    ...overrides,
-  };
+    sort_order: assignmentId,
+    assignments: [
+      {
+        id: assignmentId,
+        workout_session_id: id,
+        sort_order: 0,
+        workout_preset_id: 42,
+        sets: [],
+      },
+    ],
+  } as unknown as WorkoutPlanSession;
 }
-
+const a = session(firstId, 1);
+const b = session(secondId, 2);
 function plan(
   overrides: Partial<WorkoutPlanTemplate> = {}
 ): WorkoutPlanTemplate {
   return {
-    id: 'plan-1',
+    id: 1,
     user_id: 'user-1',
     plan_name: 'main',
     start_date: '2026-10-01',
     is_active: true,
     schedule_type: 'weekly',
+    sessions: [a, b],
+    next_session: a,
+    next_assignments: [...a.assignments, ...b.assignments],
     ...overrides,
-  };
+  } as WorkoutPlanTemplate;
 }
 
-describe('scheduledWorkoutsForWatch', () => {
-  it('lists the workout a weekly plan has due today', () => {
-    const due = assignment('1', { workout_preset_name: 'Day 2 Upper (5 Day)' });
-    expect(
-      scheduledWorkoutsForWatch(
-        [plan({ assignments: [due], next_assignment: due })],
-        [],
-        labels
-      )
-    ).toEqual([
-      {
-        presetId: 'preset-1',
-        name: 'Day 2 Upper (5 Day)',
-        planName: 'main',
-        caption: 'Scheduled Today',
-      },
-    ]);
-  });
-
-  it('lists every workout a weekly plan has due today', () => {
-    const a = assignment('1');
-    const b = assignment('2');
-    const rows = scheduledWorkoutsForWatch(
-      [
-        plan({
-          assignments: [a, b],
-          next_assignment: a,
-          next_assignments: [a, b],
-        }),
-      ],
-      [],
-      labels
-    );
-    expect(rows.map((row) => row.presetId)).toEqual(['preset-1', 'preset-2']);
-  });
-
-  it('names the session a sequential plan is on', () => {
-    const next = assignment('3', { session_name: null, session_index: 2 });
-    const rows = scheduledWorkoutsForWatch(
-      [
-        plan({
-          schedule_type: 'sequential',
-          assignments: [assignment('2'), next],
-          next_assignment: next,
-          sequence_position: { current: 2, total: 5 },
-        }),
-      ],
-      [],
-      labels
-    );
-    expect(rows).toHaveLength(1);
-    expect(rows[0].caption).toBe('Session 2 of 5');
-  });
-
-  it('prefers the session name a sequential plan gives', () => {
-    const next = assignment('3');
-    const rows = scheduledWorkoutsForWatch(
-      [
-        plan({
-          schedule_type: 'sequential',
-          assignments: [next],
-          next_assignment: next,
-          sequence_position: { current: 1, total: 3, session_name: 'Pull day' },
-        }),
-      ],
-      [],
-      labels
-    );
-    expect(rows[0].caption).toBe('Pull day');
-  });
-
-  it('skips a plan already logged today', () => {
-    const due = assignment('1');
-    const logged = [
-      { id: 9, workout_plan_assignment_id: '1' },
-    ] as unknown as ExerciseSessionResponse[];
-    expect(
-      scheduledWorkoutsForWatch(
-        [plan({ assignments: [due], next_assignment: due })],
-        logged,
-        labels
-      )
-    ).toEqual([]);
-  });
-
-  it('skips an assignment with no saved workout behind it', () => {
-    const single = assignment('1', {
-      workout_preset_id: null,
-      workout_preset_name: null,
-      exercise_id: 'ex-1',
-      exercise_name: 'Squat',
-    });
-    expect(
-      scheduledWorkoutsForWatch(
-        [plan({ assignments: [single], next_assignment: single })],
-        [],
-        labels
-      )
-    ).toEqual([]);
-  });
+it('offers both exact weekly sessions despite identical labels and library preset IDs', () => {
+  const rows = [
+    plan({ next_session: a, next_assignments: a.assignments }),
+    plan({ next_session: b, next_assignments: b.assignments }),
+  ];
+  expect(
+    rows.flatMap((row) => getDuePlanSessions(row)).map(({ id }) => id)
+  ).toEqual([firstId, secondId]);
+  expect(scheduledWorkoutsForWatch(rows, [], labels)).toEqual([
+    {
+      presetId: `session:${firstId}`,
+      name: 'A',
+      planName: 'main',
+      caption: 'Scheduled Today',
+    },
+    {
+      presetId: `session:${secondId}`,
+      name: 'A',
+      planName: 'main',
+      caption: 'Scheduled Today',
+    },
+  ]);
 });
 
-describe('getLoggedAssignmentIds', () => {
-  it('reads the assignment from a session and from its exercises', () => {
-    const ids = getLoggedAssignmentIds([
-      { id: 1, workout_plan_assignment_id: 'a' },
-      { id: 2, exercises: [{ workout_plan_assignment_id: 'b' }] },
-    ] as unknown as ExerciseSessionResponse[]);
-    expect([...ids].sort()).toEqual(['a', 'b']);
+it('offers only the exact current sequential session', () => {
+  const sequential = plan({
+    schedule_type: 'sequential',
+    next_session: b,
+    next_assignments: b.assignments,
+    sequence_position: { current: 2, total: 2 },
   });
+  expect(getDuePlanSessions(sequential)).toEqual([b]);
+  expect(scheduledWorkoutsForWatch([sequential], [], labels)).toEqual([
+    {
+      presetId: `session:${secondId}`,
+      name: 'A',
+      planName: 'main',
+      caption: 'Session 2 of 2',
+    },
+  ]);
 });
 
-describe('findDueAssignmentForPreset', () => {
-  it('finds the due assignment for a preset id, weekly or sequential', () => {
-    const due = assignment('7', { workout_preset_id: '42' });
-    const other = assignment('8', { workout_preset_id: '43' });
-    const weekly = plan({
-      assignments: [due, other],
-      next_assignment: other,
-      next_assignments: [due, other],
-    });
-    expect(findDueAssignmentForPreset([weekly], 42)?.id).toBe('7');
-    const sequential = plan({
-      schedule_type: 'sequential',
-      assignments: [due, other],
-      next_assignment: other,
-    });
-    expect(findDueAssignmentForPreset([sequential], 43)?.id).toBe('8');
-    expect(findDueAssignmentForPreset([sequential], 42)).toBeNull();
+it('does not suppress a second exact session when the first was completed', () => {
+  const entries = [
+    { id: 9, exercises: [{ workout_plan_assignment_id: 1 }] },
+  ] as unknown as ExerciseSessionResponse[];
+  expect(
+    scheduledWorkoutsForWatch([plan()], entries, labels).map(
+      ({ presetId }) => presetId
+    )
+  ).toEqual([`session:${secondId}`]);
+});
+
+it('keeps a partially logged session visible until every distinct assignment is linked', () => {
+  const combined = {
+    ...a,
+    assignments: [
+      a.assignments[0]!,
+      { ...a.assignments[0]!, id: 3, sort_order: 1 },
+    ],
+  };
+  const selected = plan({
+    sessions: [combined],
+    next_session: combined,
+    next_assignments: combined.assignments,
   });
+  const partial = [
+    {
+      exercises: [
+        { workout_plan_assignment_id: 1, sets: [{ completed_at: null }] },
+        { workout_plan_assignment_id: 1, sets: [{ completed_at: null }] },
+      ],
+    },
+  ] as unknown as ExerciseSessionResponse[];
+  expect(
+    scheduledWorkoutsForWatch([selected], partial, labels).map(
+      (row) => row.presetId
+    )
+  ).toEqual([`session:${firstId}`]);
+  const all = [
+    ...partial,
+    {
+      exercises: [
+        { workout_plan_assignment_id: 3, sets: [{ completed_at: null }] },
+      ],
+    },
+  ] as unknown as ExerciseSessionResponse[];
+  expect(scheduledWorkoutsForWatch([selected], all, labels)).toEqual([]);
+});
+
+it('supports exact sessions containing individual exercises rather than library presets', () => {
+  const single = {
+    ...a,
+    assignments: [
+      { ...a.assignments[0]!, workout_preset_id: null, exercise_id: 'ex-1' },
+    ],
+  } as WorkoutPlanSession;
+  expect(
+    scheduledWorkoutsForWatch(
+      [
+        plan({
+          sessions: [single],
+          next_session: single,
+          next_assignments: single.assignments,
+        }),
+      ],
+      [],
+      labels
+    )
+  ).toEqual([
+    {
+      presetId: `session:${firstId}`,
+      name: 'A',
+      planName: 'main',
+      caption: 'Scheduled Today',
+    },
+  ]);
+});
+
+it('reads numeric assignment identity from both session and exercise diary links', () => {
+  const entries = [
+    { id: 1, workout_plan_assignment_id: 7 },
+    { id: 2, exercises: [{ workout_plan_assignment_id: 8 }] },
+  ] as unknown as ExerciseSessionResponse[];
+  expect([...getLoggedAssignmentIds(entries)].sort()).toEqual(['7', '8']);
+});
+
+it('relays the exact Program session rather than standalone current progression', () => {
+  // Only scheduling relationships are needed to exercise the shared selector.
+  const programs = [
+    {
+      phases: [
+        {
+          weeks: [
+            {
+              sessions: [
+                {
+                  workout_plan_id: 1,
+                  workout_session_id: secondId,
+                  effective_date: '2026-10-12',
+                  status: 'planned',
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  ] as unknown as TrainingProgram[];
+  const selected = selectDashboardWorkoutPlans(
+    [
+      plan({
+        schedule_type: 'sequential',
+        next_session: a,
+        next_assignments: a.assignments,
+      }),
+    ],
+    programs
+  );
+  const dashboardPlans = [
+    ...(selected.programPlan ? [selected.programPlan] : []),
+    ...selected.standalonePlans,
+  ];
+  expect(
+    scheduledWorkoutsForWatch(dashboardPlans, [], labels).map(
+      ({ presetId }) => presetId
+    )
+  ).toEqual([`session:${secondId}`]);
+});
+
+it('sends only the fixed earliest same-day Program session token', () => {
+  const programs = [
+    {
+      phases: [
+        {
+          weeks: [
+            {
+              sessions: [
+                {
+                  workout_plan_id: 1,
+                  workout_session_id: secondId,
+                  effective_date: '2026-10-12',
+                  status: 'planned',
+                  sort_order: 0,
+                },
+                {
+                  workout_plan_id: 1,
+                  workout_session_id: firstId,
+                  effective_date: '2026-10-12',
+                  status: 'planned',
+                  sort_order: 1,
+                },
+                {
+                  workout_plan_id: 1,
+                  workout_session_id: firstId,
+                  effective_date: '2026-10-19',
+                  status: 'planned',
+                  sort_order: 0,
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  ] as unknown as TrainingProgram[];
+  const selected = selectDashboardWorkoutPlans(
+    [plan({ is_active: false })],
+    programs
+  );
+  const dashboardPlans = [
+    ...(selected.programPlan ? [selected.programPlan] : []),
+    ...selected.standalonePlans,
+  ];
+  expect(
+    scheduledWorkoutsForWatch(dashboardPlans, [], labels).map(
+      ({ presetId }) => presetId
+    )
+  ).toEqual([`session:${secondId}`]);
+});
+
+it('includes only owner-consistent inactive Program-bound library plans and preserves active progression', () => {
+  const active = plan({
+    id: 10,
+    next_session: b,
+    next_assignments: b.assignments,
+  });
+  const inactive = plan({ id: 20, is_active: false });
+  const otherOwner = plan({ id: 30, user_id: 'other-owner', is_active: false });
+  const unrelated = plan({
+    id: 40,
+    is_active: false,
+    sessions: [{ ...a, id: '33333333-3333-4333-8333-333333333333' }],
+  });
+  const staleLibraryActive = {
+    ...active,
+    next_session: a,
+    next_assignments: a.assignments,
+  };
+  const programs = [
+    {
+      user_id: 'user-1',
+      phases: [
+        {
+          weeks: [
+            {
+              sessions: [
+                {
+                  workout_plan_id: inactive.id,
+                  workout_session_id: firstId,
+                  effective_date: '2026-10-12',
+                  status: 'planned',
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  ] as unknown as TrainingProgram[];
+  const candidates = getWorkoutPlanCandidates(
+    [active],
+    [staleLibraryActive, inactive, otherOwner, unrelated],
+    programs
+  );
+  expect(candidates.map(({ id }) => id)).toEqual([10, 20]);
+  expect(candidates[0]?.next_session?.id).toBe(secondId);
+  expect(
+    candidates[0]?.next_assignments?.map((assignment) => assignment.id)
+  ).toEqual([2]);
+});
+
+it('suppresses completed earliest Program sessions without promoting a later Program date', () => {
+  const programs = [
+    {
+      phases: [
+        {
+          weeks: [
+            {
+              sessions: [
+                {
+                  workout_plan_id: 1,
+                  workout_session_id: firstId,
+                  effective_date: '2026-10-12',
+                  status: 'planned',
+                },
+                {
+                  workout_plan_id: 1,
+                  workout_session_id: secondId,
+                  effective_date: '2026-10-19',
+                  status: 'planned',
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+  ] as unknown as TrainingProgram[];
+  const selected = selectDashboardWorkoutPlans([plan()], programs);
+  const dashboardPlans = [
+    ...(selected.programPlan ? [selected.programPlan] : []),
+    ...selected.standalonePlans,
+  ];
+  const entries = [
+    { id: 9, exercises: [{ workout_plan_assignment_id: 1 }] },
+  ] as unknown as ExerciseSessionResponse[];
+  expect(scheduledWorkoutsForWatch(dashboardPlans, entries, labels)).toEqual([]);
 });

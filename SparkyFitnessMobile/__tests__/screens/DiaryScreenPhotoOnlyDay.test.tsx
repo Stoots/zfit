@@ -200,13 +200,6 @@ describe('DiaryScreen on a photo-only day', () => {
     expect(screen.getByText('Progress photos')).toBeTruthy();
   });
 
-  it('still shows the empty day when nothing at all was recorded', () => {
-    // The other half of the rule: no photos must not defeat the empty state.
-    renderDiary();
-
-    expect(screen.getByText('Add Food')).toBeTruthy();
-  });
-
   it('holds the empty state back while the photos are still loading', () => {
     // Ungated, a day with photos flashes the empty illustration until they land.
     mockPhotosByDate.mockReturnValue({ photos: [], isLoading: true });

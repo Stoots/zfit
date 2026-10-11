@@ -4,9 +4,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import {
   hasSupplementNutrition,
-  isCardioModality,
-  resolveExerciseModality,
-  type PresetSessionExerciseRequest,
+  selectDashboardWorkoutPlans,
 } from '@workspace/shared';
 import React, {
   useCallback,
@@ -51,10 +49,9 @@ import {
   useNutrientDisplayPreferences,
   useServerConnection,
 } from '../hooks';
-import { useWorkoutPresets } from '../hooks/useWorkoutPresets';
-import { getWorkoutPresetById } from '../services/api/workoutPresetsApi';
-import { useActiveWorkoutPlans } from '../hooks/useActiveWorkoutPlan';
+import { useWorkoutPlanCandidates } from '../hooks/useActiveWorkoutPlan';
 import { useStartLiveWorkout } from '../hooks/useStartLiveWorkout';
+import { useTrainingPrograms } from '../hooks/useTrainingPrograms';
 import {
   useCheckInPhotoDates,
   useCheckInPhotosByDate,
@@ -71,7 +68,7 @@ import { useDiaryDateStore } from '../stores/diaryDateStore';
 import type { FoodEntry } from '../types/foodEntries';
 import type { RootStackParamList, TabParamList } from '../types/navigation';
 import type {
-  WorkoutPlanAssignment,
+  WorkoutPlanSession,
   WorkoutPlanTemplate,
 } from '../types/workoutPlans';
 import { isManualSource } from '../utils/customMeasurementsForm';
@@ -81,11 +78,11 @@ import {
   getHistoricalMealTypeLabel,
   getMealTypeDisplayLabel,
 } from '../utils/mealNutrition';
+import { buildWorkoutPlanSessionStart } from '../utils/workoutPlanSession';
 import {
-  liveExerciseConfigFromPreset,
-  makeDefaultStartSet,
-} from '../utils/workoutSession';
-import type { LiveExerciseConfig } from '../utils/workoutSession';
+  getLoggedAssignmentIds,
+  getUncompletedActivePlans,
+} from '../utils/workoutPlanSchedule';
 import {
   setNativeHeaderDatePickerOptions,
   type NativeHeaderDatePickerNavigation,
@@ -337,138 +334,40 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
   );
 
   const { startLiveWorkout } = useStartLiveWorkout(navigation);
-  const { plans: activePlans } = useActiveWorkoutPlans(selectedDate);
-  const { presets: allPresets } = useWorkoutPresets();
-
-  const handleStartPlanAssignment = useCallback(
+  const {
+    plans: activePlans,
+    programs: trainingPrograms,
+    isLoading: isPlansLoading,
+  } = useWorkoutPlanCandidates(selectedDate, { enabled: isConnected });
+  const { isError: programsFailed } = useTrainingPrograms({
+    enabled: isConnected,
+  });
+  const scheduledPlans = useMemo(() => {
+    if (!trainingPrograms && !programsFailed) return [];
+    const selected = programsFailed
+      ? { programPlan: undefined, standalonePlans: activePlans }
+      : selectDashboardWorkoutPlans(activePlans, trainingPrograms ?? []);
+    const eligible = [
+      ...(selected.programPlan ? [selected.programPlan] : []),
+      ...selected.standalonePlans,
+    ];
+    return getUncompletedActivePlans(
+      eligible,
+      getLoggedAssignmentIds(summary?.exerciseEntries ?? [])
+    ).filter((plan) => plan.next_session != null);
+  }, [activePlans, trainingPrograms, programsFailed, summary?.exerciseEntries]);
+  const handleStartPlanSession = useCallback(
     async (
       targetPlan: WorkoutPlanTemplate,
-      assignment: WorkoutPlanAssignment
+      selectedSession: WorkoutPlanSession
     ) => {
-      if (!targetPlan) return;
-
-      const isSequential = targetPlan.schedule_type === 'sequential';
-      const sessionAssignments = isSequential
-        ? targetPlan.assignments?.filter(
-            (a) => (a.session_index ?? 1) === (assignment.session_index ?? 1)
-          ) || [assignment]
-        : targetPlan.assignments?.filter(
-            (a) => a.day_of_week === assignment.day_of_week
-          ) || [assignment];
-
-      const startExercises: PresetSessionExerciseRequest[] = [];
-      // Positional with startExercises: the preset's progression/ramp
-      // settings, which the server session doesn't carry.
-      const startConfigs: LiveExerciseConfig[] = [];
-
-      for (let i = 0; i < sessionAssignments.length; i++) {
-        const a = sessionAssignments[i]!;
-        if (a.workout_preset_id) {
-          let preset = allPresets.find(
-            (p) => String(p.id) === String(a.workout_preset_id)
-          );
-          if (!preset) {
-            try {
-              preset = await getWorkoutPresetById(Number(a.workout_preset_id));
-            } catch {
-              // Ignore fetch error, fallback gracefully
-            }
-          }
-          if (preset && preset.exercises) {
-            preset.exercises.forEach((ex) => {
-              const modality = resolveExerciseModality(
-                ex.modality,
-                ex.category
-              );
-              startConfigs.push(liveExerciseConfigFromPreset(ex));
-              startExercises.push({
-                exercise_id: ex.exercise_id,
-                sort_order: startExercises.length,
-                duration_minutes: 0,
-                notes: null,
-                superset_group: ex.superset_group ?? null,
-                workout_plan_assignment_id: a.id ? Number(a.id) : null,
-                sets:
-                  ex.sets.length === 0
-                    ? [makeDefaultStartSet(1, modality)]
-                    : ex.sets.map((set, setIndex) => ({
-                        set_number: setIndex + 1,
-                        set_type: set.set_type ?? 'normal',
-                        reps: set.reps ?? null,
-                        weight: set.weight ?? null,
-                        duration: set.duration ?? null,
-                        distance: isCardioModality(modality)
-                          ? (set.distance ?? null)
-                          : null,
-                        rest_time: isCardioModality(modality)
-                          ? 0
-                          : (set.rest_time ?? null),
-                        notes: set.notes ?? null,
-                        rpe: null,
-                        completed_at: null,
-                      })),
-              });
-            });
-          }
-        } else if (a.exercise_id) {
-          const modality = resolveExerciseModality(a.modality, a.category);
-          startConfigs.push(liveExerciseConfigFromPreset({}));
-          startExercises.push({
-            exercise_id: a.exercise_id,
-            sort_order: startExercises.length,
-            duration_minutes: 0,
-            notes: null,
-            superset_group: null,
-            workout_plan_assignment_id: a.id ? Number(a.id) : null,
-            sets:
-              a.sets.length === 0
-                ? [makeDefaultStartSet(1, modality)]
-                : a.sets.map((set, setIndex) => ({
-                    set_number: setIndex + 1,
-                    set_type: set.set_type ?? 'normal',
-                    reps: set.reps ?? null,
-                    weight: set.weight ?? null,
-                    duration: set.duration ?? null,
-                    distance: isCardioModality(modality)
-                      ? (set.distance ?? null)
-                      : null,
-                    rest_time: isCardioModality(modality)
-                      ? 0
-                      : (set.rest_time ?? null),
-                    notes: set.notes ?? null,
-                    rpe: null,
-                    completed_at: null,
-                  })),
-          });
-        }
-      }
-
-      if (startExercises.length === 0) return;
-
-      const sessionName =
-        assignment.session_name ||
-        targetPlan.sequence_position?.session_name ||
-        assignment.workout_preset_name ||
-        assignment.exercise_name ||
-        targetPlan.plan_name;
-
-      const singlePresetId =
-        sessionAssignments.length === 1 &&
-        sessionAssignments[0]?.workout_preset_id
-          ? Number(sessionAssignments[0].workout_preset_id)
-          : undefined;
-
-      await startLiveWorkout({
-        name: sessionName,
-        exercises: startExercises,
-        exerciseConfigs: startConfigs,
-        sourcePresetId: singlePresetId,
-        workoutPlanAssignmentId: assignment.id
-          ? Number(assignment.id)
-          : undefined,
-      });
+      const session = targetPlan.sessions.find(
+        (item) => item.id === selectedSession.id
+      );
+      if (!session) return;
+      await startLiveWorkout(buildWorkoutPlanSessionStart(session));
     },
-    [allPresets, startLiveWorkout]
+    [startLiveWorkout]
   );
 
   const [refreshing, setRefreshing] = useState(false);
@@ -506,6 +405,7 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
   const isDayEmpty = useMemo(() => {
     return (
       !isSleepLoading &&
+      !isPlansLoading &&
       wakeUp === null &&
       summary?.foodEntries.length === 0 &&
       !hasSupplementNutrition(summary?.supplementTotals) && //A logged supplement is something the user recorded for this day, so the day is not empty even with no food, exercise or measurement.
@@ -519,7 +419,7 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
       dayPhotos.length === 0 &&
       naps.length === 0 &&
       bedTime === null &&
-      !activePlans.some((plan) => plan.next_assignment)
+      scheduledPlans.length === 0
     );
   }, [
     isSleepLoading,
@@ -530,7 +430,8 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
     dayPhotos,
     naps,
     bedTime,
-    activePlans,
+    scheduledPlans,
+    isPlansLoading,
   ]);
 
   const renderContent = () => {
@@ -666,7 +567,7 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
               onAddExercise={() =>
                 addSheetRef.current?.present({ initialMenu: 'exercise' })
               }
-              onPressPlanAssignment={handleStartPlanAssignment}
+              onPressPlanSession={handleStartPlanSession}
               onPressWorkout={(session) => {
                 if (session.type === 'preset') {
                   // The live workout's surface is the active screen; detail is

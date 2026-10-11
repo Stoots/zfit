@@ -160,13 +160,9 @@ export const updateExercise = async (
 
 export const deleteExercise = async (
   id: string,
-  mode: ExerciseDeleteMode = 'delete',
-  clientDate?: string
+  mode: ExerciseDeleteMode = 'delete'
 ): Promise<{ message?: string; status?: string } | void> => {
   const params = new URLSearchParams({ mode });
-  if (clientDate) {
-    params.set('clientDate', clientDate);
-  }
   return apiCall(`/exercises/${id}?${params.toString()}`, {
     method: 'DELETE',
   });

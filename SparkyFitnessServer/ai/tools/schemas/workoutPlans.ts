@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { dateSchema, setTypeEnum, uuidSchema } from './common.js';
+import { workoutPlanPresetSnapshotSchema } from '@workspace/shared';
 
 // workout_plan_templates.id is a SERIAL PRIMARY KEY (integer), so plan_id must be
 // a positive integer, not a UUID. z.coerce accepts the numeric string the model
@@ -18,33 +19,48 @@ const confirmedSchema = z
 
 export const workoutPlanSetSchema = z
   .object({
-    set_type: setTypeEnum.optional(),
-    reps: z.coerce.number().int().min(0).optional(),
-    weight: z.coerce.number().min(0).optional().describe('Weight in kg'),
-    duration: z.coerce
+    id: z.number().int().positive().optional(),
+    set_number: z.number().int().positive().optional(),
+    set_type: setTypeEnum.nullable().optional(),
+    reps: z.number().nullable().optional(),
+    weight: z
+      .number()
+      .nullable()
+      .optional()
+      .describe('Weight in kg; retain null for unspecified load'),
+    duration: z
       .number()
       .int()
       .min(0)
+      .nullable()
       .optional()
       .describe('Duration in seconds'),
-    distance: z.coerce
+    distance: z
       .number()
       .min(0)
+      .nullable()
       .optional()
-      .describe('Distance in km — cardio sets'),
-    rest_time: z.coerce
-      .number()
-      .int()
-      .min(0)
-      .optional()
-      .describe('Rest time in seconds'),
-    notes: z.string().max(1000).optional().describe('Note for this set'),
+      .describe('Distance in km'),
+    rest_time: z.number().min(0).nullable().optional(),
+    notes: z.string().max(1000).nullable().optional(),
   })
   .strict();
 
-export const workoutPlanSessionItemSchema = z
+export const workoutPlanAssignmentItemSchema = z
   .object({
-    workout_preset_id: z.coerce.number().int().positive().optional(),
+    id: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe('Retain existing assignment ID when editing'),
+    workout_session_id: uuidSchema.optional(),
+    preset_snapshot: workoutPlanPresetSnapshotSchema
+      .optional()
+      .describe(
+        'Frozen local prescription; retain on edits instead of refreshing from the library'
+      ),
+    workout_preset_id: z.coerce.number().int().positive().nullable().optional(),
     preset_name: z
       .string()
       .min(1)
@@ -53,34 +69,13 @@ export const workoutPlanSessionItemSchema = z
       .describe(
         'Name of a preset you own or that is family-shared (alternative to workout_preset_id)'
       ),
-    exercise_id: uuidSchema.optional(),
+    exercise_id: uuidSchema.nullable().optional(),
     exercise_name: z
       .string()
       .min(1)
       .max(200)
       .optional()
       .describe('Name of an exercise (alternative to exercise_id)'),
-    session_name: z
-      .string()
-      .max(100)
-      .optional()
-      .describe(
-        'Optional name for the session (e.g. "Push", "Legs", "Upper A")'
-      ),
-    session_index: z.coerce
-      .number()
-      .int()
-      .min(1)
-      .optional()
-      .describe(
-        'Explicit 1-based session order (optional in sequential mode; inferred from array order/session grouping if omitted)'
-      ),
-    day_of_week: z
-      .union([z.coerce.number().int().min(0).max(6), z.string()])
-      .optional()
-      .describe(
-        'Day of week (0=Sunday ... 6=Saturday, or day name "Monday") — required for weekly plans'
-      ),
     sets: z
       .array(workoutPlanSetSchema)
       .optional()
@@ -89,10 +84,22 @@ export const workoutPlanSessionItemSchema = z
   })
   .strict();
 
+export const workoutPlanSessionItemSchema = z
+  .object({
+    id: uuidSchema
+      .optional()
+      .describe('Stable Workout Session ID; omit only for a new session'),
+    name: z.string().min(1).max(200),
+    day_of_week: z.number().int().min(0).max(6).nullable().default(null),
+    sort_order: z.number().int().min(0).optional(),
+    assignments: z.array(workoutPlanAssignmentItemSchema),
+  })
+  .strict();
+
 export const workoutPlanSessionsInputSchema = z
   .union([z.array(workoutPlanSessionItemSchema), z.string()])
   .describe(
-    'Session assignments as array of objects or JSON string. Each item: { workout_preset_id? | preset_name? | exercise_id? | exercise_name?, session_name?, session_index?, day_of_week?, sets? }'
+    'Nested Workout Sessions as an array or JSON string: [{id?,name,day_of_week:null|0..6,sort_order?,assignments:[{id?,exercise_id?|exercise_name?|workout_preset_id?|preset_name?,sets?,preset_snapshot?}]}]. Repeated names do not group sessions.'
   );
 
 export type WorkoutPlanSessionItemInput = z.infer<
@@ -145,6 +152,7 @@ const createWorkoutPlanSchema = z
     description: z
       .string()
       .max(1000)
+      .nullable()
       .optional()
       .describe('Optional description for the plan'),
     schedule_type: z
@@ -165,13 +173,14 @@ const createWorkoutPlanSchema = z
       .default(false)
       .describe('Whether this plan is active'),
     start_date: dateSchema
+      .nullable()
       .optional()
       .describe('Start date for the plan (YYYY-MM-DD)'),
     end_date: dateSchema
+      .nullable()
       .optional()
       .describe('End date for the plan (YYYY-MM-DD)'),
     sessions: workoutPlanSessionsInputSchema.optional(),
-    assignments: workoutPlanSessionsInputSchema.optional(),
   })
   .strict();
 
@@ -181,14 +190,13 @@ const updateWorkoutPlanSchema = z
     plan_id: planIdSchema.describe('ID of the workout plan template to update'),
     confirmed: confirmedSchema,
     plan_name: z.string().min(1).max(200).optional(),
-    description: z.string().max(1000).optional(),
+    description: z.string().max(1000).nullable().optional(),
     schedule_type: z.enum(['sequential', 'weekly']).optional(),
     entry_mode: z.enum(['prompt', 'prefill']).optional(),
     is_active: z.boolean().optional(),
-    start_date: dateSchema.optional(),
-    end_date: dateSchema.optional(),
+    start_date: dateSchema.nullable().optional(),
+    end_date: dateSchema.nullable().optional(),
     sessions: workoutPlanSessionsInputSchema.optional(),
-    assignments: workoutPlanSessionsInputSchema.optional(),
   })
   .strict();
 
@@ -218,13 +226,12 @@ export const manageWorkoutPlansInput = z.object({
   plan_id: z.union([z.string(), z.number()]).optional(),
   confirmed: z.boolean().optional(),
   plan_name: z.string().min(1).max(200).optional(),
-  description: z.string().max(1000).optional(),
+  description: z.string().max(1000).nullable().optional(),
   schedule_type: z.enum(['sequential', 'weekly']).optional(),
   entry_mode: z.enum(['prompt', 'prefill']).optional(),
   is_active: z.boolean().optional(),
-  start_date: dateSchema.optional(),
-  end_date: dateSchema.optional(),
+  start_date: dateSchema.nullable().optional(),
+  end_date: dateSchema.nullable().optional(),
   date: dateSchema.optional(),
   sessions: workoutPlanSessionsInputSchema.optional(),
-  assignments: workoutPlanSessionsInputSchema.optional(),
 });

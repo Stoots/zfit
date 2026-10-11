@@ -3,7 +3,7 @@ import { getClient } from '../db/poolManager.js';
 import { log } from '../config/logging.js';
 const PRESET_ENTRY_SELECT = `
   SELECT id, user_id, workout_preset_id, name, description, entry_date, created_at,
-         updated_at, created_by_user_id, notes, source, location
+         updated_at, created_by_user_id, notes, source, location, workout_format, time_cap_seconds
   FROM exercise_preset_entries
 `;
 
@@ -33,11 +33,13 @@ async function createExercisePresetEntryWithClient(
   createdByUserId: any
 ) {
   const result = await client.query(
-    // workout_format is snapshotted from the preset so later preset edits or
-    // deletes don't reclassify this session's sets.
-    `INSERT INTO exercise_preset_entries (user_id, workout_preset_id, name, description, entry_date, created_by_user_id, notes, source, location, workout_format)
+    // An explicit local prescription wins over the mutable library. Legacy
+    // preset-only starts snapshot library timer fields once, at creation.
+    `INSERT INTO exercise_preset_entries (user_id, workout_preset_id, name, description, entry_date, created_by_user_id, notes, source, location, workout_format, time_cap_seconds)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9,
-             COALESCE((SELECT wp.workout_format FROM workout_presets wp WHERE wp.id = $2), 'standard'))
+             COALESCE($10::text, (SELECT wp.workout_format FROM workout_presets wp WHERE wp.id = $2), 'standard'),
+             CASE WHEN $12::boolean THEN $11::integer
+               ELSE (SELECT wp.time_cap_seconds FROM workout_presets wp WHERE wp.id = $2) END)
      RETURNING id`,
     [
       userId,
@@ -49,6 +51,9 @@ async function createExercisePresetEntryWithClient(
       entryData.notes ?? null,
       entryData.source ?? 'manual',
       entryData.location ?? null,
+      entryData.workout_format ?? null,
+      entryData.time_cap_seconds ?? null,
+      entryData.time_cap_seconds !== undefined,
     ]
   );
   return getExercisePresetEntryByIdWithClient(
@@ -151,6 +156,14 @@ async function updateExercisePresetEntryWithClient(
       updateData.source !== undefined
         ? updateData.source
         : existingEntry.source,
+    workout_format:
+      updateData.workout_format !== undefined
+        ? updateData.workout_format
+        : existingEntry.workout_format,
+    time_cap_seconds:
+      updateData.time_cap_seconds !== undefined
+        ? updateData.time_cap_seconds
+        : existingEntry.time_cap_seconds,
   };
   const result = await client.query(
     `UPDATE exercise_preset_entries SET
@@ -161,11 +174,8 @@ async function updateExercisePresetEntryWithClient(
        notes = $5,
        source = $6,
        location = $7,
-       workout_format = CASE
-         WHEN workout_preset_id IS DISTINCT FROM $1
-           THEN COALESCE((SELECT wp.workout_format FROM workout_presets wp WHERE wp.id = $1), 'standard')
-         ELSE workout_format
-       END,
+       workout_format = $10,
+       time_cap_seconds = $11,
        updated_at = now()
      WHERE id = $8 AND user_id = $9
      RETURNING id`,
@@ -179,6 +189,8 @@ async function updateExercisePresetEntryWithClient(
       mergedEntry.location,
       id,
       userId,
+      mergedEntry.workout_format,
+      mergedEntry.time_cap_seconds,
     ]
   );
   if (result.rowCount === 0) {

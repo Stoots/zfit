@@ -215,4 +215,4 @@ const byDateHandler: RequestHandler = async (req, res, next) => {
 
 router.get('/by-date', byDateHandler);
 
-module.exports = router;
+export { router };

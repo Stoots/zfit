@@ -1,16 +1,28 @@
 # Training Programs
 
-A **Training Program** organizes multiple weeks around a goal. It contains ordered **Program Phases**, each with its own goal, dated weeks, and **Planned Sessions**. A **Workout Plan** remains a separate reusable collection of workouts: use it independently or select it for a Planned Session. Creating a Program does not activate, change or replace a Workout Plan.
+A **Training Program** organizes multiple weeks around a goal. It contains ordered **Program Phases**, each with its own goal, dated weeks, and **Planned Sessions**. A **Workout Plan** is a separate reusable collection of independently prescribed **Workout Sessions**. Use a plan independently or bind a Planned Session to one exact Workout Session. Creating a Program does not activate, change or replace a Workout Plan.
 
 ## Author and schedule on web
 
 1. Open **Exercises → Open Training Programs** (or `/training-programs`). Use **Manage Workout Plans** to create the Workout Plans you want to reuse.
 2. Select **Create Training Program**. Enter a name, goal, and inclusive start/end dates.
 3. Add phases and enter each phase's name and goal. Add weeks within the Program dates. Each week spans one to seven days; weeks must be chronological and cannot overlap.
-4. Add Planned Sessions. Give each session a name, choose an authored calendar date within its week, and select one of your Workout Plans. Multiple sessions can share a date or reuse the same plan.
+4. Add Planned Sessions. Give each a name and authored calendar date within its week, then choose the exact **Workout Session** inside one of your plans. The selector shows the session ordinal and prescription, so two sessions named A with 2 × 8 and 3 × 8 remain distinguishable. Multiple Planned Sessions can share a date or reuse the same session.
 5. Leave **Auto-shift after a miss** off for fixed dates, or explicitly enable it. Save to view your schedule and history. Empty structures can be saved for later authoring.
 
 Use the move buttons to change structure order; maintain chronological week dates when moving weeks or phases. Cancel discards unsaved edits. Delete requires confirmation and removes the Program and its history, never reusable Workout Plans or diary workouts. Removing a phase/week during aggregate editing removes only unrecorded sessions; ancestors containing recorded sessions cannot be removed.
+
+### Author independent Workout Sessions
+
+At **Exercises → Workout Plans**, add, name and order sessions inside a plan. Each session has its own ordered exercise/preset assignments and sets. Selecting a library preset freezes a local prescription; **Edit this session’s preset prescription** changes only that assignment, not the library preset or another session. Local copies are independent. Saving retains existing session UUIDs and assignment/set IDs; newly added sessions omit persisted IDs until the server creates them.
+
+Weekly plans retain explicit weekdays, including unscheduled sessions without a weekday. Sequential plans advance in authored session order only after every assignment has a diary link; expanded preset children count once for their assignment. Starting or saving a weekly prefill never rewrites an existing diary snapshot. Workout Sessions do not need a Program.
+
+**Start Workout** in the Program view opens the exact bound session, not the plan's standalone next session. Diary previews include every pending exact session on the earliest Program date in authored order, even when its plan is inactive, plus unrelated active standalone plans. Completed assignment coverage hides only the corresponding session; partial coverage does not hide the remainder.
+
+Frozen execution retains all prescribed exercise/set data, effort, rest, distance, ranges and notes. A single-preset session uses its frozen format and time cap. Multi-assignment sessions retain each prescription but use the existing one-format combined playback: mixed formats become standard, and a shared time cap is used only when all caps agree. There are no independent per-block timers. Logging keeps performed results separate from the server-frozen prescription; later local or library edits do not refresh that history.
+
+Unlike a live library-preset start, a frozen Workout Session is not expanded to a generic EMOM/Tabata round count on load. Its authored sets stay exact; the single-format timer and frozen cap still run. For example, one authored EMOM set with a 120-second cap opens and saves one set, not two cloned sets.
 
 ## Completion and missed history
 
@@ -18,7 +30,7 @@ Every session starts **Planned**. In the Program detail view:
 
 - **Link completed workout**: choose a diary date, select an owner-owned grouped workout or standalone exercise workout, and confirm completion. This is an explicit declaration that you completed that workout, not automatic detection from diary rows (which may contain planned sets). It does not log another workout. The diary date need not equal the session date, and the workout need not have originated from the selected Workout Plan.
 - **Mark missed**: confirm a permanent missed record. There is no implicit clock-driven miss detection. A miss can only be recorded once the session's resulting (effective) date is on or before your current day, evaluated in your own timezone; marking a later session missed returns 409. Outcomes are permanent, so this prevents an accidental early click from being unrecoverable (and from triggering auto-shift). Completions are not date-restricted.
-- **Completed** and **Missed** sessions show their recorded schedule date and outcome timestamp. Completion also shows the linked workout's name/date with a diary link. Workout and Workout Plan names are snapshotted when recording an outcome. Later diary or plan renames, diary date edits, and diary deletion do not rewrite the Program history. Diary deletion clears the live foreign-key link, not the completion snapshot.
+- **Completed** and **Missed** sessions show their recorded schedule date and outcome timestamp. Completion also shows the linked workout's name/date with a diary link. Workout, Workout Plan and Workout Session names are snapshotted when recording an outcome. Later diary or plan/session renames, diary date edits, and diary deletion do not rewrite the Program history. Diary deletion clears the live foreign-key link, not the completion snapshot.
 
 Outcomes are final: a missed session cannot be changed to completed, a completed session cannot be changed to missed or linked to a different workout, and recorded sessions cannot be removed or rewritten through aggregate edits. One diary workout can fulfill at most one Planned Session across all of your Programs. A grouped workout's child exercise is not a separate standalone workout; link the grouped parent instead. Retrying the same outcome is idempotent, including after diary deletion.
 
@@ -37,14 +49,14 @@ For example, sessions authored October 25, October 30 and November 7 become: **O
 - `schedule_end_date` is the later of the authored Program end and all effective session dates, including recorded history. Authored Program/week dates do not expand automatically.
 - All days are `YYYY-MM-DD` calendar strings from `0001-01-01` through `9999-12-31`. Adding one day respects month/year rollover and leap days, independent of DST and timezone. A miss that would push an eligible session past `9999-12-31` returns 409 and rolls back **both** the outcome and every shift. Disable auto-shift or edit the future authored date before retrying.
 - Aggregate saves retain effective dates when authored dates are unchanged. Deliberately editing a still-Planned Session's authored date resets its effective date to the new authored date, discarding any shift it had accumulated. Other edits, including Program/week range edits and auto-shift toggles, never recalculate dates.
-- Recorded sessions must retain their IDs, parents, names, authored dates and Workout Plans; their effective dates, timestamps and completion snapshots are read-only. Their containing phases/weeks must remain. Order may change; goals and valid containing date ranges may be edited. An invalid or history-rewriting aggregate save is rejected atomically.
+- Recorded sessions must retain their IDs, parents, names, authored dates and exact Workout Session bindings; their effective dates, timestamps and completion snapshots are read-only. Their containing phases/weeks must remain. Order may change; goals and valid containing date ranges may be edited. An invalid or history-rewriting aggregate save is rejected atomically.
 - Outcome recording and aggregate editing lock the Program in one transaction. Concurrent duplicate misses yield one shift; duplicate completion links yield one winner and 409 for the competing link.
 
 ## Privacy and deletion safety
 
 Training Programs are owner-only. Family delegates cannot view or edit them, including with diary, report or exercise-library access. Switch to your own profile first. Only your own Workout Plans and diary workouts can be referenced. Explicit owner predicates, RLS and composite foreign keys enforce isolation. Existing standalone Workout Plan sharing is unchanged.
 
-A Workout Plan used by a Planned Session cannot be deleted until its Program references are removed. The server returns HTTP 409 and leaves both the plan and diary history untouched. Recorded sessions cannot be individually removed to release that reference; explicit Program deletion remains available.
+A Workout Session used by a Planned Session cannot be removed or moved to another plan, and its parent plan cannot be deleted until Program references are removed. Assignments with any diary link, including incomplete prefill, also cannot be removed; deleting their session or plan returns HTTP 409 without deleting or unlinking diary history. Recorded Planned Sessions cannot be individually removed to release their reference; explicit Program deletion remains available. Hiding a library exercise remains an alternative to deleting linked identities.
 
 This feature does not automatically log workouts, create cardio tests, or expose AI queries.
 
@@ -82,7 +94,7 @@ Example create body:
             {
               "name": "Easy run",
               "scheduled_date": "2026-10-30",
-              "workout_plan_id": 17
+              "workout_session_id": "22222222-2222-4222-8222-222222222222"
             }
           ]
         }
@@ -92,7 +104,7 @@ Example create body:
 }
 ```
 
-`workout_plan_id` must identify an existing plan you own; `17` is illustrative. Omitted `schedule_type` defaults to `"fixed"` (authored-date policy); omitted `auto_shift` defaults to `false`. Responses include Program UUID, owner, audit timestamps, `schedule_end_date`, and stable UUIDs and zero-based `sort_order` for every child. Sessions also include `workout_plan_name`, `effective_date`, `status`, nullable `outcome_at`, and nullable `completed_workout: { type, id, name, entry_date }`.
+`workout_session_id` must identify an existing Workout Session inside a plan you own; the UUID is illustrative. Whole-plan selection is not accepted. Omitted `schedule_type` defaults to `"fixed"` (authored-date policy); omitted `auto_shift` defaults to `false`. Responses include Program UUID, owner, audit timestamps, `schedule_end_date`, and stable UUIDs and zero-based `sort_order` for every child. Planned Sessions also include their exact `workout_session_id`, display-only `workout_plan_id`, plan/session names, `effective_date`, `status`, nullable `outcome_at`, and nullable `completed_workout: { type, id, name, entry_date }`.
 
 Outcome bodies:
 
@@ -112,6 +124,8 @@ Use `"individual"` for a standalone diary exercise entry. The example UUID must 
 For PUT, send only editable fields and existing child IDs you retain. New children omit IDs. Array order defines `sort_order`; omitted unrecorded children are removed in the same transaction. Unknown, duplicate, foreign or reparented child IDs are rejected. Responses are not valid PUT bodies because response-only outcome, audit, owner and ordering fields must be omitted.
 
 Errors use `{ "error": "message" }`: invalid input/reference → 400; unauthenticated → 401; delegated context → 403; missing or foreign Program/session/workout → 404; final-outcome conflicts, duplicate workout links, history rewrites, calendar overflow and referenced plan deletion → 409. Shared contracts live in `shared/src/schemas/api/TrainingPrograms.api.zod.ts`; interactive API documentation is at `/api/api-docs/swagger`.
+
+Nested plan requests use `sessions: [{ id?, name, day_of_week, sort_order, assignments }]`; assignments contain an exercise or frozen preset prescription. New session IDs are server-generated. The exact standalone execution endpoint is `POST /api/workout-plan-templates/sessions/:workoutSessionId/start` with `{ "entry_date": "YYYY-MM-DD" }`. Shared plan contracts live in `shared/src/schemas/api/WorkoutPlans.api.zod.ts`. The generic legacy upgrade refuses ambiguous whole-plan Program references until an operator provides an explicit per-Planned-Session mapping; see [database migration guidance](../../developer/database.md#workout-session-cutover-preflight-and-explicit-mapping). This is not selected-Program consolidation or permission to deploy the cutover.
 
 ## Focused verification
 

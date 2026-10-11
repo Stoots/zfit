@@ -4,10 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import type { TrainingProgram } from '@workspace/shared';
 import ExerciseCard from '@/pages/Diary/ExerciseCard';
-import type {
-  WorkoutPlanAssignment,
-  WorkoutPlanTemplate,
-} from '@/types/workout';
+import type { WorkoutPlanTemplate } from '@/types/workout';
 
 jest.mock('react-i18next', () =>
   jest.requireActual('@/tests/mocks/reactI18next')
@@ -36,6 +33,7 @@ jest.mock('@/hooks/Exercises/useExerciseEntries', () => ({
 }));
 jest.mock('@/hooks/Exercises/useWorkoutPlans', () => ({
   useActiveWorkoutPlans: () => ({ data: mockState.plans }),
+  useWorkoutPlanTemplates: () => ({ data: mockState.plans, isPending: false }),
 }));
 jest.mock('@/hooks/Exercises/useWorkoutPresets', () => ({
   useWorkoutPresets: () => ({ data: { presets: [] } }),
@@ -67,33 +65,31 @@ const mockState: {
   programs: { data: [], isError: false },
 };
 
-const assignment = (
-  id: string,
-  sessionIndex: number,
-  name: string
-): WorkoutPlanAssignment => ({
-  id,
-  session_index: sessionIndex,
-  session_name: name,
-  sets: [],
-});
-
 const makePlan = (
   id: string,
   planName: string,
   sessionNames: string[]
 ): WorkoutPlanTemplate => {
-  const assignments = sessionNames.map((name, i) =>
-    assignment(`${id}-a${i + 1}`, i + 1, name)
-  );
+  const sessions = sessionNames.map((name, index) => ({
+    id: `${id}-s${index + 1}`,
+    name,
+    day_of_week: null,
+    is_optional: false,
+    sort_order: index,
+    assignments: [{ id: `${id}-a${index + 1}`, sets: [] }],
+  }));
   return {
     id,
     user_id: 'athlete',
     plan_name: planName,
     schedule_type: 'sequential',
-    assignments,
-    next_assignment: assignments[0],
-    sequence_position: { current: 1, total: sessionNames.length },
+    sessions,
+    next_session: sessions[0],
+    sequence_position: {
+      current: 1,
+      total: sessionNames.length,
+      session_name: sessionNames[0],
+    },
   };
 };
 
@@ -106,8 +102,13 @@ const programLinkedTo = (planId: string): TrainingProgram =>
           {
             sessions: [
               {
+                id: 'planned-session-1',
                 workout_plan_id: Number(planId),
+                workout_session_id: `${planId}-s1`,
+                workout_plan_name: `Plan ${planId}`,
+                workout_session_name: 'Push',
                 status: 'planned',
+                scheduled_date: '2026-10-12',
                 effective_date: '2026-10-12',
               },
             ],
@@ -147,8 +148,8 @@ describe('ExerciseCard dashboard plans', () => {
     expect(screen.getByText('Sequential plan: Program plan')).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Push' })).toBeNull();
     expect(
-      screen.getAllByRole('button', { name: 'Start Workout' }).length
-    ).toBeGreaterThan(0);
+      screen.getByRole('button', { name: /^Start Workout: Push/ })
+    ).toBeInTheDocument();
   });
 
   it('offers a session picker for a standalone multi-session plan', () => {

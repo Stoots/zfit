@@ -1,7 +1,81 @@
 import express from 'express';
+import { z } from 'zod';
+import {
+  workoutPlanCreateRequestSchema,
+  workoutPlanUpdateRequestSchema,
+} from '@workspace/shared';
+import exerciseService from '../services/exerciseService.js';
+import checkPermissionMiddleware from '../middleware/checkPermissionMiddleware.js';
 import { authenticate } from '../middleware/authMiddleware.js';
 import workoutPlanTemplateService from '../services/workoutPlanTemplateService.js';
 const router = express.Router();
+
+const startSessionParamsSchema = z.object({
+  workoutSessionId: z.string().uuid(),
+});
+const startSessionBodySchema = z.strictObject({ entry_date: z.iso.date() });
+/**
+ * @swagger
+ * /workout-plan-templates/sessions/{workoutSessionId}/start:
+ *   post:
+ *     summary: Start the exact prescribed Workout Session
+ *     description: Expands this session's individual assignments and frozen preset prescriptions, never a plan's first/current session or a live library preset.
+ *     tags: [Fitness & Workouts]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: workoutSessionId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             additionalProperties: false
+ *             required: [entry_date]
+ *             properties:
+ *               entry_date: { type: string, format: date }
+ *     responses:
+ *       201: { description: Created diary workouts from the exact session prescription. }
+ *       400: { description: Invalid session ID or date. }
+ *       401: { description: Authentication required. }
+ *       403: { description: Diary write permission required. }
+ *       404: { description: Workout Session not found or inaccessible. }
+ */
+router.post(
+  '/sessions/:workoutSessionId/start',
+  authenticate,
+  checkPermissionMiddleware('diary'),
+  async (req, res, next) => {
+    try {
+      const params = startSessionParamsSchema.safeParse(req.params);
+      const body = startSessionBodySchema.safeParse(req.body);
+      if (!params.success || !body.success) {
+        const error = !params.success
+          ? params.error
+          : !body.success
+            ? body.error
+            : undefined;
+        return res.status(400).json({
+          error: 'Invalid workout session start payload.',
+          details: error?.flatten(),
+        });
+      }
+      const workouts = await exerciseService.logWorkoutPlanSession(
+        req.userId,
+        req.originalUserId || req.authenticatedUserId || req.userId,
+        params.data.workoutSessionId,
+        body.data.entry_date
+      );
+      res.status(201).json(workouts);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 /**
  * @swagger
  * /workout-plan-templates:
@@ -31,9 +105,16 @@ const router = express.Router();
  */
 router.post('/', authenticate, async (req, res, next) => {
   try {
+    const parsedBody = workoutPlanCreateRequestSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      return res.status(400).json({
+        error: 'Invalid workout plan payload.',
+        details: parsedBody.error.flatten(),
+      });
+    }
     const newPlan = await workoutPlanTemplateService.createWorkoutPlanTemplate(
       req.userId,
-      req.body
+      parsedBody.data
     );
     res.status(201).json(newPlan);
   } catch (error) {
@@ -169,11 +250,18 @@ router.get('/:id', authenticate, async (req, res, next) => {
  */
 router.put('/:id', authenticate, async (req, res, next) => {
   try {
+    const parsedBody = workoutPlanUpdateRequestSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      return res.status(400).json({
+        error: 'Invalid workout plan payload.',
+        details: parsedBody.error.flatten(),
+      });
+    }
     const updatedPlan =
       await workoutPlanTemplateService.updateWorkoutPlanTemplate(
         req.userId,
         req.params.id,
-        req.body
+        parsedBody.data
       );
     res.status(200).json(updatedPlan);
   } catch (error) {
@@ -216,6 +304,8 @@ router.put('/:id', authenticate, async (req, res, next) => {
  *         description: Unauthorized.
  *       403:
  *         description: Forbidden.
+ *       409:
+ *         description: Completed, past, or Program-linked diary history prevents deletion.
  *       404:
  *         description: Workout plan template not found or could not be deleted.
  *       500:

@@ -121,6 +121,7 @@ export type WorkoutSetEditableField =
 export interface WorkoutPlaybackDraft {
   version: 1;
   preset_id: string;
+  workout_session_id?: string;
   name: string;
   description: string | null;
   entry_date: string;
@@ -395,6 +396,7 @@ export function createWorkoutPlaybackDraftFromPreset(
   const exercises: WorkoutPlaybackExerciseDraft[] = preset.exercises.map(
     (exercise, exerciseIndex) => {
       return {
+        ...(preset.workout_session_id ? exercise : {}),
         exercise_id: exercise.exercise_id,
         exercise_name:
           exercise.exercise_name ||
@@ -438,9 +440,9 @@ export function createWorkoutPlaybackDraftFromPreset(
           : {}),
         ...('increment_value' in exercise
           ? {
-              increment_value: Number(
-                (exercise as { increment_value?: number }).increment_value
-              ),
+              increment_value: preset.workout_session_id
+                ? exercise.increment_value
+                : Number(exercise.increment_value),
             }
           : {}),
         ...('equipment_brand' in exercise
@@ -455,7 +457,8 @@ export function createWorkoutPlaybackDraftFromPreset(
             : null,
         sets: (() => {
           let baseSets = exercise.sets;
-          if (baseSets.length > 0) {
+          // Frozen session sets are authored, not format templates to expand.
+          if (!preset.workout_session_id && baseSets.length > 0) {
             if (preset.workout_format === 'tabata' && baseSets.length < 8) {
               baseSets = Array.from({ length: 8 }, (_, i) => {
                 const templateSet = baseSets[i % baseSets.length]!;
@@ -489,13 +492,18 @@ export function createWorkoutPlaybackDraftFromPreset(
             const initialReps = set.reps;
 
             return {
+              ...set,
               set_number: set.set_number ?? setIndex + 1,
-              set_type: set.set_type ?? 'Working Set',
+              set_type: preset.workout_session_id
+                ? set.set_type
+                : (set.set_type ?? 'Working Set'),
               reps: initialReps,
               weight: initialWeight,
               duration: set.duration ?? null,
               distance: set.distance ?? null,
-              rest_time: set.rest_time ?? DEFAULT_REST_SECONDS,
+              rest_time: preset.workout_session_id
+                ? set.rest_time
+                : (set.rest_time ?? DEFAULT_REST_SECONDS),
               notes: set.notes ?? null,
               rpe: set.rpe ?? null,
               completed: false,
@@ -511,6 +519,8 @@ export function createWorkoutPlaybackDraftFromPreset(
   const draft: WorkoutPlaybackDraft = {
     version: 1,
     preset_id: String(preset.id),
+    workout_session_id: preset.workout_session_id,
+    load_adjustments_applied: !!preset.workout_session_id,
     name: preset.name,
     description: preset.description ?? null,
     entry_date: entryDate,

@@ -14,6 +14,8 @@ import {
   type WorkoutSessionFeedbackResponse,
   type ExerciseModality,
   type WodScoreDetailData,
+  type ExerciseEntryResponse,
+  type ExerciseSessionResponse,
 } from '@workspace/shared';
 import { log } from '../../config/logging.js';
 import exerciseService from '../../services/exerciseService.js';
@@ -436,24 +438,10 @@ interface ProjectedExercise {
   is_custom?: boolean | null;
 }
 
-interface DiaryEntryItem {
-  id: string | number;
-  name?: string;
-  type?: string;
-  duration_minutes?: number | null;
-  calories_burned?: number | null;
-  distance?: number | null;
-  avg_heart_rate?: number | null;
-  steps?: number | null;
-  notes?: string | null;
-  created_at?: string | Date;
-  sets?: ExerciseSetInput[];
-  activity_details?: { detail_type?: string; detail_data?: unknown }[];
+type DiaryEntryItem = ExerciseEntryResponse & {
   preset_wod_score?: WodScoreDetail;
   preset_location?: string;
-  exercises?: DiaryEntryItem[];
-  location?: string | null;
-}
+};
 
 interface WorkoutPresetListItem {
   id: number | string;
@@ -1028,28 +1016,28 @@ Workout formats (workout_format, default standard) drive the in-app timer:
             }
 
             case 'list_exercise_diary': {
-              const grouped = (await exerciseService.getExerciseEntriesByDate(
-                userId,
-                userId,
-                args.entry_date
-              )) as DiaryEntryItem[];
+              const grouped: ExerciseSessionResponse[] =
+                await exerciseService.getExerciseEntriesByDate(
+                  userId,
+                  userId,
+                  args.entry_date
+                );
               // Flatten preset sessions into their member entries and attach preset WOD details
               // The score lives on the preset session, so it is shown once, on
               // the session's first exercise.
-              const entries = grouped.flatMap((item: DiaryEntryItem) => {
+              const entries = grouped.flatMap<DiaryEntryItem>((item) => {
                 if (item.type !== 'preset') return [item];
                 const score = findWodScore(item.activity_details);
-                return (item.exercises ?? []).map(
-                  (ex: DiaryEntryItem, idx: number) =>
-                    idx === 0
-                      ? {
-                          ...ex,
-                          ...(score ? { preset_wod_score: score } : {}),
-                          ...(item.location
-                            ? { preset_location: item.location }
-                            : {}),
-                        }
-                      : ex
+                return (item.exercises ?? []).map((ex, idx) =>
+                  idx === 0
+                    ? {
+                        ...ex,
+                        ...(score ? { preset_wod_score: score } : {}),
+                        ...(item.location
+                          ? { preset_location: item.location }
+                          : {}),
+                      }
+                    : ex
                 );
               });
               entries.sort(
@@ -1061,8 +1049,8 @@ Workout formats (workout_format, default standard) drive the in-app timer:
                 entries,
                 `Exercise Diary: ${args.entry_date}`,
                 (e: DiaryEntryItem) => {
-                  let text = `**${e.name}**`;
-                  const sets: ExerciseSetInput[] = e.sets ?? [];
+                  let text = `**${e.exercise_snapshot?.name ?? 'Unknown exercise'}**`;
+                  const sets = e.sets;
                   if (sets.length > 0) text += ` — ${sets.length} sets`;
                   if (e.duration_minutes)
                     text += ` | ${e.duration_minutes} min`;
