@@ -161,15 +161,26 @@ describe.runIf(optedIn)(
           plan_name: 'Plan label unchanged',
           is_active: false,
           schedule_type: 'weekly',
-          assignments: [
-            { day_of_week: 1, exercise_id: exercise.id, sets: [prescription] },
+          sessions: [
+            {
+              name: 'Session label unchanged',
+              day_of_week: 1,
+              sort_order: 0,
+              assignments: [
+                {
+                  exercise_id: exercise.id,
+                  sort_order: 0,
+                  sets: [prescription],
+                },
+              ],
+            },
           ],
         });
       expect(plan.status, JSON.stringify(plan.body)).toBe(201);
       const savedPlan = await get(
         `/api/workout-plan-templates/${plan.body.id}`
       );
-      expect(savedPlan.assignments[0]).toMatchObject({
+      expect(savedPlan.sessions[0].assignments[0]).toMatchObject({
         exercise_id: exercise.id,
         exercise_name: correct,
         sets: [expect.objectContaining(prescription)],

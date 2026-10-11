@@ -92,10 +92,16 @@ describe.runIf(optedIn)(
             [owner]
           )
         ).rows[0].id;
+        const session = (
+          await db.query(
+            "INSERT INTO public.workout_plan_sessions(template_id,user_id,name,day_of_week,sort_order) VALUES($1,$2,'Unchanged session',1,0) RETURNING id",
+            [plan, owner]
+          )
+        ).rows[0].id;
         const assignment = (
           await db.query(
-            'INSERT INTO public.workout_plan_template_assignments(template_id,day_of_week,exercise_id,sort_order) VALUES($1,1,$2,3) RETURNING id',
-            [plan, renamed]
+            'INSERT INTO public.workout_plan_template_assignments(template_id,workout_session_id,user_id,exercise_id,sort_order) VALUES($1,$2,$3,$4,3) RETURNING id',
+            [plan, session, owner, renamed]
           )
         ).rows[0].id;
         await db.query(
@@ -199,6 +205,9 @@ describe.runIf(optedIn)(
     afterAll(async () => {
       if (!db) return;
       await db.query('ROLLBACK');
+      await db.query('DELETE FROM public.exercise_entries WHERE user_id=$1', [
+        owner,
+      ]);
       await db.query('DELETE FROM public."user" WHERE id=$1', [owner]);
       await db.end();
     });
