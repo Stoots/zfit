@@ -323,8 +323,9 @@ export type RootStackParamList = {
     intervalScalingNotes?: string;
   };
   ActivityDetail: { session: IndividualSessionResponse };
-  FastingDetail: undefined;
   MindfulnessDetail: { selectedDate?: string } | undefined;
+  CooperRunTests: undefined;
+  FastingDetail: undefined;
   SleepDetail: { entryId: string; day: string };
   Chat: undefined;
   Logs: undefined;

@@ -271,6 +271,11 @@ export const activeWorkoutPlanQueryKey = (date: string) =>
 
 export const trainingProgramsQueryKey = ['trainingPrograms'] as const;
 
+export const cooperRunAttemptsQueryKey = [
+  'cardioTestAttempts',
+  'cooperRun',
+] as const;
+
 export const activeAiServiceSettingQueryKey = [
   'ai-service-settings',
   'active',

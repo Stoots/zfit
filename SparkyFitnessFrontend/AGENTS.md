@@ -42,8 +42,8 @@ pnpm run build
 
 Features are organized by domain, and the same domain folder name appears in `src/pages/`, `src/api/`, and `src/hooks/`. A feature change usually touches the matching folder in all three:
 
-- Page domains: `Admin`, `Auth`, `Chat`, `CheckIn`, `Cycle`, `Diary`, `Errors`, `Exercises`, `Fasting`, `Foods`, `Goals`, `Integrations`, `Medications`, `Reports`, `Settings`, `Symptoms`, `TrainingPrograms`.
-- API domains add a few more: `AiConversions`, `Chatbot`, `Onboarding`, `Pregnancy`, `SleepScience`, `Symptoms`.
+- Page domains: `Admin`, `Auth`, `CardioTests`, `Chat`, `CheckIn`, `Cycle`, `Diary`, `Errors`, `Exercises`, `Fasting`, `Foods`, `Goals`, `Integrations`, `Medications`, `Reports`, `Settings`, `Symptoms`, `TrainingPrograms`.
+- API domains add a few more: `AiConversions`, `CardioTests`, `Chatbot`, `Onboarding`, `Pregnancy`, `SleepScience`, `Symptoms`.
 - Example: a Medications bug lives in `src/pages/Medications/` + `src/api/Medications/` + `src/hooks/` medication hooks. Start there, not with a repo-wide search.
 - Training Program authoring/scheduling (#2): `src/pages/TrainingPrograms/`, `src/api/TrainingPrograms/`, `src/hooks/TrainingPrograms/`. Private `/training-programs` route, linked from Exercises. Owner-only (no acting-user access), fixed calendar dates; Planned Sessions reuse existing Workout Plans rather than replacing them.
 
@@ -51,6 +51,7 @@ Features are organized by domain, and the same domain folder name appears in `sr
 
 - `src/main.tsx` - app bootstrap; creates the shared `QueryClient` with global `QueryCache`/`MutationCache` handlers that render toasts from query/mutation `meta` (`errorTitle`, `errorMessage`, `successMessage`).
 - `src/App.tsx` - route registry via `createBrowserRouter`, plus `PrivateRoute` and `PermissionRoute` wrappers (permission-gated areas include `reports` and `admin`).
+- `src/pages/CardioTests/CooperRunTests.tsx`, `src/api/CardioTests/cardioTests.ts`, and `src/hooks/CardioTests/useCooperRunAttempts.ts` - Cooper run Test Attempt entry/edit, dated history, and trend.
 - `src/pages/<Domain>/` - route screens by domain.
 - `src/api/api.ts` - `apiCall(endpoint, options)` helper: base URL `/api`, query `params`, JSON/FormData bodies, `responseType`, error toasts, `suppress404Toast`. Use it for all backend requests.
 - `src/api/<Domain>/` - per-domain API clients built on `apiCall`.
@@ -94,6 +95,7 @@ When searching, ignore `node_modules/`, `dist/`, and every locale except `public
 ## Quick Routing
 
 - Routing/navigation/permission issue: `src/App.tsx` (router, `PrivateRoute`, `PermissionRoute`) and `src/layouts/MainLayout.tsx`.
+- Cooper run Test Attempts: `/cardio-tests` is registered in `src/App.tsx` and gated by `hasPermission('diary')` in `src/layouts/MainLayout.tsx`; implementation is in `src/pages/CardioTests/CooperRunTests.tsx`, `src/api/CardioTests/cardioTests.ts`, and `src/hooks/CardioTests/useCooperRunAttempts.ts`.
 - API/error-toast issue: `src/api/api.ts`, then the domain client in `src/api/<Domain>/`, then the query/mutation `meta` in the calling hook.
 - Auth/session issue: `src/lib/auth-client.ts`, `src/hooks/useAuth.tsx`, `src/pages/Auth/`, and the server's `auth.ts` if it crosses packages.
 - Family-access/acting-user issue: `src/contexts/ActiveUserContext.tsx` and the hooks consuming it.

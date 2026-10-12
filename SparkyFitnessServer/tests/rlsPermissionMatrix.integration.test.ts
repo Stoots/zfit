@@ -207,6 +207,7 @@ describe.runIf(RUN)('RLS permission matrix', () => {
     water_intake: 'diary',
     water_intake_entries: 'diary',
     weekly_goal_plans: 'diary',
+    cardio_test_attempts: 'diary',
     // check-in / wellness
     check_in_measurements: 'checkin',
     check_in_photos: 'checkin',

@@ -1,5 +1,4 @@
 import { randomUUID, randomBytes } from 'node:crypto';
-import pg from 'pg';
 import express from 'express';
 // @ts-expect-error TS7016 — supertest has no declarations in this package.
 import request from 'supertest';
@@ -21,41 +20,14 @@ import {
 } from '@workspace/shared';
 import { getClient, getSystemClient, endPool } from '../db/poolManager.js';
 import errorHandler from '../middleware/errorHandler.js';
+import {
+  databaseReachable,
+  requireDatabaseInCI,
+} from './databaseIntegrationGuard.js';
 
-// Skipping is an explicit opt-out. In CI an unreachable database must fail the
-// suite instead of silently skipping it.
-const skipRequested = Boolean(process.env.SKIP_TRAINING_PROGRAM_DB);
-
-async function databaseReachable() {
-  if (skipRequested || !process.env.SPARKY_FITNESS_APP_DB_USER) return false;
-  const probe = new pg.Client({
-    host: process.env.SPARKY_FITNESS_DB_HOST,
-    port: Number(process.env.SPARKY_FITNESS_DB_PORT) || 5432,
-    database: process.env.SPARKY_FITNESS_DB_NAME,
-    user: process.env.SPARKY_FITNESS_APP_DB_USER,
-    password: process.env.SPARKY_FITNESS_APP_DB_PASSWORD,
-    connectionTimeoutMillis: 2000,
-  });
-  try {
-    await probe.connect();
-    await probe.query('SELECT 1');
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await probe.end().catch(() => {});
-  }
-}
-const run = await databaseReachable();
-
-it.runIf(!run && Boolean(process.env.CI) && !skipRequested)(
-  'requires a reachable database in CI (set SKIP_TRAINING_PROGRAM_DB to opt out)',
-  () => {
-    throw new Error(
-      'Training Program integration tests need Postgres: set SPARKY_FITNESS_DB_* and SPARKY_FITNESS_APP_DB_USER/PASSWORD, or set SKIP_TRAINING_PROGRAM_DB to skip deliberately.'
-    );
-  }
-);
+const skipEnvVar = 'SKIP_TRAINING_PROGRAM_DB';
+const run = await databaseReachable(skipEnvVar);
+requireDatabaseInCI(run, skipEnvVar, 'Training Program');
 
 describe.runIf(run)('persisted authenticated Training Program APIs', () => {
   const app = express();

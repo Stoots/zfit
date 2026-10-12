@@ -74,6 +74,7 @@ BEGIN
     'training_program_phases',
     'training_program_weeks',
     'training_program_sessions',
+    'cardio_test_attempts',
     'workout_preset_exercise_sets',
     'workout_preset_exercises',
     'workout_presets',
@@ -621,6 +622,9 @@ SELECT create_owner_policy('training_programs');
 SELECT create_owner_policy('training_program_phases');
 SELECT create_owner_policy('training_program_weeks');
 SELECT create_owner_policy('training_program_sessions');
+
+-- Cardio Test Attempts are diary records and follow diary delegation.
+SELECT create_diary_policy('cardio_test_attempts');
 
 -- Profiles: delegates can read (with any meaningful permission) but only owner can write.
 -- Delegates do not need to modify another user's profile to manage their diary.

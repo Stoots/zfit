@@ -21,6 +21,7 @@ import { localizeExerciseTaxonomyValue } from '../localization/exerciseTaxonomy'
 import { useNativeIOSHeadersActive } from '../services/nativeTabBarPreference';
 import { useActiveWorkoutBarPadding } from '../components/ActiveWorkoutBar';
 import SegmentedControl from '../components/SegmentedControl';
+import Button from '../components/ui/Button';
 import StatusView from '../components/StatusView';
 import CollapsibleSection from '../components/CollapsibleSection';
 import CardioSessionList from '../components/exerciseStats/CardioSessionList';
@@ -169,58 +170,67 @@ const ExerciseStatisticsScreen: React.FC<ExerciseStatisticsScreenProps> = ({
   const hasActivity =
     (data?.keyStats.totalWorkouts ?? 0) > 0 || setRows.length > 0;
 
-  const renderCardio = () => {
-    if (cardio.isLoading) {
-      return <StatusView inline loading />;
-    }
-    if (cardio.sessions.length === 0) {
-      return cardio.isError ? (
-        <StatusView
-          inline
-          icon="alert-circle"
-          iconTone="danger"
-          title={t('exerciseStatistics.cardio.loadFailed', {
-            defaultValue: 'Failed to load cardio sessions',
-          })}
-          subtitle={t('common.connectionRetry', {
-            defaultValue: 'Please check your connection and try again.',
-          })}
-        />
+  const renderCardio = () => (
+    <>
+      <Button
+        variant="outline"
+        accessibilityRole="button"
+        onPress={() => navigation.navigate('CooperRunTests')}
+      >
+        {t('exerciseStatistics.cardioTests', {
+          defaultValue: 'Cooper Run Test Attempts',
+        })}
+      </Button>
+      {cardio.isLoading ? (
+        <StatusView inline loading />
+      ) : cardio.sessions.length === 0 ? (
+        cardio.isError ? (
+          <StatusView
+            inline
+            icon="alert-circle"
+            iconTone="danger"
+            title={t('exerciseStatistics.cardio.loadFailed', {
+              defaultValue: 'Failed to load cardio sessions',
+            })}
+            subtitle={t('common.connectionRetry', {
+              defaultValue: 'Please check your connection and try again.',
+            })}
+          />
+        ) : (
+          <StatusView
+            inline
+            icon="exercise-running"
+            iconTone="muted"
+            title={t('exerciseStatistics.cardio.empty', {
+              defaultValue: 'No cardio workouts in this range',
+            })}
+          />
+        )
       ) : (
-        <StatusView
-          inline
-          icon="exercise-running"
-          iconTone="muted"
-          title={t('exerciseStatistics.cardio.empty', {
-            defaultValue: 'No cardio workouts in this range',
-          })}
-        />
-      );
-    }
-    return (
-      <>
-        <Text className="text-text-secondary text-xs mb-3">
-          {t('exerciseStatistics.cardio.hint', {
-            defaultValue: 'Tap a workout for its route and heart rate.',
-          })}
-        </Text>
-        <CardioSessionList
-          sessions={cardio.sessions}
-          distanceUnit={cardio.distanceUnit}
-          today={getTodayDate()}
-          hasMore={cardio.hasNextPage}
-          isLoadingMore={cardio.isFetchingNextPage}
-          onLoadMore={() => void cardio.fetchNextPage()}
-          onOpen={(session) =>
-            navigation.navigate('CardioSession', {
-              session,
-              distanceUnit: cardio.distanceUnit,
-            })
-          }
-        />
-      </>
-    );
-  };
+        <>
+          <Text className="text-text-secondary text-xs mb-3">
+            {t('exerciseStatistics.cardio.hint', {
+              defaultValue: 'Tap a workout for its route and heart rate.',
+            })}
+          </Text>
+          <CardioSessionList
+            sessions={cardio.sessions}
+            distanceUnit={cardio.distanceUnit}
+            today={getTodayDate()}
+            hasMore={cardio.hasNextPage}
+            isLoadingMore={cardio.isFetchingNextPage}
+            onLoadMore={() => void cardio.fetchNextPage()}
+            onOpen={(session) =>
+              navigation.navigate('CardioSession', {
+                session,
+                distanceUnit: cardio.distanceUnit,
+              })
+            }
+          />
+        </>
+      )}
+    </>
+  );
 
   const renderBody = () => {
     if (isLoading) {
