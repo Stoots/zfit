@@ -28,7 +28,7 @@ If a task also touches `shared/`, the frontend, or the mobile app, read the rele
 - Stack: Express 5, PostgreSQL via `pg`, Better Auth, Zod, TypeScript 5, Vitest 4, ESLint 10
 - Module system: ESM with `type: "module"` and `moduleResolution: "NodeNext"`
 - The package is now effectively TypeScript-first; almost all source files are `.ts`
-- Main domains: food and meal tracking, exercise logging, health and sleep data, sleep science, fasting, medications, symptom and episode tracking, mood, menstrual cycle and pregnancy, reporting, AI chat, onboarding, identity, admin tooling, and external provider integrations
+- Main domains: food and meal tracking, exercise logging, Cooper run Test Attempts, health and sleep data, sleep science, fasting, medications, symptom and episode tracking, mood, menstrual cycle and pregnancy, reporting, AI chat, onboarding, identity, admin tooling, and external provider integrations
 
 ## Verified Commands
 
@@ -62,6 +62,7 @@ pnpm exec eslint routes/v2/foodRoutes.ts services/foodCoreService.ts
 - `auth.ts` - Better Auth configuration, plugins, session behavior, SSO provider syncing
 - `routes/` - primary HTTP route surface
 - `routes/trainingProgramRoutes.ts` - owner-only `/api/training-programs` CRUD for the full phase/week/Planned Session structure, validated by `services/trainingProgramService.ts` and atomically persisted by `models/trainingProgramRepository.ts`. Reuses `workout_plan_templates`; fixed calendar-day dates and stable child IDs. Recording a `missed` outcome needs the session's effective date on or before the athlete's today (user timezone, 409 otherwise); the service resolves today and passes it to the repository. Persisted real-auth coverage: `tests/trainingPrograms.integration.test.ts` (needs Postgres via `SPARKY_FITNESS_DB_*`/`SPARKY_FITNESS_APP_DB_*`; skips locally when unreachable, but fails when `CI` is set unless `SKIP_TRAINING_PROGRAM_DB` is set).
+- `routes/cardioTestRoutes.ts` - authenticated Cooper run Test Attempt list/create/edit at `/api/cardio-tests/cooper-run/attempts`, implemented by `services/cardioTestAttemptService.ts` and `models/cardioTestAttemptRepository.ts`; persisted coverage is in `tests/cardioTestAttempts.integration.test.ts`
 - `routes/v2/` - newer typed route surface; pair these changes with `schemas/`
 - `routes/v2/openFoodFactsContributionRoutes.ts` - owner-only single-food preview and explicit photo-backed publication; background contributions are disabled for this release
 - `routes/v2/symptomRoutes.ts` - generic symptom tracking (`symptoms` permission): definitions (`/custom`), the pick-list library (`/options`), entries and episodes (`/entries`, `/entries/ongoing`, `/entries/:id/end`, `/entries/:id/severity`), photos, and symptom-free days. Logic lives in `services/symptomService.ts` over `models/symptomRepository.ts` and `models/symptomOptionRepository.ts`; the request/response contract is `../shared/src/schemas/api/Symptoms.api.zod.ts`
@@ -255,6 +256,7 @@ When searching, ignore noisy/generated directories unless you explicitly need th
 - Public v2 contract issue:
   inspect the matching file in `routes/v2/` plus the related Zod schema in `schemas/`
 - Training Program authoring/scheduling (#2): `routes/trainingProgramRoutes.ts`, `services/trainingProgramService.ts`, `models/trainingProgramRepository.ts`, shared `TrainingPrograms.api.zod.ts`. All four `training_program_*` tables are owner-only; standalone Workout Plans remain independent.
+- Cooper run Test Attempts: `routes/cardioTestRoutes.ts`, `services/cardioTestAttemptService.ts`, `models/cardioTestAttemptRepository.ts`, and shared `CardioTests.api.zod.ts` / `CardioTestAttempts.zod.ts`.
 - Food, barcode, or external provider issue:
   inspect the relevant `integrations/*` code, then the matching service and repository files
 - Open Food Facts publication:

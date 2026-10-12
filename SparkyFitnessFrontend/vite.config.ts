@@ -8,7 +8,8 @@ import { reactClickToComponent } from 'vite-plugin-react-click-to-component';
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
   const backendHost = process.env.VITE_BACKEND_HOST || 'localhost';
-  const target = `http://${backendHost}:3010`;
+  const backendPort = process.env.VITE_BACKEND_PORT || '3010';
+  const target = `http://${backendHost}:${backendPort}`;
   return {
     // react-grid-layout reads process.env["NODE_ENV"] at runtime, but the
     // browser has no `process`. Shim just the env object so it resolves in both

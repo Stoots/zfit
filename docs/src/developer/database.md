@@ -105,6 +105,7 @@ Quick reference of all tables by domain and purpose. For detailed security tier,
 | `workout_plan_template_assignments` | Scheduled workout templates (weekday or ordered sequence) |
 | `workout_plan_assignment_sets` | Sets within assigned workout plans |
 | `workout_feedback` | Session / per-exercise workout feedback (difficulty, pain flag and note) behind adaptive suggestions |
+| `cardio_test_attempts` | Dated Test Attempts for Cooper run and other supported Cardio Tests |
 
 ### Training Programs (Tier 1: Owner-Only)
 | Table | Purpose |

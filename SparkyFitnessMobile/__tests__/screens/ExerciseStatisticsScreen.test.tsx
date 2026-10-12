@@ -293,11 +293,13 @@ describe('ExerciseStatisticsScreen', () => {
     expect(fetchNextPage).toHaveBeenCalled();
   });
 
-  it('says when the range has no cardio', () => {
+  it('opens Cooper run Test Attempts from the cardio view, even with no sessions', () => {
     mockUseCardioSessions.mockReturnValue(cardioResult({ sessions: [] }));
     const screen = render(<ExerciseStatisticsScreen {...props} />);
     fireEvent.press(screen.getByText('Cardio'));
     expect(screen.getByText('No cardio workouts in this range')).toBeTruthy();
+    fireEvent.press(screen.getByText('Cooper Run Test Attempts'));
+    expect(navigation.navigate).toHaveBeenCalledWith('CooperRunTests');
   });
 
   it('shows an empty state when the range has no workouts', () => {

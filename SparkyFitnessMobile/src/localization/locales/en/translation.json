@@ -588,8 +588,26 @@
     "progressPhotoTimelapse": "Time-lapse",
     "exerciseStatistics": "Exercise Statistics",
     "cardioSession": "Cardio Session",
+    "cooperRunTests": "Cooper Run Test Attempts",
     "watchSettings": "Apple Watch",
     "aiSettings": "AI"
+  },
+  "cardioTests": {
+    "title": "Cardio Tests",
+    "history": "Test Attempt History",
+    "cooper": {
+      "title": "Cooper Run Test",
+      "intro": "Record the distance you cover in 12 minutes and compare attempts over time.",
+      "formTitle": "Record Test Attempt",
+      "editFormTitle": "Edit Test Attempt",
+      "distance": "12-minute distance (m)",
+      "distanceA11y": "Distance covered in 12 minutes in meters",
+      "distancePlaceholder": "e.g. 2500",
+      "save": "Record Test Attempt",
+      "empty": "No Cooper run Test Attempts recorded yet.",
+      "chartA11y": "Cooper run distance trend by date",
+      "editAttemptA11y": "Edit Cooper run attempt on {{date}}"
+    }
   },
   "healthMetrics": {
     "steps": "Steps",
@@ -5866,6 +5884,7 @@
       "minutesAxis": "Minutes from start",
       "underOneMinute": "<1 min"
     },
+    "cardioTests": "Cooper Run Test Attempts",
     "consistency": {
       "title": "Training Consistency",
       "subtitle_one": "Last {{formattedCount}} week, {{first}} to {{last}}",

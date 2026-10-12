@@ -224,3 +224,5 @@ export * from "./schemas/database/TrainingPrograms.zod.ts";
 export * from "./schemas/database/TrainingProgramPhases.zod.ts";
 export * from "./schemas/database/TrainingProgramWeeks.zod.ts";
 export * from "./schemas/database/TrainingProgramSessions.zod.ts";
+export * from "./schemas/api/CardioTests.api.zod.ts";
+export * from "./schemas/database/CardioTestAttempts.zod.ts";

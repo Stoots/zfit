@@ -99,6 +99,7 @@ import {
   SafeDailyNutritionDetails,
   SafeNutrientTrends,
   SafeExerciseStatistics,
+  SafeCooperRunTests,
   SafeCardioSession,
   SafeFamilyMembers,
   SafeFamilyDiary,
@@ -714,6 +715,11 @@ function AppContent() {
             name="CardioSession"
             component={SafeCardioSession}
             options={createStackScreenOptions(t('screens.cardioSession', { defaultValue: 'Cardio Session' }), { headerBackButtonDisplayMode: 'minimal' })}
+          />
+          <Stack.Screen
+            name="CooperRunTests"
+            component={SafeCooperRunTests}
+            options={createStackScreenOptions(t('screens.cooperRunTests', { defaultValue: 'Cooper Run Test Attempts' }), { headerBackButtonDisplayMode: 'minimal' })}
           />
           <Stack.Screen
             name="ExerciseSearch"

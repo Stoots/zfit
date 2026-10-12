@@ -64,6 +64,10 @@ Bug fixes
 - Restore per-set RPE entry in started workouts, including timed cardio, with decimal effort values retained in resumed drafts and workout save requests.
 - Show prescribed set notes on workout start and provide editable exercise notes that persist with the workout.
 
+#### Features
+
+- Cooper run Test Attempts: entry, edit, dated history, and trend graph on web and mobile; native acceptance pending per `agent-docs/cooper-manual-acceptance.md`.
+
 Developer tooling
 
 - Add a warm-cache deployment smoke command that verifies the browser's loaded frontend asset and live upcoming-workout order, with private JSON/screenshot evidence and CI acceptance checks (`agent-docs/deployment-smoke.md`).

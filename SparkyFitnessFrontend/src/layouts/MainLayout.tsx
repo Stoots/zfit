@@ -169,8 +169,15 @@ const MainLayout: React.FC<MainLayoutProps> = ({
         });
       }
     }
+    if (hasPermission('diary')) {
+      items.push({
+        value: '/cardio-tests',
+        label: t('cardioTests.title', 'Cardio Tests'),
+        icon: HeartPulse,
+      });
+    }
     return items;
-  }, [isActingOnBehalf, hasWritePermission, cycleSettings, t]);
+  }, [isActingOnBehalf, hasPermission, hasWritePermission, cycleSettings, t]);
 
   // Map meal type names to icons
   const getMealTypeIcon = useCallback((name: string): LucideIcon => {
@@ -299,6 +306,13 @@ const MainLayout: React.FC<MainLayoutProps> = ({
           icon: HeartPulse,
         });
       }
+    }
+    if (hasPermission('diary')) {
+      tabs.push({
+        value: '/cardio-tests',
+        label: t('cardioTests.title', 'Cardio Tests'),
+        icon: HeartPulse,
+      });
     }
     if (user?.role === 'admin' && !isActingOnBehalf) {
       tabs.push({ value: '/admin', label: t('nav.admin'), icon: Shield });

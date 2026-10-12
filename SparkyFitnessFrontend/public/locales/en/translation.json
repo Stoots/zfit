@@ -6948,6 +6948,24 @@
     "chartLabel": "Workout days per week",
     "setsTitle": "Sets per muscle",
     "noSets": "No sets logged this week or last.",
-    "loadFailed": "Failed to load training consistency."
+    "loadFailed": "Could not load your training consistency."
+  },
+  "cardioTests": {
+    "title": "Cardio Tests",
+    "saved": "Test Attempt saved.",
+    "noAccess": "You do not have access to these attempts.",
+    "readOnly": "You can view this history but do not have permission to edit it.",
+    "history": "Test Attempt History",
+    "date": "Date",
+    "add": "Record Test Attempt",
+    "edit": "Edit Test Attempt",
+    "record": "Record Test",
+    "cooper": {
+      "intro": "Record the distance you cover in a 12-minute Cooper run and compare attempts over time.",
+      "distance": "12-minute distance (m)",
+      "distanceLabel": "Distance",
+      "empty": "No Cooper run Test Attempts recorded yet.",
+      "chartA11y": "Cooper run distance trend by date"
+    }
   }
 }
