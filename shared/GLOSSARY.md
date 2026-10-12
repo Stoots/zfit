@@ -12,6 +12,19 @@ _Avoid_: Workout plan (when referring to the whole multi-week structure)
 A set of scheduled workout sessions with exercises or presets; it can be used within a training program or independently.
 _Avoid_: Training program (when referring to a set of sessions rather than the multi-week structure)
 
+**Workout Session**:
+A single workout within a Workout Plan, with its own ordered exercises and prescription. Sessions with the same label, such as A or B, may have different prescriptions in different weeks.
+_Avoid_: Workout plan (when referring to one workout within a plan)
+
+**Session Prescription**:
+The intended exercises, sets, repetitions, effort, rest and other targets for a particular Workout Session, distinct from the results recorded when it is performed.
+
+**Optional Session**:
+A session offered in addition to the required training, which the athlete may omit without failing to complete the required schedule.
+
+**Omitted Session**:
+An Optional Session not performed on its scheduled day, distinct from a missed required session.
+
 **Cardio Test**:
 A repeatable fitness assessment performed under a defined protocol, with each attempt recording measured results.
 _Avoid_: Cardio workout (when referring to an assessment intended to compare performance over time)

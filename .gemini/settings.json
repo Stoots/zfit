@@ -1,6 +1,6 @@
 {
-  "contextFileName": ["AGENTS.md", "GEMINI.md"],
+  "contextFileName": ["AGENTS.md"],
   "context": {
-    "fileName": ["AGENTS.md", "GEMINI.md"]
+    "fileName": ["AGENTS.md"]
   }
 }

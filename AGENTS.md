@@ -1,16 +1,21 @@
 # AGENTS.md
 
-*Last updated: 2026-10-08*
+_Last updated: 2026-10-12_
 
 This is the repo-root monorepo guide for SparkyFitness. Use it to choose the right package, understand shared repo-level rules, and find the next guide to read.
 
 **For AI Tools & Developers:** Start with `agent-docs/README.md` (in this repo) for quick navigation to:
+
 - `file-and-domain-reference.md` — Find any code by feature in seconds
 - `testing-patterns.md` — Concrete test examples for each layer
 - `architecture-permissions.md` — Permission types and RLS patterns
 - Plus 5 more guides for migrations, data flow, anti-patterns, new features, and planning
 
 Package-level guides win. For work inside a package, follow that package's `AGENTS.md` when present, otherwise its `CLAUDE.md`.
+
+## This is a fork
+
+This repo is `Stoots/zfit`, a personal fork of `CodeWithCJ/SparkyFitness`. Read `FORK.md` first for what the fork adds, the upstream sync procedure, and which GitHub Actions workflows are disabled. The current handover and next steps are in `agent-docs/HANDOVER.md`. Keep edits to upstream-owned files (this file, `CHANGELOG.md`, `.github/`) minimal so syncs stay clean. Deployment smoke gate docs: `agent-docs/deployment-smoke.md`.
 
 ## Scope
 
@@ -44,8 +49,7 @@ For `docs/` and `SparkyFitnessGarmin/`, there is no package-level `AGENTS.md`. `
 
 ## Workspace Notes
 
-- `pnpm-workspace.yaml` currently lists `frontend`, `SparkyFitnessFrontend`, `shared`, `SparkyFitnessMobile`, `SparkyFitnessServer`, and `docs`.
-- Only `SparkyFitnessFrontend/` exists on disk right now; treat `frontend` as a legacy workspace entry unless the task is specifically about workspace cleanup.
+- `pnpm-workspace.yaml` lists `SparkyFitnessFrontend`, `shared`, `SparkyFitnessMobile`, `SparkyFitnessServer`, and `docs`.
 - `shared/` is a library package, not an app. Validate shared changes from the consuming package(s), not in isolation.
 - `SparkyFitnessGarmin/` is outside the current workspace. Inspect its own manifest and scripts before working there.
 
@@ -53,7 +57,7 @@ For `docs/` and `SparkyFitnessGarmin/`, there is no package-level `AGENTS.md`. `
 
 Do not read or search these paths; they burn context for nothing:
 
-- `WIP/` - personal scratch area; contains zips and full copies of other repos, including a stale duplicate of this repo (`WIP/SparkyFitness-main/`). Never read or edit anything under it.
+- `WIP/` - gitignored personal scratch area; if present, it may hold zips and copies of other repos. Never read or edit anything under it.
 - `SparkyFitnessMobile/ios/` and `SparkyFitnessMobile/android/` - generated native projects (`ios/` is >1 GB of Pods). Regenerate with `npx expo prebuild --clean`; edit `app.config.ts`, `plugins/`, or `targets/` instead.
 - `pnpm-lock.yaml` (~1.3 MB) - never read; check `package.json` files instead.
 - `db_schema_backup.sql` (~330 KB) - never read whole; grep for the one `CREATE TABLE` you need.
@@ -82,7 +86,7 @@ Cheap ways to learn things:
 - Auth or API contract changes usually need a quick check in both web and mobile because they share the same backend.
 - Frontend local dev proxies `/api`, `/health-data`, and `/uploads` to the server on `3010`. The `/health-data` proxy is rewritten to `/api/health-data`, while server APIs remain rooted at `/api`.
 - Server runtime secrets are usually sourced from repo-root `.env`, commonly created from `docker/.env.example`. The server can also load secret files via `SparkyFitnessServer/utils/secretLoader.ts`.
-- Extract shared logic on the **second** duplication ("rule of two"), not the third - duplicated logic drifts as different sessions edit each copy. Extract *behavior*, not coincidental shape. See `agent-docs/anti-patterns.md`.
+- Extract shared logic on the **second** duplication ("rule of two"), not the third - duplicated logic drifts as different sessions edit each copy. Extract _behavior_, not coincidental shape. See `agent-docs/anti-patterns.md`.
 - Training Programs (#2): owner-only multi-week authoring, distinct from reusable Workout Plans. Contract: `shared/src/schemas/api/TrainingPrograms.api.zod.ts`; server: `routes/trainingProgramRoutes.ts`, `services/trainingProgramService.ts`, `models/trainingProgramRepository.ts`; web: `TrainingPrograms` page/API/hooks domain. See `docs/src/features/exercises/training-programs.md` for scheduling and focused verification.
 - **Strict TypeScript Typing:** Never use `any` or `// eslint-disable-next-line @typescript-eslint/no-explicit-any` when creating new functions or editing existing code. When modifying existing files, proactively update legacy `any` declarations in the touched code to reflect their proper TypeScript data types, interfaces, or schemas from `@workspace/shared`. Do NOT copy legacy `any` parameter signatures forward when refactoring or extending service/repository files.
 - **Library Deletes vs Diary Snapshots:** `exercise_entries` and `food_entries` are self-contained snapshots, not pointers (`exercise_id` and `food_id` are `ON DELETE SET NULL`). Deleting an exercise or food from the library (`mode: 'delete'`) preserves past and current diary history, cascades from presets and plan templates, cleans up future scheduled workout plan entries (`entry_date >= today`), and cleans up empty parent preset entries. Only explicit `delete_with_history` (force delete) purges diary logs for that user. If an item is referenced by other users (`otherUserReferences > 0`), the backend falls back to hiding (`is_quick_exercise` / `is_quick_food`).
@@ -93,7 +97,6 @@ Cheap ways to learn things:
   3. `docs/src/install/environment-variables.md` (the comprehensive documentation reference).
   4. `docs/components/EnvGenerator.vue` (the interactive web `.env` generator component).
   5. `helm/chart/templates/` and `helm/chart/values.yaml` (if passed through Helm charts).
-
 
 ## Commit & PR Conventions
 
@@ -157,4 +160,3 @@ npx expo prebuild --clean
 pnpm dev
 pnpm run build
 ```
-

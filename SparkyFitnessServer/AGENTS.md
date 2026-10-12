@@ -1,6 +1,6 @@
 # AGENTS.md
 
-_Last updated: 2026-10-08_
+_Last updated: 2026-10-12_
 
 SparkyFitness Server is the backend API package for the SparkyFitness monorepo. Use this file as the primary guide for work inside `SparkyFitnessServer/`.
 
@@ -61,7 +61,7 @@ pnpm exec eslint routes/v2/foodRoutes.ts services/foodCoreService.ts
 - `services/backgroundJobScheduler.ts` - starts every scheduled background job at startup, including the demo reset; provider syncs are listed in `services/providerSyncScheduler.ts`; `SPARKY_FITNESS_DISABLE_SCHEDULED_JOBS=true` skips them all
 - `auth.ts` - Better Auth configuration, plugins, session behavior, SSO provider syncing
 - `routes/` - primary HTTP route surface
-- `routes/trainingProgramRoutes.ts` - owner-only `/api/training-programs` CRUD for the full phase/week/Planned Session structure, validated by `services/trainingProgramService.ts` and atomically persisted by `models/trainingProgramRepository.ts`. Reuses `workout_plan_templates`; fixed calendar-day dates and stable child IDs. Persisted real-auth coverage: `tests/trainingPrograms.integration.test.ts`.
+- `routes/trainingProgramRoutes.ts` - owner-only `/api/training-programs` CRUD for the full phase/week/Planned Session structure, validated by `services/trainingProgramService.ts` and atomically persisted by `models/trainingProgramRepository.ts`. Reuses `workout_plan_templates`; fixed calendar-day dates and stable child IDs. Recording a `missed` outcome needs the session's effective date on or before the athlete's today (user timezone, 409 otherwise); the service resolves today and passes it to the repository. Persisted real-auth coverage: `tests/trainingPrograms.integration.test.ts` (needs Postgres via `SPARKY_FITNESS_DB_*`/`SPARKY_FITNESS_APP_DB_*`; skips locally when unreachable, but fails when `CI` is set unless `SKIP_TRAINING_PROGRAM_DB` is set).
 - `routes/v2/` - newer typed route surface; pair these changes with `schemas/`
 - `routes/v2/openFoodFactsContributionRoutes.ts` - owner-only single-food preview and explicit photo-backed publication; background contributions are disabled for this release
 - `routes/v2/symptomRoutes.ts` - generic symptom tracking (`symptoms` permission): definitions (`/custom`), the pick-list library (`/options`), entries and episodes (`/entries`, `/entries/ongoing`, `/entries/:id/end`, `/entries/:id/severity`), photos, and symptom-free days. Logic lives in `services/symptomService.ts` over `models/symptomRepository.ts` and `models/symptomOptionRepository.ts`; the request/response contract is `../shared/src/schemas/api/Symptoms.api.zod.ts`
@@ -77,7 +77,7 @@ pnpm exec eslint routes/v2/foodRoutes.ts services/foodCoreService.ts
 - `utils/uploadsPath.ts` - the uploads root plus the resolver and containment guard for stored `file_path` values; use it instead of re-deriving `SPARKY_FITNESS_CUSTOM_UPLOADS_DIRECTORY`
 - `utils/oauthState.ts` - server-issued single-use OAuth `state` nonces for provider linking (`issueOAuthState`, `persistOAuthState`, `claimOAuthState`); use it instead of hand-rolling a state value
 - `utils/outboundHttp.ts` - process-wide outbound HTTP defaults, applied from `index.ts`: the axios request timeout and the per-address-family connect attempt timeout (`net.setDefaultAutoSelectFamilyAttemptTimeout`). Both are fixed constants on purpose - do not add env overrides, and read the sizing note there before changing either, because the two values interact
-- `utils/errors.ts` - `ValidationError` plus `describeError(error)`; prefer it over `error.message` when logging any caught value, because an `AggregateError` or a non-Error throw renders as an empty string
+- `utils/errors.ts` - `HttpError(message, status)` for expected client-facing failures raised below the route layer (never wrap raw DB errors in it), `ValidationError` plus `describeError(error)`; prefer it over `error.message` when logging any caught value, because an `AggregateError` or a non-Error throw renders as an empty string
 - `middleware/requireSelfMiddleware.ts` - `requireSelfActor`, which rejects a switched/delegated context outright; attach per-route to account-linking routes
 - `integrations/` - provider adapters and ingest pipelines
 - `schemas/` - Zod route schemas

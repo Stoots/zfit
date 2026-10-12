@@ -1,6 +1,6 @@
 # AGENTS.md
 
-_Last updated: 2026-10-08_
+_Last updated: 2026-10-12_
 
 SparkyFitness Frontend is the React web app for the SparkyFitness monorepo. Use this file as the primary guide for work inside `SparkyFitnessFrontend/`.
 
@@ -106,7 +106,8 @@ When searching, ignore `node_modules/`, `dist/`, and every locale except `public
 - `weight_distance` / `weight_duration` (#127) have their own `SET_TABLE_LAYOUT` entries: carries swap the reps cell for a distance cell (stored km, edited in metres/yards via `carryDistanceFromKm` / `carryDistanceToKm` in `@workspace/shared`), loaded holds drop reps and use the duration column.
 - Training consistency (#59): `pages/Reports/TrainingConsistencyCard.tsx` in the Exercise report's left column, fed by `useTrainingConsistency` (`hooks/Reports/useReports.ts`) from `GET /reports/training-consistency`. A fixed 26-week window computed on the server by the shared `buildTrainingConsistency`, so it ignores the report's date filter; the existing `WorkoutHeatmap` stays the calendar.
 - Chart issue: Recharts usage in the domain page plus `src/components/ExerciseCharts/` or `ZoomableChart.tsx`.
-- Training Program CRUD and hierarchy: `pages/TrainingPrograms/TrainingPrograms.tsx`, `TrainingProgramEditor.tsx`, and `hooks/TrainingPrograms/useTrainingPrograms.ts`. Validate with shared `trainingProgramInputSchema`; preserve retained child IDs. Behavioral flow tests: `tests/components/TrainingPrograms.test.tsx`.
+- Training Program CRUD and hierarchy: `pages/TrainingPrograms/TrainingPrograms.tsx` (workspace shell; `ProgramList`, `ProgramDetail`, `SessionRowActions`), `TrainingProgramEditor.tsx` (form shell; `ProgramHeaderFields`, `PhaseEditor`, `WeekEditor`, `SessionRow`, draft state in `useProgramDraft.ts` where an unchosen Workout Plan is `null` and blocks save), and `hooks/TrainingPrograms/useTrainingPrograms.ts` (keys from `trainingProgramKeys` in `api/keys/exercises.ts`; Program mutations also invalidate workout plans and diary exercise/progress keys, and workout-plan/diary-exercise mutations invalidate `trainingProgramKeys.all`). Validate with shared `trainingProgramInputSchema`; preserve retained child IDs. Behavioral flow tests: `tests/components/TrainingPrograms.test.tsx`.
+- Diary dashboard plan banners: `pages/Diary/ExerciseCard.tsx` splits eligible plans with shared `selectDashboardWorkoutPlans` into one next Training Program workout (preview, no session picker) and standalone plans (`DashboardPlanCard` with the session picker). While Programs load nothing is shown; on query error or when acting on behalf of another user every eligible plan is standalone. Tests: `tests/components/ExerciseCardDashboard.test.tsx`.
 
 ## Priority Rule
 
