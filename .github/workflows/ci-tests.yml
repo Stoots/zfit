@@ -274,7 +274,8 @@ jobs:
       # behaviour as the app role (superuser DB user seeds, app role is enforced).
       - name: Verify RLS, Strava cleanup, OIDC providers, Better Auth schema, sign-in rate limits, provider sync claims, Training Programs, Cardio Test Attempts and startup locking
         run: |
-          pnpm exec vitest run tests/rlsPermissionMatrix.integration.test.ts tests/stravaActivityDetailCleanup.integration.test.ts tests/betterAuthSchemaCheck.integration.test.ts tests/oidcProviderRepository.integration.test.ts tests/authRateLimitDatabase.integration.test.ts tests/providerSyncClaim.integration.test.ts tests/trainingPrograms.integration.test.ts tests/cardioTestAttempts.integration.test.ts
+          # The suites share one database and some apply migrations, so run files serially to avoid deadlocks.
+          pnpm exec vitest run tests/rlsPermissionMatrix.integration.test.ts tests/stravaActivityDetailCleanup.integration.test.ts tests/betterAuthSchemaCheck.integration.test.ts tests/oidcProviderRepository.integration.test.ts tests/authRateLimitDatabase.integration.test.ts tests/providerSyncClaim.integration.test.ts tests/trainingPrograms.integration.test.ts tests/cardioTestAttempts.integration.test.ts --no-file-parallelism
           # Initialization reapplies policies, so run it after the other database tests.
           RUN_DATABASE_INITIALIZATION_TEST=1 pnpm exec vitest run tests/initializeDatabase.integration.test.ts
         env:
