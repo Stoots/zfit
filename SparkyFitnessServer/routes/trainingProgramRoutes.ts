@@ -177,7 +177,7 @@ router.use(authenticate, onBehalfOfMiddleware, requireSelfActor);
  *       404: { description: Not found or not owned by the caller. }
  *   put:
  *     summary: Atomically edit the complete Program structure
- *     description: Retained children keep their IDs. Omitted unrecorded children are deleted. Unknown, foreign or reparented IDs are rejected. Recorded sessions and their ancestors must be retained; session names, authored dates and Workout Plans are immutable. Unchanged authored dates preserve effective dates; deliberately changing a planned authored date resets its effective date. Program/week dates do not expand automatically.
+ *     description: Retained children keep their IDs. Omitted unrecorded children are deleted. Unknown, foreign or reparented IDs are rejected. Recorded sessions and their ancestors must be retained; session names, authored dates and Workout Plans are immutable. Unchanged authored dates preserve effective dates; changing a planned session's scheduled_date resets its effective_date to the new authored date, discarding any shift it accumulated from earlier misses. Program/week dates do not expand automatically.
  *     tags: [Training Programs]
  *     requestBody:
  *       required: true
@@ -209,7 +209,7 @@ router.use(authenticate, onBehalfOfMiddleware, requireSelfActor);
  * /training-programs/{id}/sessions/{sessionId}/outcome:
  *   post:
  *     summary: Record a permanent missed outcome or link a completed diary workout
- *     description: Owner-only. Completion links a grouped preset entry or standalone exercise entry and snapshots its name/date and Workout Plan name. Diary renames, date edits and deletion do not rewrite history. One workout can fulfill only one session. Identical retries are idempotent; conflicting final outcomes return 409. With auto_shift enabled, a new miss adds one Gregorian calendar day to every still-planned session on a strictly later effective date. Same-day and recorded sessions never move. Effective dates can leave their authored week/Program without reparenting; overflow past 9999-12-31 rolls back the whole operation. Recording and aggregate edits serialize on the Program lock.
+ *     description: Owner-only. Completion links a grouped preset entry or standalone exercise entry and snapshots its name/date and Workout Plan name. Diary renames, date edits and deletion do not rewrite history. One workout can fulfill only one session. Identical retries are idempotent; conflicting final outcomes return 409. With auto_shift enabled, a new miss adds one Gregorian calendar day to every still-planned session on a strictly later effective date. Same-day sessions (equal effective date, even with a later sort order) and recorded sessions never move. A missed outcome is only accepted when the session's effective date is on or before the athlete's today (their timezone); a later session returns 409, because outcomes are permanent. Effective dates can leave their authored week/Program without reparenting; overflow past 9999-12-31 rolls back the whole operation. Recording and aggregate edits serialize on the Program lock.
  *     tags: [Training Programs]
  *     parameters:
  *       - in: path
@@ -253,7 +253,7 @@ router.use(authenticate, onBehalfOfMiddleware, requireSelfActor);
  *       401: { description: Authentication required. }
  *       403: { description: Delegated context forbidden. }
  *       404: { description: Program, session or diary workout not found or not owned. }
- *       409: { description: Conflicting final outcome, workout already linked, or calendar overflow. }
+ *       409: { description: Conflicting final outcome, workout already linked, missed outcome on a session scheduled after the athlete's today, or calendar overflow. }
  */
 router.get('/', async (req, res, next) => {
   try {

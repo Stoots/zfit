@@ -2,6 +2,7 @@ import { deleteExerciseEntriesByTemplateId } from './exerciseTemplate.js';
 import type { PoolClient } from 'pg';
 import { getClient } from '../db/poolManager.js';
 import { log } from '../config/logging.js';
+import { HttpError } from '../utils/errors.js';
 // @ts-expect-error TS(7016): Could not find a declaration file for module 'pg-format'.
 import format from 'pg-format';
 import {
@@ -497,11 +498,9 @@ async function deleteWorkoutPlanTemplate(
       [templateId, userId]
     );
     if (references.rowCount) {
-      throw Object.assign(
-        new Error(
-          'Remove this Workout Plan from your Training Program sessions before deleting it.'
-        ),
-        { status: 409 }
+      throw new HttpError(
+        'Remove this Workout Plan from your Training Program sessions before deleting it.',
+        409
       );
     }
     if (today)

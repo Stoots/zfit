@@ -5,7 +5,15 @@ import express from 'express';
 import request from 'supertest';
 // @ts-expect-error TS7016 — cookie-parser has no declarations in this package.
 import cookieParser from 'cookie-parser';
-import { beforeAll, afterAll, beforeEach, describe, it, expect } from 'vitest';
+import {
+  beforeAll,
+  afterAll,
+  beforeEach,
+  describe,
+  it,
+  expect,
+  vi,
+} from 'vitest';
 import {
   trainingProgramSchema,
   type TrainingProgram,
@@ -14,12 +22,12 @@ import {
 import { getClient, getSystemClient, endPool } from '../db/poolManager.js';
 import errorHandler from '../middleware/errorHandler.js';
 
+// Skipping is an explicit opt-out. In CI an unreachable database must fail the
+// suite instead of silently skipping it.
+const skipRequested = Boolean(process.env.SKIP_TRAINING_PROGRAM_DB);
+
 async function databaseReachable() {
-  if (
-    !process.env.SPARKY_FITNESS_APP_DB_USER ||
-    process.env.SKIP_TRAINING_PROGRAM_DB === '1'
-  )
-    return false;
+  if (skipRequested || !process.env.SPARKY_FITNESS_APP_DB_USER) return false;
   const probe = new pg.Client({
     host: process.env.SPARKY_FITNESS_DB_HOST,
     port: Number(process.env.SPARKY_FITNESS_DB_PORT) || 5432,
@@ -39,6 +47,15 @@ async function databaseReachable() {
   }
 }
 const run = await databaseReachable();
+
+it.runIf(!run && Boolean(process.env.CI) && !skipRequested)(
+  'requires a reachable database in CI (set SKIP_TRAINING_PROGRAM_DB to opt out)',
+  () => {
+    throw new Error(
+      'Training Program integration tests need Postgres: set SPARKY_FITNESS_DB_* and SPARKY_FITNESS_APP_DB_USER/PASSWORD, or set SKIP_TRAINING_PROGRAM_DB to skip deliberately.'
+    );
+  }
+);
 
 describe.runIf(run)('persisted authenticated Training Program APIs', () => {
   const app = express();
@@ -163,7 +180,13 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
       db.release();
     }
   }
+  // Missed outcomes are only accepted on or before the athlete's today, so pin
+  // the clock after every authored date used below. Only Date is mocked; it is
+  // set before sign-up so the issued sessions are valid under it.
+  const setToday = (day: string) => vi.setSystemTime(`${day}T12:00:00Z`);
+  const DEFAULT_TODAY = '2028-06-01';
   beforeAll(async () => {
+    setToday(DEFAULT_TODAY);
     // Load Better Auth only after the database probe: it eagerly validates the
     // migrated schema at import time, which cannot run on DB-less unit-test hosts.
     const { auth } = await import('../auth.js');
@@ -231,6 +254,7 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
     program = trainingProgramSchema.parse(response.body);
   });
   afterAll(async () => {
+    vi.useRealTimers();
     const db = await getSystemClient();
     try {
       await db.query('DELETE FROM public."user" WHERE id = ANY($1::uuid[])', [
@@ -987,7 +1011,7 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
 
   it('rolls back a miss when auto-shift would exceed the supported calendar', async () => {
     const input = body();
-    input.start_date = '9999-12-30';
+    input.start_date = '2026-10-25';
     input.end_date = '9999-12-31';
     input.auto_shift = true;
     input.phases = [
@@ -996,17 +1020,23 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
         goal: 'Calendar',
         weeks: [
           {
-            start_date: input.start_date,
-            end_date: input.end_date,
+            start_date: '2026-10-25',
+            end_date: '2026-10-31',
             sessions: [
               {
                 name: 'Miss',
-                scheduled_date: input.start_date,
+                scheduled_date: '2026-10-25',
                 workout_plan_id: planId,
               },
+            ],
+          },
+          {
+            start_date: '9999-12-25',
+            end_date: '9999-12-31',
+            sessions: [
               {
                 name: 'Future',
-                scheduled_date: input.end_date,
+                scheduled_date: '9999-12-31',
                 workout_plan_id: planId,
               },
             ],
@@ -1031,6 +1061,93 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
       ).status
     ).toBe(409);
     expect(await reload(saved.id)).toEqual(saved);
+  });
+
+  describe("missed outcomes are bounded by the athlete's today", () => {
+    it('rejects a missed outcome on a future session without shifting or recording anything', async () => {
+      const edit = editable(program);
+      edit.auto_shift = true;
+      expect((await update(edit)).status).toBe(200);
+      const before = await reload();
+      setToday('2026-10-24');
+      try {
+        const response = await outcome(sessions(before)[0]!.id, {
+          status: 'missed',
+        });
+        expect(response.status).toBe(409);
+        expect(response.body.error).toMatch(/after today/);
+      } finally {
+        setToday(DEFAULT_TODAY);
+      }
+      expect(await reload()).toEqual(before);
+    });
+
+    it('accepts a missed outcome on the session day itself and after it', async () => {
+      const [first, second] = sessions(program);
+      setToday('2026-10-25');
+      try {
+        expect((await outcome(first!.id, { status: 'missed' })).status).toBe(
+          200
+        );
+        expect((await outcome(second!.id, { status: 'missed' })).status).toBe(
+          409
+        );
+      } finally {
+        setToday(DEFAULT_TODAY);
+      }
+      expect((await outcome(second!.id, { status: 'missed' })).status).toBe(
+        200
+      );
+    });
+
+    it('evaluates today in the athlete timezone, not UTC', async () => {
+      const db = await getSystemClient();
+      try {
+        await db.query(
+          `INSERT INTO user_preferences(user_id, timezone) VALUES ($1, 'Pacific/Kiritimati')
+           ON CONFLICT (user_id) DO UPDATE SET timezone = EXCLUDED.timezone`,
+          [owner]
+        );
+      } finally {
+        db.release();
+      }
+      // 2026-10-24T12:00Z is already 2026-10-25 (UTC+14) in Kiritimati.
+      setToday('2026-10-24');
+      try {
+        const first = sessions(program)[0]!;
+        expect((await outcome(first.id, { status: 'missed' })).status).toBe(
+          200
+        );
+      } finally {
+        setToday(DEFAULT_TODAY);
+        const cleanup = await getSystemClient();
+        try {
+          await cleanup.query(
+            'UPDATE user_preferences SET timezone = $2 WHERE user_id = $1',
+            [owner, 'UTC']
+          );
+        } finally {
+          cleanup.release();
+        }
+      }
+    });
+
+    it('does not require the date rule for completed outcomes', async () => {
+      setToday('2026-10-24');
+      try {
+        const workout = await diaryWorkout('individual');
+        expect(
+          (
+            await outcome(sessions(program)[0]!.id, {
+              status: 'completed',
+              workout,
+            })
+          ).status
+        ).toBe(200);
+      } finally {
+        setToday(DEFAULT_TODAY);
+      }
+    });
   });
 
   it('serializes concurrent retry misses to one shift and competing completion links to one winner', async () => {

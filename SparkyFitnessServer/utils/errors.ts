@@ -5,6 +5,22 @@ export class ValidationError extends Error {
   }
 }
 
+/**
+ * An error that carries the HTTP status the centralized error handler should
+ * answer with. Use it for expected, client-facing failures (404, 409, ...)
+ * raised below the route layer; its message is returned to the caller as-is,
+ * so never wrap a raw database error in it.
+ */
+export class HttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number
+  ) {
+    super(message);
+    this.name = 'HttpError';
+  }
+}
+
 // A thrown value only has to be renderable, not an Error, and `error.message`
 // on its own is not always enough to diagnose one. Node's Happy Eyeballs
 // connector rejects with an `AggregateError` whose `message` is the empty

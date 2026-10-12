@@ -8,6 +8,7 @@ on:
       - "SparkyFitnessMobile/**"
       - "SparkyFitnessServer/**"
       - "SparkyFitnessGarmin/**"
+      - "shared/**"
       - ".github/workflows/ci-tests.yml"
   push:
     branches: [main]
@@ -16,6 +17,7 @@ on:
       - "SparkyFitnessMobile/**"
       - "SparkyFitnessServer/**"
       - "SparkyFitnessGarmin/**"
+      - "shared/**"
       - ".github/workflows/ci-tests.yml"
 
 jobs:
@@ -40,8 +42,10 @@ jobs:
           filters: |
             frontend:
               - 'SparkyFitnessFrontend/**'
+              - 'shared/**'
             mobile:
               - 'SparkyFitnessMobile/**'
+              - 'shared/**'
             server:
               - 'SparkyFitnessServer/**'
             garmin:
@@ -191,6 +195,9 @@ jobs:
           # here; it is exercised in the migration-check job (which provisions
           # Postgres). Without this it would fail trying to connect.
           SKIP_RLS_MATRIX: "1"
+          # Same reason: the Training Program integration suite needs Postgres
+          # and runs in the migration-check job instead.
+          SKIP_TRAINING_PROGRAM_DB: "1"
 
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
@@ -265,9 +272,9 @@ jobs:
       # The schema + RLS policies are now applied and the non-superuser app role
       # exists, so the permission matrix can verify every table's real RLS
       # behaviour as the app role (superuser DB user seeds, app role is enforced).
-      - name: Verify RLS, Strava cleanup, OIDC providers, Better Auth schema, sign-in rate limits, provider sync claims and startup locking
+      - name: Verify RLS, Strava cleanup, OIDC providers, Better Auth schema, sign-in rate limits, provider sync claims, Training Programs and startup locking
         run: |
-          pnpm exec vitest run tests/rlsPermissionMatrix.integration.test.ts tests/stravaActivityDetailCleanup.integration.test.ts tests/betterAuthSchemaCheck.integration.test.ts tests/oidcProviderRepository.integration.test.ts tests/authRateLimitDatabase.integration.test.ts tests/providerSyncClaim.integration.test.ts
+          pnpm exec vitest run tests/rlsPermissionMatrix.integration.test.ts tests/stravaActivityDetailCleanup.integration.test.ts tests/betterAuthSchemaCheck.integration.test.ts tests/oidcProviderRepository.integration.test.ts tests/authRateLimitDatabase.integration.test.ts tests/providerSyncClaim.integration.test.ts tests/trainingPrograms.integration.test.ts
           # Initialization reapplies policies, so run it after the other database tests.
           RUN_DATABASE_INITIALIZATION_TEST=1 pnpm exec vitest run tests/initializeDatabase.integration.test.ts
         env:

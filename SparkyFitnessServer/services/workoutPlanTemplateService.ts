@@ -2,6 +2,7 @@ import workoutPlanTemplateRepository from '../models/workoutPlanTemplateReposito
 import workoutPresetRepository from '../models/workoutPresetRepository.js';
 import exerciseRepository from '../models/exerciseRepository.js';
 import { log } from '../config/logging.js';
+import { HttpError } from '../utils/errors.js';
 import { resolveTemplateStartDay } from '../utils/timezoneLoader.js';
 
 export interface WorkoutPlanAssignmentSetInput {
@@ -362,7 +363,13 @@ async function deleteWorkoutPlanTemplate(
       `Error deleting workout plan template ${templateId} for user ${userId}: ${message}`,
       error
     );
-    throw error;
+    // Expected conflicts (e.g. a plan still used by a Training Program) carry
+    // a client-safe message and status; anything else may be a raw database
+    // error, so it is wrapped before it can reach the API response.
+    if (error instanceof HttpError) throw error;
+    throw new Error('Failed to delete workout plan template.', {
+      cause: error,
+    });
   }
 }
 
