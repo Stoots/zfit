@@ -1,0 +1,35 @@
+name: Deployment Smoke Checks
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'scripts/deployment-smoke*'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/deployment-smoke-checks.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/deployment-smoke*'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/deployment-smoke-checks.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: pnpm install --filter . --frozen-lockfile --ignore-scripts
+      - run: pnpm exec prettier scripts/deployment-smoke*.mjs --check
+      - run: pnpm deployment:check
