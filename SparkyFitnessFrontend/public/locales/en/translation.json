@@ -72,6 +72,7 @@
     "sessionDate": "Session date",
     "workoutPlan": "Workout Plan",
     "choosePlan": "Choose a Workout Plan",
+    "planRequired": "Phase {{phase}}, week {{week}}, session {{session}}: choose a Workout Plan.",
     "addPhase": "Add phase",
     "addWeek": "Add week",
     "addSession": "Add Planned Session",

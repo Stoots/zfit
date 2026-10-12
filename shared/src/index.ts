@@ -205,6 +205,7 @@ export * from "./schemas/database/MindfulnessSessions.zod.ts";
 export * from "./types/progression.ts";
 export * from "./utils/exerciseMuscleAggregates.ts";
 export * from "./utils/trainingConsistency.ts";
+export * from "./utils/dashboardWorkoutPlans.ts";
 export * from "./utils/muscleBodyMap.ts";
 export * from "./utils/workoutHeartRateSeries.ts";
 export * from "./utils/cardioSession.ts";

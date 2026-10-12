@@ -12,6 +12,17 @@ import {
   recordTrainingProgramOutcome,
 } from '@/api/TrainingPrograms/trainingPrograms';
 import { getWorkoutPlanTemplates } from '@/api/Exercises/workoutPlanTemplates';
+import { workoutPlanKeys } from '@/hooks/Exercises/useWorkoutPlans';
+import { exerciseEntryKeys, trainingProgramKeys } from '@/api/keys/exercises';
+import { dailyProgressKeys } from '@/api/keys/diary';
+
+export function useTrainingProgramsList(userId?: string, enabled = true) {
+  return useQuery({
+    queryKey: trainingProgramKeys.list(userId),
+    queryFn: getTrainingPrograms,
+    enabled: enabled && !!userId,
+  });
+}
 
 export function useTrainingPrograms(
   userId: string,
@@ -20,19 +31,20 @@ export function useTrainingPrograms(
 ) {
   const { t } = useTranslation();
   const client = useQueryClient();
-  const key = ['trainingPrograms', userId];
-  const programs = useQuery({
-    queryKey: [...key, 'list'],
-    queryFn: getTrainingPrograms,
-    enabled,
-  });
+  const invalidateDependents = () => {
+    void client.invalidateQueries({ queryKey: trainingProgramKeys.all });
+    void client.invalidateQueries({ queryKey: workoutPlanKeys.all });
+    void client.invalidateQueries({ queryKey: exerciseEntryKeys.all });
+    void client.invalidateQueries({ queryKey: dailyProgressKeys.all });
+  };
+  const programs = useTrainingProgramsList(userId, enabled);
   const program = useQuery({
-    queryKey: [...key, 'detail', id],
+    queryKey: trainingProgramKeys.detail(userId, id),
     queryFn: () => getTrainingProgram(id!),
     enabled: enabled && !!id,
   });
   const plans = useQuery({
-    queryKey: ['workoutPlanTemplates', 'trainingPrograms', userId],
+    queryKey: [...workoutPlanKeys.lists(), 'owned', userId],
     queryFn: async () =>
       (await getWorkoutPlanTemplates()).filter(
         (plan) => plan.user_id === userId
@@ -48,8 +60,8 @@ export function useTrainingPrograms(
       id?: string;
     }) => saveTrainingProgram(input, programId),
     onSuccess: (saved) => {
-      client.setQueryData([...key, 'detail', saved.id], saved);
-      void client.invalidateQueries({ queryKey: key });
+      client.setQueryData(trainingProgramKeys.detail(userId, saved.id), saved);
+      invalidateDependents();
     },
     meta: {
       successMessage: t('trainingPrograms.saved', 'Training Program saved.'),
@@ -58,8 +70,10 @@ export function useTrainingPrograms(
   const remove = useMutation({
     mutationFn: deleteTrainingProgram,
     onSuccess: (_data, programId) => {
-      client.removeQueries({ queryKey: [...key, 'detail', programId] });
-      void client.invalidateQueries({ queryKey: key });
+      client.removeQueries({
+        queryKey: trainingProgramKeys.detail(userId, programId),
+      });
+      invalidateDependents();
     },
     meta: {
       successMessage: t(
@@ -79,8 +93,8 @@ export function useTrainingPrograms(
       input: TrainingProgramOutcomeInput;
     }) => recordTrainingProgramOutcome(programId, sessionId, input),
     onSuccess: (saved) => {
-      client.setQueryData([...key, 'detail', saved.id], saved);
-      void client.invalidateQueries({ queryKey: key });
+      client.setQueryData(trainingProgramKeys.detail(userId, saved.id), saved);
+      invalidateDependents();
     },
     meta: {
       successMessage: t(

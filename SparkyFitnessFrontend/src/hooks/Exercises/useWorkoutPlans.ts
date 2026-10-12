@@ -8,6 +8,7 @@ import {
   updateWorkoutPlanTemplate,
   deleteWorkoutPlanTemplate,
 } from '@/api/Exercises/workoutPlanTemplates';
+import { trainingProgramKeys } from '@/api/keys/exercises';
 import type { WorkoutPlanTemplate } from '@/types/workout';
 
 export const workoutPlanKeys = {
@@ -82,6 +83,7 @@ export const useCreateWorkoutPlanTemplateMutation = () => {
     }) => createWorkoutPlanTemplate(userId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: workoutPlanKeys.all });
+      queryClient.invalidateQueries({ queryKey: trainingProgramKeys.all });
     },
     meta: {
       successMessage: t(
@@ -110,6 +112,7 @@ export const useUpdateWorkoutPlanTemplateMutation = () => {
     }) => updateWorkoutPlanTemplate(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: workoutPlanKeys.all });
+      queryClient.invalidateQueries({ queryKey: trainingProgramKeys.all });
     },
     meta: {
       errorMessage: t(
@@ -146,6 +149,7 @@ export const useDeleteWorkoutPlanTemplateMutation = () => {
     mutationFn: (id: string) => deleteWorkoutPlanTemplate(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: workoutPlanKeys.all });
+      queryClient.invalidateQueries({ queryKey: trainingProgramKeys.all });
     },
     meta: {
       successMessage: t(

@@ -7,6 +7,7 @@ import {
   dailySummaryQueryKey,
   workoutSessionQueryKeyRoot,
   workoutLocationsQueryKey,
+  trainingProgramsQueryKey,
 } from './queryKeys';
 
 export function invalidateExerciseCache(
@@ -46,5 +47,9 @@ export function invalidateExerciseCache(
   });
   void queryClient.invalidateQueries({
     queryKey: ['workoutPlanTemplates'],
+  });
+  // Logging a planned session completes it in its Program.
+  void queryClient.invalidateQueries({
+    queryKey: [...trainingProgramsQueryKey],
   });
 }

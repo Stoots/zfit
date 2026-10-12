@@ -4,6 +4,7 @@ import {
   exerciseEntryKeys,
   exerciseKeys,
   presetKeys,
+  trainingProgramKeys,
 } from '@/api/keys/exercises';
 import {
   caffeineKeys,
@@ -43,6 +44,7 @@ export const useDiaryInvalidation = () => {
     queryClient.invalidateQueries({ queryKey: goalKeys.all });
     queryClient.invalidateQueries({ queryKey: reportKeys.all });
     queryClient.invalidateQueries({ queryKey: ['workoutPlanTemplates'] });
+    queryClient.invalidateQueries({ queryKey: trainingProgramKeys.all });
     queryClient.invalidateQueries({ queryKey: fastingKeys.all });
   }, [queryClient]);
 };
@@ -114,6 +116,7 @@ export const useExerciseInvalidation = () => {
     queryClient.invalidateQueries({ queryKey: exerciseKeys.all });
     queryClient.invalidateQueries({ queryKey: presetKeys.all });
     queryClient.invalidateQueries({ queryKey: ['workoutPlanTemplates'] });
+    queryClient.invalidateQueries({ queryKey: trainingProgramKeys.all });
     queryClient.invalidateQueries({ queryKey: exerciseEntryKeys.all });
     queryClient.invalidateQueries({ queryKey: dailyProgressKeys.all });
     queryClient.invalidateQueries({ queryKey: diaryReportKeys.all });

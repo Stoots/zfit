@@ -37,6 +37,14 @@ export const workoutCoachingKeys = {
   suggestions: () => [...workoutCoachingKeys.all, 'suggestions'] as const,
 };
 
+export const trainingProgramKeys = {
+  all: ['trainingPrograms'] as const,
+  list: (userId: string | undefined) =>
+    [...trainingProgramKeys.all, userId, 'list'] as const,
+  detail: (userId: string | undefined, id: string | undefined) =>
+    [...trainingProgramKeys.all, userId, 'detail', id] as const,
+};
+
 export const presetKeys = {
   all: ['workoutPresets'] as const,
   lists: () => [...presetKeys.all, 'list'] as const,

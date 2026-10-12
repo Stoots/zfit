@@ -13,7 +13,11 @@ import {
   getExerciseHistory,
   fetchWorkoutLocations,
 } from '@/api/Exercises/exerciseEntryService';
-import { exerciseEntryKeys, exerciseKeys } from '@/api/keys/exercises';
+import {
+  exerciseEntryKeys,
+  exerciseKeys,
+  trainingProgramKeys,
+} from '@/api/keys/exercises';
 import i18n from '@/i18n';
 import { dailyProgressKeys } from '@/api/keys/diary';
 import { UpdateExerciseEntryRequest } from '@workspace/shared';
@@ -138,6 +142,7 @@ export const useLogWorkoutPresetMutation = () => {
       queryClient.invalidateQueries({
         queryKey: ['workoutPlanTemplates'],
       });
+      queryClient.invalidateQueries({ queryKey: trainingProgramKeys.all });
     },
     meta: {
       successMessage: t(
@@ -162,6 +167,7 @@ export const useCreatePresetSessionMutation = () => {
       queryClient.invalidateQueries({ queryKey: exerciseEntryKeys.all });
       queryClient.invalidateQueries({ queryKey: dailyProgressKeys.all });
       queryClient.invalidateQueries({ queryKey: ['workoutPlanTemplates'] });
+      queryClient.invalidateQueries({ queryKey: trainingProgramKeys.all });
     },
     meta: {
       successMessage: t(
@@ -188,6 +194,7 @@ export const useDeleteExercisePresetEntryMutation = () => {
         queryKey: dailyProgressKeys.all,
       });
       queryClient.invalidateQueries({ queryKey: ['workoutPlanTemplates'] });
+      queryClient.invalidateQueries({ queryKey: trainingProgramKeys.all });
     },
     meta: {
       successMessage: t(

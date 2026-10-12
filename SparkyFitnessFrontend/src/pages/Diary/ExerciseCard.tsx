@@ -9,20 +9,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
-import {
-  Dumbbell,
-  Play,
-  Repeat,
-  ChevronDown,
-  CalendarDays,
-} from 'lucide-react';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import { Badge } from '@/components/ui/badge';
+import { Dumbbell, Play } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { useActiveUser } from '@/contexts/ActiveUserContext';
@@ -40,6 +27,7 @@ import type {
   WorkoutPlanTemplate,
 } from '@/types/workout';
 import { formatMinutesToHHMM } from '@/utils/timeFormatters';
+import DashboardPlanCard from './DashboardPlanCard';
 import ExerciseEntryDisplay from './ExerciseEntryDisplay';
 import ExercisePresetEntryDisplay from './ExercisePresetEntryDisplay';
 import EditExerciseDatabaseDialog from './EditExerciseDatabaseDialog';
@@ -51,6 +39,7 @@ import {
   useExerciseEntries,
 } from '@/hooks/Exercises/useExerciseEntries';
 import { useActiveWorkoutPlans } from '@/hooks/Exercises/useWorkoutPlans';
+import { useTrainingProgramsList } from '@/hooks/TrainingPrograms/useTrainingPrograms';
 import {
   useWorkoutPresets,
   workoutPresetByIdOptions,
@@ -60,6 +49,7 @@ import {
   resolveExerciseCalories,
   resolveExerciseModality,
   setsDurationMinutes,
+  selectDashboardWorkoutPlans,
 } from '@workspace/shared';
 import { defaultSetForModality } from '@/constants/exercises';
 import { generateClientId } from '@/utils/generateClientId';
@@ -97,7 +87,7 @@ const ExerciseCard = ({
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { activeUserId } = useActiveUser();
+  const { activeUserId, isActingOnBehalf } = useActiveUser();
   const { loggingLevel, energyUnit, convertEnergy, getEnergyUnitString } =
     usePreferences();
   debug(
@@ -127,9 +117,6 @@ const ExerciseCard = ({
   ] = useState(false);
   const [exerciseToEditInDatabase, setExerciseToEditInDatabase] =
     useState<Exercise | null>(null);
-  const [selectedSessionMap, setSelectedSessionMap] = useState<
-    Record<string | number, string | number>
-  >({});
 
   const currentUserId = activeUserId || user?.id;
   debug(loggingLevel, 'Current user ID:', currentUserId);
@@ -142,6 +129,8 @@ const ExerciseCard = ({
     selectedDate,
     currentUserId
   );
+  const { data: trainingPrograms, isError: trainingProgramsError } =
+    useTrainingProgramsList(user?.id, !isActingOnBehalf);
 
   const { data: presetData } = useWorkoutPresets(currentUserId);
   const workoutPresets = useMemo(() => presetData?.presets ?? [], [presetData]);
@@ -614,74 +603,32 @@ const ExerciseCard = ({
     return ids;
   }, [exerciseEntries]);
 
-  const uncompletedActivePlans = useMemo(() => {
-    return (activePlans as WorkoutPlanTemplate[]).filter(
-      (plan: WorkoutPlanTemplate) => {
-        if (!plan.next_assignment) return false;
-        const planAssignmentIds = (plan.assignments || []).map(
-          (a: WorkoutPlanAssignment) => String(a.id)
-        );
-        const isPlanCompletedToday = planAssignmentIds.some((id: string) =>
-          loggedAssignmentIds.has(id)
-        );
-        return !isPlanCompletedToday;
-      }
-    );
-  }, [activePlans, loggedAssignmentIds]);
-
-  const getDistinctSessionsForPlan = (plan: WorkoutPlanTemplate) => {
-    if (!plan.assignments || plan.assignments.length === 0) return [];
-    const map = new Map<
-      number | string,
-      {
-        assignment: WorkoutPlanAssignment;
-        sessionIndex: number;
-        name: string;
-        exerciseCount: number;
-        isSuggested: boolean;
-      }
-    >();
-
-    for (const a of plan.assignments) {
-      const key =
-        plan.schedule_type === 'sequential'
-          ? (a.session_index ?? 0)
-          : (a.day_of_week ?? 0);
-      const isSuggested =
-        plan.schedule_type === 'sequential'
-          ? (a.session_index ?? 0) ===
-            (plan.next_assignment?.session_index ?? 0)
-          : a.id === plan.next_assignment?.id;
-
-      const existing = map.get(key);
-      if (existing) {
-        existing.exerciseCount += 1;
-        if (isSuggested) existing.isSuggested = true;
-      } else {
-        const name =
-          a.session_name ||
-          a.workout_preset_name ||
-          a.exercise_name ||
-          (plan.schedule_type === 'sequential'
-            ? t('exerciseCard.sessionNumber', {
-                num: a.session_index ?? 1,
-                defaultValue: `Session ${a.session_index ?? 1}`,
-              })
-            : t('exerciseCard.dayNumber', {
-                num: (a.day_of_week ?? 0) + 1,
-                defaultValue: `Day ${(a.day_of_week ?? 0) + 1}`,
-              }));
-        map.set(key, {
-          assignment: a,
-          sessionIndex: a.session_index ?? 1,
-          name,
-          exerciseCount: 1,
-          isSuggested,
-        });
-      }
+  const { programPlan, standalonePlans } = useMemo(() => {
+    const none = { programPlan: undefined, standalonePlans: [] };
+    // Without the schedule, linked plans cannot be distinguished from standalone
+    // plans. Do not briefly display the entire program while it loads.
+    if (!isActingOnBehalf && !trainingPrograms && !trainingProgramsError) {
+      return none;
     }
-    return Array.from(map.values());
-  };
+    const eligiblePlans = activePlans.filter((plan: WorkoutPlanTemplate) => {
+      if (!plan.next_assignment) return false;
+      return !(plan.assignments || []).some((assignment) =>
+        loggedAssignmentIds.has(String(assignment.id))
+      );
+    });
+    // Programs are owner-only, and a failed schedule lookup falls back to the
+    // pre-Program behaviour of listing every eligible plan.
+    if (isActingOnBehalf || trainingProgramsError || !trainingPrograms) {
+      return { programPlan: undefined, standalonePlans: eligiblePlans };
+    }
+    return selectDashboardWorkoutPlans(eligiblePlans, trainingPrograms);
+  }, [
+    activePlans,
+    trainingPrograms,
+    trainingProgramsError,
+    loggedAssignmentIds,
+    isActingOnBehalf,
+  ]);
 
   if (loading) {
     return <div>Loading exercises...</div>;
@@ -737,145 +684,22 @@ const ExerciseCard = ({
         </div>
       </CardHeader>
       <CardContent>
-        {uncompletedActivePlans.map((plan: WorkoutPlanTemplate) => {
-          const distinctSessions = getDistinctSessionsForPlan(plan);
-          const currentAssignmentId =
-            selectedSessionMap[plan.id] ||
-            (plan.next_assignment?.id ? String(plan.next_assignment.id) : '');
-          const currentSessionItem =
-            distinctSessions.find(
-              (s) => String(s.assignment.id) === String(currentAssignmentId)
-            ) ||
-            distinctSessions.find(
-              (s) =>
-                String(s.assignment.id) === String(plan.next_assignment?.id)
-            ) ||
-            distinctSessions[0];
-          const currentAssignment =
-            currentSessionItem?.assignment || plan.next_assignment;
-          if (!currentAssignment) return null;
-
-          const sessionName =
-            currentAssignment.session_name ||
-            currentAssignment.workout_preset_name ||
-            currentAssignment.exercise_name ||
-            t('exerciseCard.scheduledWorkout', 'Workout Session');
-
-          const sessionIndex =
-            currentAssignment.session_index ??
-            (plan.sequence_position?.current || 1);
-          const totalSessions =
-            plan.sequence_position?.total ?? distinctSessions.length ?? 1;
-
-          return (
-            <div
-              key={plan.id}
-              className="mb-3 p-3.5 rounded-lg border bg-muted/40 hover:bg-muted/60 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-            >
-              <div className="space-y-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Badge
-                    variant="secondary"
-                    className="text-xs font-semibold gap-1"
-                  >
-                    {plan.schedule_type === 'sequential' ? (
-                      <>
-                        <Repeat className="h-3 w-3 text-primary" />
-                        {t('exerciseCard.upNextInPlanBadge', 'Plan Up Next')}
-                      </>
-                    ) : (
-                      <>
-                        <CalendarDays className="h-3 w-3 text-primary" />
-                        {t(
-                          'exerciseCard.scheduledTodayBadge',
-                          'Scheduled Today'
-                        )}
-                      </>
-                    )}
-                  </Badge>
-                  {distinctSessions.length > 1 ? (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 px-2 font-semibold text-sm gap-1 hover:bg-muted/80 text-foreground"
-                        >
-                          <span>{sessionName}</span>
-                          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="start" className="w-56">
-                        <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-                          {t(
-                            'exerciseCard.switchSessionLabel',
-                            'Switch / Pick Session:'
-                          )}
-                        </div>
-                        {distinctSessions.map((sessionItem, index: number) => (
-                          <DropdownMenuItem
-                            key={sessionItem.assignment.id || index}
-                            onClick={() =>
-                              setSelectedSessionMap((prev) => ({
-                                ...prev,
-                                [plan.id]: sessionItem.assignment.id ?? '',
-                              }))
-                            }
-                            className="flex items-center justify-between gap-2 cursor-pointer"
-                          >
-                            <span className="truncate">
-                              {index + 1}. {sessionItem.name}
-                            </span>
-                            {sessionItem.isSuggested && (
-                              <Badge
-                                variant="secondary"
-                                className="text-[10px] px-1.5 py-0 shrink-0"
-                              >
-                                {t('exerciseCard.suggestedBadge', 'Suggested')}
-                              </Badge>
-                            )}
-                          </DropdownMenuItem>
-                        ))}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  ) : (
-                    <span className="font-semibold text-sm">{sessionName}</span>
-                  )}
-                  {plan.schedule_type === 'sequential' && (
-                    <span className="text-xs text-muted-foreground font-medium">
-                      ({sessionIndex} of {totalSessions})
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {plan.schedule_type === 'sequential'
-                    ? t(
-                        'exerciseCard.activePlanHint',
-                        'Sequential plan: {{name}}',
-                        { name: plan.plan_name }
-                      )
-                    : t(
-                        'exerciseCard.activeWeeklyPlanHint',
-                        'Active plan: {{name}}',
-                        { name: plan.plan_name }
-                      )}
-                </p>
-              </div>
-              <div className="flex items-center shrink-0">
-                <Button
-                  size="sm"
-                  variant="default"
-                  onClick={() =>
-                    handleStartPlanSession(plan, currentAssignment)
-                  }
-                >
-                  <Play className="w-3.5 h-3.5 mr-1" />
-                  {t('exerciseCard.startWorkoutButton', 'Start Workout')}
-                </Button>
-              </div>
-            </div>
-          );
-        })}
+        {programPlan && (
+          <DashboardPlanCard
+            key={`program-${programPlan.id}`}
+            plan={programPlan}
+            allowSessionPicker={false}
+            onStart={handleStartPlanSession}
+          />
+        )}
+        {standalonePlans.map((plan: WorkoutPlanTemplate) => (
+          <DashboardPlanCard
+            key={plan.id}
+            plan={plan}
+            allowSessionPicker
+            onStart={handleStartPlanSession}
+          />
+        ))}
 
         {exerciseEntries?.length === 0 ? (
           <p className="dark:text-slate-300">
