@@ -703,6 +703,18 @@ const WorkoutPlaybackPage = () => {
     [updateDraft]
   );
 
+  const handleExerciseNotesChange = useCallback(
+    (exerciseIndex: number, value: string) => {
+      updateDraft((currentDraft) => ({
+        ...currentDraft,
+        exercises: currentDraft.exercises.map((exercise, index) =>
+          index === exerciseIndex ? { ...exercise, notes: value } : exercise
+        ),
+      }));
+    },
+    [updateDraft]
+  );
+
   const handleSessionNotesChange = useCallback(
     (value: string) => {
       updateDraft((currentDraft) => ({ ...currentDraft, notes: value }));
@@ -745,12 +757,15 @@ const WorkoutPlaybackPage = () => {
     [timezone]
   );
 
-  const toggleSetNotesVisibility = useCallback((setKey: string) => {
-    setSetNotesVisibility((current) => ({
-      ...current,
-      [setKey]: !current[setKey],
-    }));
-  }, []);
+  const toggleSetNotesVisibility = useCallback(
+    (setKey: string, visible: boolean) => {
+      setSetNotesVisibility((current) => ({
+        ...current,
+        [setKey]: !visible,
+      }));
+    },
+    []
+  );
 
   const handleAddSet = useCallback(
     (exerciseIndex: number) => {
@@ -1156,6 +1171,7 @@ const WorkoutPlaybackPage = () => {
         onCompleteSet={handleCompleteSet}
         onUncompleteSet={handleUncompleteSet}
         onSetFieldChange={handleSetFieldChange}
+        onExerciseNotesChange={handleExerciseNotesChange}
         onOpenRestEditor={handleOpenRestEditor}
         onRemoveSet={handleRemoveSet}
         onAddSet={handleAddSet}

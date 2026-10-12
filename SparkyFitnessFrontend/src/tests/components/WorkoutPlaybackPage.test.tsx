@@ -2,26 +2,20 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import WorkoutPlaybackPage from '@/pages/Diary/WorkoutPlaybackPage';
 import type { WorkoutPreset } from '@/types/workout';
-import { createWorkoutPlaybackDraftFromPreset } from '@/utils/workoutPlayback';
+import {
+  buildPresetSessionCreateRequestFromDraft,
+  createWorkoutPlaybackDraftFromPreset,
+  loadWorkoutPlaybackDraftFromStorage,
+} from '@/utils/workoutPlayback';
 
 const mockNavigate = jest.fn();
 const mockCreatePresetSession = jest.fn();
 const mockSearchParams = new URLSearchParams('date=2026-04-27');
 let mockLocationState: { returnTo?: string; draft?: unknown } | null = null;
 
-jest.mock('react-i18next', () => ({
-  useTranslation: () => ({
-    t: (
-      key: string,
-      defaultValue?: string,
-      values?: Record<string, string | number>
-    ) =>
-      (defaultValue || key).replace(
-        '{{setNumber}}',
-        String(values?.['setNumber'] ?? '{{setNumber}}')
-      ),
-  }),
-}));
+jest.mock('react-i18next', () =>
+  jest.requireActual('@/tests/mocks/reactI18next')
+);
 
 jest.mock('react-router-dom', () => ({
   useNavigate: () => mockNavigate,
@@ -39,6 +33,14 @@ jest.mock('@/hooks/Exercises/useExerciseEntries', () => ({
     isPending: false,
   }),
   useWorkoutLocations: () => ({ data: ['Home Gym', 'Downtown'] }),
+  fetchExerciseProgressionStats: jest.fn(async () => null),
+}));
+
+jest.mock('@/hooks/Exercises/useWorkoutCoaching', () => ({
+  fetchWorkoutCoachingSignals: jest.fn(async () => ({
+    adaptive_suggestions: false,
+    signals: [],
+  })),
 }));
 
 const presetFixture: WorkoutPreset = {
@@ -294,6 +296,102 @@ describe('WorkoutPlaybackPage', () => {
     expect(screen.queryByLabelText('Set notes 1')).not.toBeInTheDocument();
     fireEvent.click(screen.getAllByLabelText('Toggle notes for set 1')[0]!);
     expect(screen.getByLabelText('Set notes 1')).toBeInTheDocument();
+  });
+
+  it('shows prescribed notes and retains edited effort and notes after resuming', async () => {
+    const preset = {
+      ...presetFixture,
+      exercises: [
+        {
+          ...presetFixture.exercises[0],
+          notes: 'Keep the shoulders down.',
+          sets: [
+            {
+              set_number: 1,
+              reps: 8,
+              weight: 80,
+              rest_time: 90,
+              notes: 'Pause at the bottom.',
+            },
+          ],
+        },
+      ],
+    } as unknown as WorkoutPreset;
+    mockLocationState = {
+      draft: createWorkoutPlaybackDraftFromPreset(preset, '2026-04-27'),
+    };
+    const view = render(<WorkoutPlaybackPage />);
+
+    expect(screen.getByLabelText('Exercise notes for Bench Press')).toHaveValue(
+      'Keep the shoulders down.'
+    );
+    expect(screen.getByLabelText('Set notes 1')).toHaveValue(
+      'Pause at the bottom.'
+    );
+    fireEvent.click(screen.getByLabelText('Toggle notes for set 1'));
+    expect(screen.queryByLabelText('Set notes 1')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('Toggle notes for set 1'));
+    fireEvent.change(screen.getByLabelText('RPE set 1'), {
+      target: { value: '8.5' },
+    });
+    fireEvent.change(screen.getByLabelText('Exercise notes for Bench Press'), {
+      target: { value: 'Use a narrower grip next time.' },
+    });
+    fireEvent.change(screen.getByLabelText('Set notes 1'), {
+      target: { value: 'Controlled pause.' },
+    });
+    fireEvent.click(screen.getByLabelText('Complete set 1'));
+
+    await waitFor(() => {
+      const saved = loadWorkoutPlaybackDraftFromStorage('2026-04-27');
+      expect(saved?.exercises[0]?.sets[0]?.rpe).toBe(8.5);
+    });
+    view.unmount();
+    mockLocationState = null;
+    render(<WorkoutPlaybackPage />);
+    fireEvent.click(screen.getByLabelText('Expand Bench Press'));
+    expect(screen.getByLabelText('RPE set 1')).toHaveValue(8.5);
+    expect(screen.getByLabelText('Exercise notes for Bench Press')).toHaveValue(
+      'Use a narrower grip next time.'
+    );
+    expect(screen.getByLabelText('Set notes 1')).toHaveValue(
+      'Controlled pause.'
+    );
+    const saved = loadWorkoutPlaybackDraftFromStorage('2026-04-27')!;
+    const payload = buildPresetSessionCreateRequestFromDraft(saved, 'UTC');
+    expect(payload.exercises?.[0]).toMatchObject({
+      notes: 'Use a narrower grip next time.',
+      sets: [{ rpe: 8.5, notes: 'Controlled pause.' }],
+    });
+  });
+
+  it('allows entering and clearing RPE for a timed exercise', async () => {
+    const preset = {
+      ...presetFixture,
+      exercises: [
+        {
+          exercise_id: 'bike',
+          exercise_name: 'Stationary bike',
+          modality: 'duration_distance',
+          sets: [{ set_number: 1, duration: 600, rpe: 6 }],
+        },
+      ],
+    } as unknown as WorkoutPreset;
+    mockLocationState = {
+      draft: createWorkoutPlaybackDraftFromPreset(preset, '2026-04-27'),
+    };
+    render(<WorkoutPlaybackPage />);
+    const rpe = screen.getByLabelText('RPE set 1');
+    expect(rpe).toHaveValue(6);
+    fireEvent.change(rpe, { target: { value: '7.5' } });
+    expect(rpe).toHaveValue(7.5);
+    fireEvent.change(rpe, { target: { value: '' } });
+    fireEvent.click(screen.getByLabelText('Complete set 1'));
+    await waitFor(() => {
+      const draft = loadWorkoutPlaybackDraftFromStorage('2026-04-27')!;
+      const payload = buildPresetSessionCreateRequestFromDraft(draft, 'UTC');
+      expect(payload.exercises?.[0]?.sets[0]?.rpe).toBeNull();
+    });
   });
 
   it('clears the start time when the clear button is clicked', () => {

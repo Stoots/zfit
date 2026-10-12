@@ -52,6 +52,7 @@ interface WorkoutPlaybackSetRowProps {
   reps: number | null | undefined;
   weight: number | null | undefined;
   duration: number | null | undefined;
+  rpe: number | null | undefined;
   /** Epoch ms the set's stopwatch started; null when not running. */
   timerStartedAtMs: number | null;
   restTime: number | null | undefined;
@@ -84,6 +85,7 @@ const WorkoutPlaybackSetRow = ({
   reps,
   weight,
   duration,
+  rpe,
   timerStartedAtMs,
   restTime,
   notes,
@@ -308,10 +310,36 @@ const WorkoutPlaybackSetRow = ({
             </>
           )}
 
+          <label className="col-span-1 min-w-0 sm:col-start-5">
+            <span className="text-xs text-muted-foreground sm:sr-only">
+              {t('workout.rpe', 'RPE')}
+            </span>
+            <Input
+              type="number"
+              inputMode="decimal"
+              min={0}
+              max={10}
+              step={0.5}
+              aria-label={t('workout.rpeSet', 'RPE set {{setNumber}}', {
+                setNumber,
+              })}
+              value={rpe ?? ''}
+              onClick={(event) => event.stopPropagation()}
+              onChange={(event) =>
+                onSetFieldChange(
+                  pointer,
+                  'rpe',
+                  event.target.value === '' ? null : Number(event.target.value)
+                )
+              }
+              className="w-full"
+            />
+          </label>
+
           <Button
             type="button"
             variant="outline"
-            className="col-span-1 w-full min-w-0 justify-center px-2 text-xs tabular-nums sm:col-start-5 sm:col-span-1"
+            className="col-span-1 w-full min-w-0 justify-center px-2 text-xs tabular-nums sm:col-start-6 sm:col-span-1"
             aria-label={`Edit rest for set ${setNumber}`}
             onClick={(event) => {
               event.stopPropagation();
@@ -322,13 +350,14 @@ const WorkoutPlaybackSetRow = ({
             {formatRestChip(restTime)}
           </Button>
 
-          <div className="col-span-1 flex items-center justify-end gap-1 sm:col-start-6 sm:col-span-1 sm:justify-center">
+          <div className="col-span-4 flex items-center justify-end gap-1 sm:col-start-7 sm:col-span-1 sm:justify-center">
             <Button
               type="button"
               variant="ghost"
               size="icon"
               className="cursor-pointer"
               aria-label={`Toggle notes for set ${setNumber}`}
+              aria-expanded={isNotesVisible}
               onClick={(event) => {
                 event.stopPropagation();
                 onToggleNotesVisibility(notesKey);
@@ -364,7 +393,7 @@ const WorkoutPlaybackSetRow = ({
                 'workout.notesPlaceholder',
                 'Add a note for this set...'
               )}
-              className="min-h-16 resize-none text-sm focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
+              className="col-span-4 min-h-16 resize-none text-sm sm:col-span-7"
             />
           )}
         </div>

@@ -8,6 +8,8 @@ import {
 } from '@workspace/shared';
 import type { WeightUnit } from '@/contexts/PreferencesContext';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   WORKOUT_PLAYBACK_SET_GRID_CLASSES,
   type WorkoutPlaybackExerciseDraft,
@@ -25,7 +27,7 @@ import {
 interface WorkoutPlaybackExercisesListProps {
   exercises: WorkoutPlaybackExerciseDraft[];
   setNotesVisibility: Record<string, boolean>;
-  onToggleSetNotesVisibility: (setKey: string) => void;
+  onToggleSetNotesVisibility: (setKey: string, visible: boolean) => void;
   onSelectSet: (pointer: WorkoutSetPointer) => void;
   onCompleteSet: (pointer: WorkoutSetPointer) => void;
   onUncompleteSet: (pointer: WorkoutSetPointer) => void;
@@ -34,6 +36,7 @@ interface WorkoutPlaybackExercisesListProps {
     field: WorkoutSetEditableField,
     value: number | string | null
   ) => void;
+  onExerciseNotesChange: (exerciseIndex: number, value: string) => void;
   onOpenRestEditor: (pointer: WorkoutSetPointer) => void;
   onRemoveSet: (pointer: WorkoutSetPointer) => void;
   onAddSet: (exerciseIndex: number) => void;
@@ -53,6 +56,7 @@ const WorkoutPlaybackExercisesList = ({
   onCompleteSet,
   onUncompleteSet,
   onSetFieldChange,
+  onExerciseNotesChange,
   onOpenRestEditor,
   onRemoveSet,
   onAddSet,
@@ -234,6 +238,9 @@ const WorkoutPlaybackExercisesList = ({
                         </>
                       )}
                       <div className="flex justify-center px-3">
+                        {t('workout.rpe', 'RPE')}
+                      </div>
+                      <div className="flex justify-center px-3">
                         {t('exercise.workoutPlaybackPage.columnRest', 'Rest')}
                       </div>
                       <div className="flex justify-end px-3">
@@ -256,15 +263,21 @@ const WorkoutPlaybackExercisesList = ({
                         reps={set.reps}
                         weight={set.weight}
                         duration={set.duration}
+                        rpe={set.rpe}
                         timerStartedAtMs={set.timer_started_at_ms ?? null}
                         restTime={set.rest_time}
                         notes={set.notes}
                         completed={set.completed}
                         isNotesVisible={
                           setNotesVisibility[`${exerciseKey}-${setIndex}`] ??
-                          false
+                          !!set.notes
                         }
-                        onToggleNotesVisibility={onToggleSetNotesVisibility}
+                        onToggleNotesVisibility={(key) =>
+                          onToggleSetNotesVisibility(
+                            key,
+                            setNotesVisibility[key] ?? !!set.notes
+                          )
+                        }
                         onSelectSet={onSelectSet}
                         onCompleteSet={onCompleteSet}
                         onUncompleteSet={onUncompleteSet}
@@ -276,6 +289,24 @@ const WorkoutPlaybackExercisesList = ({
                       />
                     );
                   })}
+                  <div className="mt-3 space-y-1.5">
+                    <Label htmlFor={`exercise-notes-${exerciseIndex}`}>
+                      {t('workout.exerciseNotes', 'Exercise notes')}
+                    </Label>
+                    <Textarea
+                      id={`exercise-notes-${exerciseIndex}`}
+                      aria-label={t(
+                        'workout.exerciseNotesNamed',
+                        'Exercise notes for {{name}}',
+                        { name: exercise.exercise_name }
+                      )}
+                      value={exercise.notes ?? ''}
+                      onChange={(event) =>
+                        onExerciseNotesChange(exerciseIndex, event.target.value)
+                      }
+                      className="min-h-16 resize-y text-sm"
+                    />
+                  </div>
                 </div>
 
                 <div className="mt-2 flex justify-center gap-3">

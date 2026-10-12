@@ -23,7 +23,7 @@ import { generateClientId } from '@/utils/generateClientId';
 
 export const DEFAULT_REST_SECONDS = 90;
 export const WORKOUT_PLAYBACK_SET_GRID_CLASSES =
-  'grid w-full min-w-[48rem] grid-cols-4 gap-2 sm:grid-cols-[7rem_10rem_5rem_6rem_6rem_6rem] sm:gap-x-6 sm:gap-y-2';
+  'grid w-full grid-cols-4 gap-2 sm:grid-cols-[minmax(6rem,1fr)_minmax(7rem,1.5fr)_repeat(3,minmax(0,1fr))_minmax(4rem,1fr)_minmax(5rem,1fr)]';
 
 export type WorkoutPlaybackRestState = 'idle' | 'running' | 'paused';
 
@@ -114,6 +114,7 @@ export type WorkoutSetEditableField =
   | 'duration'
   | 'rest_time'
   | 'set_type'
+  | 'rpe'
   | 'notes'
   | 'timer_started_at_ms';
 
