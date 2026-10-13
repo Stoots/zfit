@@ -924,6 +924,27 @@ describe.runIf(run)('persisted lossless Workout Program consolidation', () => {
     const active = workoutPlanResponseSchema.parse(reloaded.body);
     expect(active.is_active).toBe(true);
     expect(active.sessions).toStrictEqual(plan.sessions);
+    const activeResponse = await request(app)
+      .get(`/api/workout-plan-templates/active/${f.startDate}`)
+      .set('Authorization', `Bearer ${f.ownerToken}`);
+    expect(activeResponse.status).toBe(200);
+    const mobilePlan = activeResponse.body.find(
+      (item: { id: number }) => item.id === active.id
+    );
+    expect(
+      mobilePlan.assignments.map((assignment: { id: number }) => assignment.id)
+    ).toEqual(
+      active.sessions.flatMap((session) =>
+        session.assignments.map((assignment) => assignment.id)
+      )
+    );
+    expect(mobilePlan.sequence_position).toMatchObject({ total: 57 });
+    expect(mobilePlan.next_assignment).toMatchObject({
+      id: mobilePlan.next_assignments[0].id,
+      template_id: active.id,
+      session_index: mobilePlan.sequence_position.current,
+      session_name: mobilePlan.next_session.name,
+    });
     const activatedGraph = await captureRawConsolidationGraph(f);
     for (const table of [
       'training_programs',

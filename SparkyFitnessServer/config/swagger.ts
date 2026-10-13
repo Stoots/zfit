@@ -877,12 +877,45 @@ const options = {
             start_date: { type: 'string', format: 'date-time' },
             end_date: { type: 'string', format: 'date-time', nullable: true },
             is_active: { type: 'boolean' },
+            sessions: {
+              type: 'array',
+              description: 'Canonical Workout Sessions and their assignments.',
+              items: { type: 'object' },
+            },
+            next_session: {
+              type: 'object',
+              nullable: true,
+              description: 'Next canonical Workout Session for this date.',
+            },
+            next_assignments: {
+              type: 'array',
+              description: 'Assignments in the next Workout Session.',
+              items: { type: 'object' },
+            },
+            next_assignment: {
+              type: 'object',
+              nullable: true,
+              description:
+                'First due assignment for upstream App Store v1.8.0.',
+            },
+            sequence_position: {
+              type: 'object',
+              nullable: true,
+              description: 'Sequential position of the next Workout Session.',
+            },
             assignments: {
               type: 'array',
+              description:
+                'Flat session assignments for upstream App Store v1.8.0.',
               items: {
                 type: 'object',
                 properties: {
                   id: { type: 'integer' },
+                  template_id: { type: 'integer' },
+                  session_index: { type: 'integer', nullable: true },
+                  session_name: { type: 'string', nullable: true },
+                  sort_order: { type: 'integer' },
+                  modality: { type: 'string', nullable: true },
                   day_of_week: {
                     type: 'integer',
                     description: '0-6 (Sunday-Saturday)',
