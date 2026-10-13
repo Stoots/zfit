@@ -10,8 +10,10 @@
 ## Where to start
 
 - Current state and next steps: `agent-docs/HANDOVER.md`.
-- Work queue: GitHub issues on `Stoots/zfit` (see `docs/agents/issue-tracker.md`). Unblocked next tickets: #11, #10, #4. Specs: #1 and #9 (#9 supersedes #1 for session identity).
+- Work queue: GitHub issues on `Stoots/zfit` (see `docs/agents/issue-tracker.md`). #5 and #7 have active preparatory branches, but implementation remains blocked until open issue #4 is resolved; #6 and #8 follow. Specs: #1 and #9 (#9 supersedes #1 for session identity).
 - Deployment verification: `agent-docs/deployment-smoke.md`.
+- Before delivery: review changes against `main` on both repo standards and the originating issue/spec (`agent-docs/pr-review-checklist.md`), then verify each commit's affected package typecheck. Green tests alone did not catch the PR #20 spec gaps.
+- Local verification: run multi-file database suites with Vitest `--no-file-parallelism`; place mobile Jest caches under `~/.cache` via `--cacheDirectory`. The `jest-expo` runtime lacks `Promise.withResolvers`.
 
 ## Syncing upstream
 
@@ -33,7 +35,7 @@ git merge upstream/main    # in small steps (merge intermediate upstream commits
 Inherited workflows that are upstream-only, need upstream secrets, or would publish or open PRs are disabled in the repo settings (no file edits, so syncs stay clean):
 
 ```bash
-gh workflow disable <file>.yml   # and `gh workflow enable <file>.yml` to restore
+gh workflow disable <file>.yml -R Stoots/zfit   # and `gh workflow enable <file>.yml -R Stoots/zfit` to restore
 ```
 
 | Disabled workflow                                                                                                                          | Why                                                           |
@@ -49,7 +51,7 @@ gh workflow disable <file>.yml   # and `gh workflow enable <file>.yml` to restor
 | `sync-translations.yml`                                                                                                                    | Needs translation service secrets; opens PRs                  |
 | `pr-license-enforcement.yml`, `pr-validation.yml`, `first-contributor-welcome.yml`, `pr-merged-issue-notifier.yml`, `issue-auto-label.yml` | Upstream contributor and community automation                 |
 
-Kept enabled: `ci-tests.yml`, `pr-validation-tests.yml`, `docs-test.yml`, `helm-tests.yml`, `deployment-smoke-checks.yml`. Check the live state with `gh workflow list --all`.
+Kept enabled: `ci-tests.yml`, `pr-validation-tests.yml`, `docs-test.yml`, `helm-tests.yml`, `deployment-smoke-checks.yml`. Check the live state with `gh workflow list --all -R Stoots/zfit`.
 
 ## Fork changelog
 
@@ -66,9 +68,10 @@ Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded her
 
 #### Features
 
-- Cooper run Test Attempts: entry, edit, dated history, and trend graph on web and mobile; native acceptance pending per `agent-docs/cooper-manual-acceptance.md`.
+- Cooper run Test Attempts (#4): entry, edit, dated history, and trend graph on web and mobile; native acceptance pending per `agent-docs/cooper-manual-acceptance.md`.
 - Normalize stored exercise and diary exercise names with consistent capitalization (#10).
-- Bind Program Planned Sessions to exact Workout Sessions, retain session-level prescriptions and optionality, and let participants link a completed workout to the scheduled session (#11–#12).
+- Bind Program Planned Sessions to exact Workout Sessions and retain session-level prescriptions (#11).
+- Support optional sessions and linking a completed workout after its scheduled date (#12).
 - Preview and apply selected future prescriptions in bulk with Program-aware conflict checks (#13).
 - Add owner-scoped Workout Plan consolidation preflight, explicit mappings, replay-safe transactions, and private rollback receipts (#14). Live cutover remains separately approval-gated.
 - Training Programs: authoring, outcomes, and optional auto-shift (issues #2, #3). See `docs/src/features/exercises/training-programs.md` and `docs/adr/`.
