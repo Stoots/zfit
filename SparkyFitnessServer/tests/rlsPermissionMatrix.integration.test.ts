@@ -861,6 +861,22 @@ describe.runIf(RUN)('RLS permission matrix', () => {
       });
 
       crudSuite({
+        table: 'workout_plan_templates',
+        actors: ACTORS,
+        read: ['owner', 'reports', 'exlib'],
+        write: ['owner'],
+        rowId: () => secondPlan.planId,
+        insert: () => ({
+          sql: `INSERT INTO workout_plan_templates (user_id, plan_name, schedule_type)
+                VALUES ($1, 'New plan', 'sequential')`,
+          params: [OWNER],
+        }),
+        update: () => ({
+          sql: "UPDATE workout_plan_templates SET plan_name = 'Edited plan' WHERE id = $1",
+          params: [secondPlan.planId],
+        }),
+      });
+      crudSuite({
         table: 'workout_plan_sessions',
         actors: ACTORS,
         read: ['owner', 'reports', 'exlib'],
