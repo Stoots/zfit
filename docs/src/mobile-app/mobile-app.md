@@ -16,6 +16,12 @@ Join the Testflight beta program to get early access to new features and updates
 
 [Join Testflight](https://testflight.apple.com/join/9Yz8PzpR)
 
+### Install the web app on iPhone
+
+To use this fork's Training Programs, Workout Sessions, and Cardio Tests, open your server's **HTTPS** web address in iPhone Safari and sign in. Tap **Share** → **Add to Home Screen** → **Add**, then open SparkyFitness from the new icon. Open **Training** for Training Programs or **Exercises** and its Workout Plans; open **More** for Cardio Tests.
+
+The Home Screen app may ask you to sign in again when your session expires or Safari clears website data. Recording workouts and tests requires a connection to your server; offline recording and syncing are unavailable. After a server update, close and reopen the app or reload it. If an old screen persists, remove the Home Screen icon, clear that site's Safari website data, and add the icon again.
+
 
 ## Android
 

@@ -262,7 +262,9 @@
   .dialog-viewport-fit {
     width: calc(100vw - 2rem);
     max-width: calc(100vw - 2rem);
-    max-height: calc(100dvh - 2rem);
+    max-height: calc(
+      100dvh - 2rem - env(safe-area-inset-top) - env(safe-area-inset-bottom)
+    );
     overflow-y: auto;
   }
 
