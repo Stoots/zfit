@@ -4,3 +4,10 @@ SparkyFitness allows you to easily track your exercise routines, including detai
 
 For high-intensity conditioning, interval timers, and CrossFit-style WOD scoring, check out the dedicated [Interval, Circuit & WOD Workouts](/features/exercises/interval-wod-workouts) guide.
 
+## Recorded exercise names
+
+Diary exercise-name snapshots uppercase only their initial lowercase character, preserving the remaining casing, including acronyms and proper names. The same stored rule applies to new manual, imported, integration and AI entries.
+
+Existing labels are corrected from their own recorded text, not copied from the exercise's current library name. Labels survive library renames and deletion of the original exercise. The correction does not change recorded dates, sets, reps, weight, duration, calories, notes, telemetry, ownership or audit timestamps.
+
+

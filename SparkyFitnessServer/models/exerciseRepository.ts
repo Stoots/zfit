@@ -1,8 +1,10 @@
 import { getClient } from '../db/poolManager.js';
 import exerciseDb from './exercise.js';
 import exerciseEntryDb from './exerciseEntry.js';
-const templateDbPath = './exerciseTemplate.js';
-const { default: exerciseTemplateDb } = await import(templateDbPath);
+import {
+  createExerciseEntriesFromTemplate,
+  deleteExerciseEntriesByTemplateId,
+} from './exerciseTemplate.js';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function getExercisesNeedingReview(userId: any) {
   const client = await getClient(userId); // User-specific operation
@@ -86,7 +88,8 @@ export { clearUserIgnoredUpdate };
 export default {
   ...exerciseDb,
   ...exerciseEntryDb,
-  ...exerciseTemplateDb,
+  createExerciseEntriesFromTemplate,
+  deleteExerciseEntriesByTemplateId,
   getExercisesNeedingReview,
   updateExerciseEntriesSnapshot,
   clearUserIgnoredUpdate,

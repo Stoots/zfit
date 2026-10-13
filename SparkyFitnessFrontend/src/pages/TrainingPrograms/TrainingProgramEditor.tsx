@@ -39,6 +39,7 @@ export default function TrainingProgramEditor({
       )
     ) ?? []
   );
+  const hasWorkoutSessions = plans.some((plan) => plan.sessions.length > 0);
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const converted = toProgramInput(draft);
@@ -176,11 +177,11 @@ export default function TrainingProgramEditor({
             {t('trainingPrograms.addPhase', 'Add phase')}
           </Button>
         </section>
-        {!plans.length && (
+        {!hasWorkoutSessions && (
           <p className="text-muted-foreground">
             {t(
               'trainingPrograms.noPlans',
-              'Create a Workout Plan on the Exercises page before adding Planned Sessions. You can still save your Program structure.'
+              'Create a Workout Plan with Workout Sessions on the Exercises page before adding Planned Sessions. You can still save your Program structure.'
             )}
           </p>
         )}

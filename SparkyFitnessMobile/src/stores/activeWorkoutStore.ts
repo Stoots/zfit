@@ -1280,8 +1280,12 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>()(
           if (exercise != null) exerciseConfigs[String(exercise.id)] = config;
         });
 
-        const workoutFormat = opts?.workoutFormat ?? 'standard';
-        const timeCapSeconds = opts?.timeCapSeconds ?? null;
+        const workoutFormat =
+          session.workout_format ?? opts?.workoutFormat ?? 'standard';
+        const timeCapSeconds =
+          session.time_cap_seconds !== undefined
+            ? session.time_cap_seconds
+            : (opts?.timeCapSeconds ?? null);
         const startedMs = Date.now();
         let intervalPhases: IntervalPhase[] = [];
         if (workoutFormat !== 'standard') {
@@ -1371,16 +1375,21 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>()(
       },
 
       startWorkoutAtSet: (session, setId) => {
-        cancelCurrentRestNotification(get().rest);
-        const steps = buildStepsFromSession(session);
-        const targetIndex = steps.findIndex((s) => s.setId === setId);
-        if (targetIndex < 0) return;
+        if (
+          !session.exercises.some((exercise) =>
+            exercise.sets.some((entrySet) => String(entrySet.id) === setId)
+          )
+        )
+          return;
+        get().startWorkout(session);
+        const steps = get().steps;
+        const targetIndex = steps.findIndex((step) => step.setId === setId);
 
         // Server-persisted completions are preserved wholesale — restarting
         // at a middle set resumes with holes rather than clearing later
         // checkmarks. Priors the server doesn't know about are stamped now,
         // and only those make the session dirty.
-        const completedSetIds = seedCompletionFromSession(session);
+        const completedSetIds = { ...get().completedSetIds };
         let addedPriors = false;
         for (let i = 0; i < targetIndex; i++) {
           const id = steps[i].setId;
@@ -1391,48 +1400,10 @@ export const useActiveWorkoutStore = create<ActiveWorkoutState>()(
         }
 
         set({
-          sessionId: session.id,
-          session,
-          startedAt: Date.now(),
-          steps,
           completedSetIds,
           activeSetId: setId,
-          rest: READY_REST,
           sessionRevision: addedPriors ? 1 : 0,
           hasUnsavedChanges: addedPriors,
-          createdByLiveStart: false,
-          // Backfilled priors are never PRs (detection lives only in
-          // completeActiveSet); stamps resume from the server.
-          prBaseline: {},
-          prSetIds: seedPrFromSession(session),
-          // A fresh start has no id churn yet — every set keys by its own id.
-          setRenderKeys: {},
-          setTimerStartedAt: {},
-          // A resumed diary workout has no live-start plan; its set values
-          // are real. Previous-session sets re-capture lazily.
-          plannedSetValues: {},
-          previousSessionSets: {},
-          // Nor its preset progression/ramp settings — same as the plan.
-          exerciseConfigs: {},
-          coachingSignals: {},
-          declinedAdaptive: {},
-          // Nor was it started from a preset this session — no update-preset
-          // prompt on finish.
-          sourcePresetId: null,
-          sourceServerConfigId: null,
-          workoutFormat: 'standard',
-          timeCapSeconds: null,
-          intervalPhases: [],
-          intervalPhaseIndex: 0,
-          isIntervalPaused: false,
-          intervalPauseStartedAt: null,
-          watchIntervalRevision: 0,
-          watchExcludedPauseMs: 0,
-          watchArmedAt: null,
-          intervalRoundsCompleted: 0,
-          intervalRepsCompleted: 0,
-          intervalStatus: 'rx',
-          intervalScalingNotes: '',
         });
       },
 

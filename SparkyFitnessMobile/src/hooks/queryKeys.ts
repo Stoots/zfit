@@ -266,8 +266,14 @@ export const workoutPresetSearchQueryKey = (searchTerm: string) =>
 export const workoutPresetsLibraryQueryKey = (searchTerm: string) =>
   ['workoutPresetsLibrary', searchTerm] as const;
 
+export const workoutPlanTemplatesQueryKey = ['workoutPlanTemplates'] as const;
 export const activeWorkoutPlanQueryKey = (date: string) =>
   ['workoutPlanTemplates', 'active', date] as const;
+
+export const workoutPlanLibraryQueryKey = [
+  'workoutPlanTemplates',
+  'library',
+] as const;
 
 export const trainingProgramsQueryKey = ['trainingPrograms'] as const;
 

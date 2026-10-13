@@ -1,4 +1,5 @@
-import { renderHook } from '@testing-library/react-native';
+import { act, renderHook } from '@testing-library/react-native';
+import { AppState, type AppStateStatus } from 'react-native';
 import { useRefetchOnFocus } from '../../src/hooks/useRefetchOnFocus';
 import { useFocusEffect } from '@react-navigation/native';
 
@@ -67,14 +68,6 @@ describe('useRefetchOnFocus', () => {
     expect(mockRefetch).toHaveBeenCalledTimes(1);
   });
 
-  test('passes callback to useFocusEffect', () => {
-    const mockRefetch = jest.fn();
-
-    renderHook(() => useRefetchOnFocus(mockRefetch));
-
-    expect(mockUseFocusEffect).toHaveBeenCalledWith(expect.any(Function));
-  });
-
   test('skips refetch when re-focused within staleTime', () => {
     const mockRefetch = jest.fn();
 
@@ -116,5 +109,38 @@ describe('useRefetchOnFocus', () => {
     (Date.now as jest.Mock).mockReturnValue(5_000);
     focusCallback!();
     expect(mockRefetch).toHaveBeenCalledTimes(2);
+  });
+  test('refreshes saved prescriptions on foreground resume only while focused', () => {
+    let listener: ((state: AppStateStatus) => void) | undefined;
+    let blur: (() => void) | undefined;
+    const remove = jest.fn(() => {
+      listener = undefined;
+    });
+    jest
+      .spyOn(AppState, 'addEventListener')
+      .mockImplementation((_event, callback) => {
+        listener = callback;
+        return { remove };
+      });
+    mockUseFocusEffect.mockImplementation((callback) => {
+      focusCallback = () => {
+        blur = callback() || undefined;
+      };
+      focusCallback();
+    });
+    const refetch = jest.fn();
+    renderHook(() => useRefetchOnFocus(refetch, true, 0, true));
+    expect(refetch).toHaveBeenCalledTimes(1);
+    act(() => listener?.('background'));
+    expect(refetch).toHaveBeenCalledTimes(1);
+    act(() => listener?.('active'));
+    expect(refetch).toHaveBeenCalledTimes(2);
+    act(() => blur?.());
+    act(() => listener?.('active'));
+    expect(refetch).toHaveBeenCalledTimes(2);
+    act(() => focusCallback?.());
+    expect(refetch).toHaveBeenCalledTimes(3);
+    act(() => listener?.('active'));
+    expect(refetch).toHaveBeenCalledTimes(4);
   });
 });

@@ -145,12 +145,10 @@ export const useDeleteExerciseMutation = () => {
     mutationFn: ({
       id,
       mode = 'delete',
-      clientDate,
     }: {
       id: string;
       mode?: ExerciseDeleteMode;
-      clientDate?: string;
-    }) => deleteExercise(id, mode, clientDate),
+    }) => deleteExercise(id, mode),
     onSuccess: () => {
       invalidateExercise();
     },

@@ -9,12 +9,16 @@ import type { ProgramSession, OutcomeStatus } from './programTypes';
 export default function ProgramDetail({
   selected,
   outcomePending,
+  startingSessionId,
+  onStartSession,
   onEdit,
   onDelete,
   onRecordOutcome,
 }: {
   selected: TrainingProgram;
   outcomePending: boolean;
+  startingSessionId: string | null;
+  onStartSession: (session: ProgramSession) => void;
   onEdit: () => void;
   onDelete: () => void;
   onRecordOutcome: (target: {
@@ -132,25 +136,33 @@ export default function ProgramDetail({
                             </time>
                           </p>
                         )}
-                        <Badge
-                          variant={
-                            session.status === 'missed'
-                              ? 'outline'
-                              : 'secondary'
-                          }
-                        >
-                          {t(
-                            `trainingPrograms.state.${session.status}`,
-                            session.status
+                        <div className="flex flex-wrap gap-2">
+                          <Badge
+                            variant={
+                              session.status === 'missed'
+                                ? 'outline'
+                                : 'secondary'
+                            }
+                          >
+                            {t(
+                              `trainingPrograms.state.${session.status}`,
+                              session.status
+                            )}
+                          </Badge>
+                          {session.is_optional && (
+                            <Badge variant="outline">
+                              {t('trainingPrograms.optional', 'Optional')}
+                            </Badge>
                           )}
-                        </Badge>
+                        </div>
                       </div>
                       <div className="min-w-0 space-y-2">
                         <p className="break-words font-medium">
                           {session.name}
                         </p>
                         <p className="break-words text-muted-foreground">
-                          {session.workout_plan_name}
+                          {session.workout_plan_name} ·{' '}
+                          {session.workout_session_name}
                         </p>
                         {session.completed_workout && (
                           <p className="break-words text-sm">
@@ -174,6 +186,20 @@ export default function ProgramDetail({
                               {new Date(session.outcome_at).toLocaleString()}
                             </time>
                           </p>
+                        )}
+                        {session.status === 'planned' && (
+                          <Button
+                            className="min-h-11"
+                            disabled={startingSessionId === session.id}
+                            onClick={() => onStartSession(session)}
+                          >
+                            {startingSessionId === session.id
+                              ? t('common.loading', 'Starting…')
+                              : t(
+                                  'trainingPrograms.startWorkout',
+                                  'Start Workout'
+                                )}
+                          </Button>
                         )}
                         <SessionRowActions
                           session={session}

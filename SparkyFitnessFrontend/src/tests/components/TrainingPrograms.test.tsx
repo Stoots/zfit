@@ -1,4 +1,5 @@
 import '@testing-library/jest-dom';
+import { useEffect } from 'react';
 import {
   render,
   screen,
@@ -7,7 +8,7 @@ import {
   within,
 } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 import { createInstance } from 'i18next';
 import { I18nextProvider } from 'react-i18next';
 import type {
@@ -20,11 +21,14 @@ import TrainingPrograms from '@/pages/TrainingPrograms/TrainingPrograms';
 import * as api from '@/api/TrainingPrograms/trainingPrograms';
 import { getWorkoutPlanTemplates } from '@/api/Exercises/workoutPlanTemplates';
 import { fetchExerciseEntries } from '@/api/Exercises/exerciseEntryService';
+import { getExerciseById } from '@/api/Exercises/exerciseService';
+import type { WorkoutPlaybackRouteState } from '@/utils/workoutPlayback';
 import en from '../../../public/locales/en/translation.json';
 
 jest.mock('@/api/TrainingPrograms/trainingPrograms');
 jest.mock('@/api/Exercises/workoutPlanTemplates');
 jest.mock('@/api/Exercises/exerciseEntryService');
+jest.mock('@/api/Exercises/exerciseService');
 // The diary hook imports the app singleton; this suite supplies its own locale
 // instance and must not start the singleton's HTTP translation loader.
 jest.mock('@/i18n', () => ({
@@ -41,6 +45,16 @@ jest.mock('@/contexts/ActiveUserContext', () => ({
 const i18n = createInstance();
 let stored: TrainingProgram | undefined;
 let nextId = 1;
+const workoutSessionId = '10000000-0000-4000-8000-000000000001';
+const laterWorkoutSessionId = '10000000-0000-4000-8000-000000000002';
+let playbackState: WorkoutPlaybackRouteState | undefined;
+function PlaybackDestination() {
+  const { state } = useLocation();
+  useEffect(() => {
+    playbackState = state as WorkoutPlaybackRouteState;
+  }, [state]);
+  return <h1>Workout Playback</h1>;
+}
 const uuid = () =>
   `00000000-0000-4000-8000-${String(nextId++).padStart(12, '0')}`;
 function serverResponse(
@@ -66,8 +80,11 @@ function serverResponse(
         sort_order: w,
         sessions: week.sessions.map((session, s) => ({
           ...session,
+          is_optional: session.is_optional ?? false,
           id: session.id ?? uuid(),
           sort_order: s,
+          workout_plan_id: 17,
+          workout_session_name: 'A',
           workout_plan_name: 'Strength A',
           effective_date: session.scheduled_date,
           status: 'planned',
@@ -86,7 +103,10 @@ function mount() {
     <I18nextProvider i18n={i18n}>
       <QueryClientProvider client={client}>
         <MemoryRouter>
-          <TrainingPrograms />
+          <Routes>
+            <Route path="*" element={<TrainingPrograms />} />
+            <Route path="/workout-playback" element={<PlaybackDestination />} />
+          </Routes>
         </MemoryRouter>
       </QueryClientProvider>
     </I18nextProvider>
@@ -117,7 +137,11 @@ function addPhase(name: string, goal: string, number: number) {
   fireEvent.click(phase.getByRole('button', { name: 'Add week' }));
   fireEvent.click(phase.getByRole('button', { name: 'Add Planned Session' }));
   fill('Session name', `${name} workout`, phase);
-  fill('Workout Plan', '17', phase);
+  fill(
+    'Workout Session',
+    number === 1 ? workoutSessionId : laterWorkoutSessionId,
+    phase
+  );
   return phase;
 }
 
@@ -131,6 +155,21 @@ beforeAll(async () => {
 beforeEach(() => {
   jest.clearAllMocks();
   mockActor.delegated = false;
+  playbackState = undefined;
+  jest.mocked(getExerciseById).mockResolvedValue({
+    id: 'exercise',
+    name: 'Renamed library exercise',
+    category: 'Strength',
+    modality: 'weight_reps',
+    images: null,
+    primary_muscles: null,
+    secondary_muscles: null,
+    equipment: null,
+    instructions: null,
+    force: null,
+    level: null,
+    mechanic: null,
+  });
   stored = undefined;
   nextId = 1;
   jest
@@ -148,8 +187,51 @@ beforeEach(() => {
     stored = undefined;
   });
   jest.mocked(getWorkoutPlanTemplates).mockResolvedValue([
-    { id: '17', user_id: 'athlete', plan_name: 'Strength A', assignments: [] },
-    { id: '18', user_id: 'family', plan_name: 'Not my plan', assignments: [] },
+    {
+      id: '17',
+      user_id: 'athlete',
+      plan_name: 'Strength A',
+      sessions: [
+        {
+          id: workoutSessionId,
+          name: 'A',
+          day_of_week: null,
+          is_optional: false,
+          sort_order: 0,
+          assignments: [
+            {
+              id: 101,
+              exercise_id: 'exercise',
+              exercise_name: 'Lunge',
+              sets: [
+                { set_number: 1, reps: 8 },
+                { set_number: 2, reps: 8 },
+              ],
+            },
+          ],
+        },
+        {
+          id: laterWorkoutSessionId,
+          name: 'A',
+          day_of_week: null,
+          is_optional: false,
+          sort_order: 1,
+          assignments: [
+            {
+              id: 102,
+              exercise_id: 'exercise',
+              exercise_name: 'Lunge',
+              sets: [
+                { set_number: 1, reps: 8 },
+                { set_number: 2, reps: 8 },
+                { set_number: 3, reps: 8 },
+              ],
+            },
+          ],
+        },
+      ],
+    },
+    { id: '18', user_id: 'family', plan_name: 'Not my plan', sessions: [] },
   ]);
 });
 
@@ -172,11 +254,17 @@ it('authors phases, weeks and dated sessions, then views, edits and deletes a Pr
       phase.goal,
       phase.weeks[0]?.start_date,
       phase.weeks[0]?.sessions[0]?.scheduled_date,
-      phase.weeks[0]?.sessions[0]?.workout_plan_id,
+      phase.weeks[0]?.sessions[0]?.workout_session_id,
     ])
   ).toEqual([
-    ['Base', 'Build endurance', '2026-10-25', '2026-10-30', 17],
-    ['Build', 'Practice race pace', '2026-11-01', '2026-11-01', 17],
+    ['Base', 'Build endurance', '2026-10-25', '2026-10-30', workoutSessionId],
+    [
+      'Build',
+      'Practice race pace',
+      '2026-11-01',
+      '2026-11-01',
+      laterWorkoutSessionId,
+    ],
   ]);
   expect(screen.getByText('Fixed dates')).toBeInTheDocument();
   expect(screen.getByText('Base workout')).toBeInTheDocument();
@@ -185,6 +273,14 @@ it('authors phases, weeks and dated sessions, then views, edits and deletes a Pr
   fireEvent.click(
     screen.getByRole('button', { name: 'Edit Training Program' })
   );
+  await screen.findAllByLabelText('Workout Session');
+  expect(
+    screen
+      .getAllByLabelText('Workout Session')
+      .map((select) =>
+        select instanceof HTMLSelectElement ? select.value : null
+      )
+  ).toEqual([workoutSessionId, laterWorkoutSessionId]);
   fill('Program goal', 'Finish stronger');
   const editingBase = within(screen.getByRole('group', { name: 'Phase 1' }));
   fill('Session date', '2026-10-31', editingBase);
@@ -198,7 +294,7 @@ it('authors phases, weeks and dated sessions, then views, edits and deletes a Pr
   expect(stored!.phases[0]!.weeks[0]!.sessions[0]).toMatchObject({
     id: retainedSessionId,
     scheduled_date: '2026-10-31',
-    workout_plan_id: 17,
+    workout_session_id: workoutSessionId,
   });
   expect(screen.queryByText('Build workout')).not.toBeInTheDocument();
   fireEvent.click(
@@ -270,8 +366,8 @@ it('supports authoring structure without Workout Plans and explicit session orde
   fireEvent.click(screen.getByRole('button', { name: 'Add Planned Session' }));
   const sessions = screen.getAllByLabelText('Session name');
   fireEvent.change(sessions[1]!, { target: { value: 'Second session' } });
-  fireEvent.change(screen.getAllByLabelText('Workout Plan')[1]!, {
-    target: { value: '17' },
+  fireEvent.change(screen.getAllByLabelText('Workout Session')[1]!, {
+    target: { value: laterWorkoutSessionId },
   });
   fireEvent.click(screen.getByRole('button', { name: 'Move session 2 up' }));
   expect(screen.getAllByLabelText('Session name')[0]).toHaveValue(
@@ -317,17 +413,17 @@ function scheduleFixture(autoShift = false): TrainingProgram {
               {
                 name: 'First run',
                 scheduled_date: '2026-10-25',
-                workout_plan_id: 17,
+                workout_session_id: workoutSessionId,
               },
               {
                 name: 'Strength',
                 scheduled_date: '2026-10-30',
-                workout_plan_id: 17,
+                workout_session_id: laterWorkoutSessionId,
               },
               {
                 name: 'Last run',
                 scheduled_date: '2026-10-31',
-                workout_plan_id: 17,
+                workout_session_id: workoutSessionId,
               },
             ],
           },
@@ -456,10 +552,21 @@ it('renders cumulative repeated misses beside unchanged completion history after
   ).not.toBeInTheDocument();
 });
 
-it.each(['preset', 'individual'] as const)(
-  'lets the athlete choose and confirm a %s diary workout and shows completion',
-  async (type) => {
+it.each([
+  { type: 'preset', omitted: false },
+  { type: 'individual', omitted: false },
+  { type: 'preset', omitted: true },
+  { type: 'individual', omitted: true },
+] as const)(
+  'links a $type diary workout after omission=$omitted without changing required dates',
+  async ({ type, omitted }) => {
     stored = scheduleFixture();
+    if (omitted) {
+      const session = stored.phases[0]!.weeks[0]!.sessions[0]!;
+      session.is_optional = true;
+      session.status = 'omitted';
+      session.outcome_at = '2026-10-26T00:00:00.000Z';
+    }
     const workoutId = uuid();
     const candidate: ExerciseSessionResponse =
       type === 'preset'
@@ -520,6 +627,24 @@ it.each(['preset', 'individual'] as const)(
         return response;
       });
     await openStored();
+    if (omitted) {
+      expect(
+        within(sessionRow('First run')).getByText('Omitted')
+      ).toBeInTheDocument();
+      expect(
+        within(sessionRow('First run')).getByText('Optional')
+      ).toBeInTheDocument();
+      expect(
+        within(sessionRow('First run')).queryByRole('button', {
+          name: 'Mark missed',
+        })
+      ).not.toBeInTheDocument();
+      expect(
+        within(sessionRow('First run')).queryByRole('button', {
+          name: 'Start Workout',
+        })
+      ).not.toBeInTheDocument();
+    }
     fireEvent.click(
       within(sessionRow('First run')).getByRole('button', {
         name: 'Link completed workout',
@@ -601,10 +726,101 @@ it('defaults auto-shift off, persists an explicit opt-in and locks recorded sess
   ).toBeChecked();
   expect(screen.getByLabelText('Session name')).toBeDisabled();
   expect(screen.getByLabelText('Session date')).toBeDisabled();
-  expect(screen.getByLabelText('Workout Plan')).toBeDisabled();
+  expect(
+    screen.getByRole('combobox', { name: 'Workout Session' })
+  ).toBeDisabled();
   expect(
     screen.getByRole('button', { name: 'Remove session 1' })
   ).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Remove week 1' })).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Remove phase 1' })).toBeDisabled();
+});
+
+it('starts the exact later repeated-label session after reloading instead of the plan’s first session', async () => {
+  stored = scheduleFixture();
+  await openStored();
+  fireEvent.click(
+    within(sessionRow('Strength')).getByRole('button', {
+      name: 'Start Workout',
+    })
+  );
+  await screen.findByRole('heading', { name: 'Workout Playback' });
+  const draft = playbackState?.draft;
+  if (!draft) {
+    throw new Error(
+      'Exact Program session start must provide a workout playback draft.'
+    );
+  }
+  const exercise = draft.exercises[0];
+  if (!exercise) {
+    throw new Error(
+      'Exact Program session start must include its prescribed exercise.'
+    );
+  }
+  expect(draft.workout_session_id).toBe(laterWorkoutSessionId);
+  expect(draft.entry_date).toBe('2026-10-30');
+  expect(exercise.sets.map((set) => set.reps)).toEqual([8, 8, 8]);
+  expect(exercise.exercise_name).toBe('Lunge');
+  expect(draft.load_adjustments_applied).toBe(true);
+});
+
+it('refuses a missing exact binding rather than starting the first available session', async () => {
+  stored = scheduleFixture();
+  stored.phases[0]!.weeks[0]!.sessions[1]!.workout_session_id =
+    '10000000-0000-4000-8000-000000000099';
+  await openStored();
+  fireEvent.click(
+    within(sessionRow('Strength')).getByRole('button', {
+      name: 'Start Workout',
+    })
+  );
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'selected Workout Session is unavailable'
+  );
+  expect(playbackState).toBeUndefined();
+});
+
+it('inherits library optionality for new sessions but preserves an edited stored override', async () => {
+  const plans = await getWorkoutPlanTemplates();
+  plans[0]!.sessions[0]!.is_optional = true;
+  jest.mocked(getWorkoutPlanTemplates).mockResolvedValue(plans);
+  mount();
+  await startProgram();
+  const phase = addPhase('Base', 'Endurance', 1);
+  expect(phase.getByLabelText('Optional')).toBeChecked();
+  fireEvent.click(phase.getByLabelText('Optional'));
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Save Training Program' })
+  );
+  await screen.findByRole('heading', { name: 'Autumn 10K' });
+  expect(stored!.phases[0]!.weeks[0]!.sessions[0]!.is_optional).toBe(false);
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Edit Training Program' })
+  );
+  await screen.findByLabelText('Workout Session');
+  expect(screen.getByLabelText('Optional')).not.toBeChecked();
+  fill('Workout Session', laterWorkoutSessionId);
+  expect(screen.getByLabelText('Optional')).not.toBeChecked();
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Save Training Program' })
+  );
+  await screen.findByRole('heading', { name: 'Autumn 10K' });
+  expect(stored!.phases[0]!.weeks[0]!.sessions[0]!.is_optional).toBe(false);
+});
+
+it('does not offer a missed outcome for a planned optional session', async () => {
+  stored = scheduleFixture();
+  stored.phases[0]!.weeks[0]!.sessions[0]!.is_optional = true;
+  await openStored();
+  const optional = within(sessionRow('First run'));
+  expect(optional.getByText('Optional')).toBeInTheDocument();
+  expect(
+    optional.queryByRole('button', { name: 'Mark missed' })
+  ).not.toBeInTheDocument();
+  expect(
+    optional.getByRole('button', { name: 'Link completed workout' })
+  ).toBeInTheDocument();
+  expect(
+    within(sessionRow('Strength')).getByRole('button', { name: 'Mark missed' })
+  ).toBeInTheDocument();
 });

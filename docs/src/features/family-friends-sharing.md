@@ -14,7 +14,7 @@ Setting up a connection is simple and can be managed directly from the applicati
 2. **Add a Connection**:
    - Enter the email address of the family member or friend you want to connect with.
    - Choose the specific permissions you want to grant them (see the matrix below).
-   - *Optional:* Set an **Access End Date** if you want the permission to expire automatically.
+   - _Optional:_ Set an **Access End Date** if you want the permission to expire automatically.
 3. **Save Connection**: Click **Add Connection**. The new connection will appear under "Rules I Created".
 4. **Accessing Switched Profiles**: The connected person will now see your profile in their **Profile Switcher** (located in the top-right corner of the dashboard). They can select your name to switch contexts and act on your behalf.
 
@@ -42,31 +42,62 @@ Cooper run Test Attempt entry/edit drafts are scoped to the active web profile. 
 ## Security & Boundary Isolation
 
 ### 1. Tier 1: Strictly Private Data
+
 Certain tables contain private user data that is **never** accessible to any family member or friend, regardless of the permission level. This includes:
-* API Keys (`api_key` table)
-* OIDC SSO Connections (`user_oidc_links` table)
-* Personal AI Assistant Chat History (`sparky_chat_history` table)
-* Personal Fasting Preferences and auto-calculation configuration (`user_fasting_preferences` table)
-* Training Programs, Program Phases, weeks and Planned Sessions (`training_programs`, `training_program_phases`, `training_program_weeks`, `training_program_sessions`) — owner-only, even with **Manage Diary**, **View Reports** or exercise-library access. Switch to your own profile to author or view them. Standalone Workout Plan sharing remains unchanged.
-* Cycle & Pregnancy hub data (`cycle_settings`, `cycle_daily_entries`, `cycles`, `user_cycle_display_preferences`, `cycle_test_entries`, `pregnancies`, `pregnancy_kick_sessions`, `pregnancy_contractions`, `pregnancy_photos`, `pregnancy_checklist_state`, `health_appointments` tables) — this reproductive-health data is **never** shared or delegated, even with `can_view_reports`. It is strictly owner-only. Bump photo *files* are owner-only too: they are excluded from the public uploads URLs and can only be fetched through an authenticated request by their owner.
+
+- API Keys (`api_key` table)
+- OIDC SSO Connections (`user_oidc_links` table)
+- Personal AI Assistant Chat History (`sparky_chat_history` table)
+- Personal Fasting Preferences and auto-calculation configuration (`user_fasting_preferences` table)
+- Training Programs, Program Phases, weeks and Planned Sessions (`training_programs`, `training_program_phases`, `training_program_weeks`, `training_program_sessions`) — owner-only, even with **Manage Diary**, **View Reports** or exercise-library access. This includes per-Program optionality, omitted history and late completion links. Switch to your own profile to author or view them. Standalone Workout Plan optionality follows the existing plan-sharing rules and never grants Program access.
+- Program consolidation manifests and recovery receipts (`workout_program_consolidations`) — owner-only, with no family permission that grants read or write access. Sharing a Workout Plan does not share its consolidation journal.
+- Cycle & Pregnancy hub data (`cycle_settings`, `cycle_daily_entries`, `cycles`, `user_cycle_display_preferences`, `cycle_test_entries`, `pregnancies`, `pregnancy_kick_sessions`, `pregnancy_contractions`, `pregnancy_photos`, `pregnancy_checklist_state`, `health_appointments` tables) — this reproductive-health data is **never** shared or delegated, even with `can_view_reports`. It is strictly owner-only. Bump photo _files_ are owner-only too: they are excluded from the public uploads URLs and can only be fetched through an authenticated request by their owner.
 
 ### 2. Tier 2: Read-Only Profile & Settings Data
+
 The following data can be **read** by delegates who hold at least one of `can_manage_diary`, `can_manage_checkin`, `can_manage_medications`, `can_manage_symptoms`, or `can_view_reports` — but **only the account owner can modify it**:
-* Profile information (`profiles` table — name, date of birth, height, avatar, etc.)
-* General preferences (`user_preferences` table — themes, units, calculation methods, calorie safety-floor settings, and report chart scaling)
-* Nutrient column display preferences (`user_nutrient_display_preferences`)
-* Dashboard widget layout (`user_dashboard_layouts`)
-* Onboarding data and completion status (`onboarding_data`, `onboarding_status`)
+
+- Profile information (`profiles` table — name, date of birth, height, avatar, etc.)
+- General preferences (`user_preferences` table — themes, units, calculation methods, calorie safety-floor settings, and report chart scaling)
+- Nutrient column display preferences (`user_nutrient_display_preferences`)
+- Dashboard widget layout (`user_dashboard_layouts`)
+- Onboarding data and completion status (`onboarding_data`, `onboarding_status`)
 
 Delegates with only library permissions **cannot** read or write any of the above.
 
 ### 3. Workout Feedback (Pain & Difficulty)
+
 After a workout you can say how it felt (too easy / just right / too hard) and flag pain or discomfort with a note. Adaptive suggestions learn from this. This feedback (`workout_feedback` table) is shared like the rest of your diary: delegates with **Manage Diary** (`can_manage_diary`) can see and record it for you, and delegates with **View Reports** (`can_view_reports`) can see it. Pain notes are health information, so keep that in mind when choosing who gets these permissions.
 
 ### 4. Context-Switched Library Isolation
+
 Your custom food library, recipes, custom exercises, and medication inventory are only visible to delegates when they have switched their active profile context to your profile. This prevents their personal libraries/cabinets from being cluttered with your items.
 
+Workout Sessions inherit their standalone Workout Plan's read-sharing boundary.
+Only the plan owner can create, rename, reorder or remove a session. A Training
+Program still belongs only to its owner and selects one exact session; sharing
+the plan does not share the Program or its outcomes.
+
+Sessions can have the same label without sharing a prescription. Each preset
+assignment keeps a local copy of its full exercises/sets; editing a library
+preset or a different session does not update that copy or a logged workout.
+Deleting the library preset clears only its live reference. A plan save keeps
+assignment IDs and diary links, including when switching weekly/sequential
+scheduling. Removing a session still used by a Program, or an assignment still
+linked to diary history, is refused without saving partial changes.
+
+An explicitly approved operator consolidation groups one owner's Program workouts
+into an inactive reusable plan; it is not a delegate action. The new plan keeps
+normal library-sharing rules, but has no start/end dates copied from the private
+Program calendar. Active family exercise-library/report readers protect the
+source sessions: consolidation clones the selected prescriptions and retains
+the original shared containers rather than moving their sessions away. Other
+Programs, standalone workouts and diary history are also protected. Deleting a
+plan retained by a consolidation journal is refused; the journal is private
+and does not grant additional access to either the Program or workout history.
+
 ### 5. Automatic Token Validation & Expiry
+
 If you set an **Access End Date** for a connection, the database automatically revokes all database read/write access the moment that timestamp passes. No manual action is needed.
 
 ### 6. Deleting a Shared Food or Exercise
@@ -75,15 +106,21 @@ A diary entry keeps its own copy of everything it needs to display itself — th
 
 When you delete a food or exercise from your library you are offered up to three choices:
 
-| Choice | Your library | Your meals & meal plans (food)<br>Your presets & plans (exercise) | Your diary | **Anyone else's data** |
-| :--- | :--- | :--- | :--- | :--- |
-| **Hide** | Stops appearing in search | Unchanged, keeps working | Unchanged | **Unchanged** |
-| **Delete** | Removed | Removed | **Kept** | **Unchanged** |
-| **Delete including history** | Removed | Removed | **Also deleted** | **Unchanged** |
+| Choice                       | Your library              | Your meals & meal plans (food)<br>Your presets & plans (exercise) | Your diary       | **Anyone else's data** |
+| :--------------------------- | :------------------------ | :---------------------------------------------------------------- | :--------------- | :--------------------- |
+| **Hide**                     | Stops appearing in search | Unchanged, keeps working                                          | Unchanged        | **Unchanged**          |
+| **Delete**                   | Removed                   | Removed                                                           | **Kept**         | **Unchanged**          |
+| **Delete including history** | Removed                   | Removed                                                           | **Also deleted** | **Unchanged**          |
 
-**Another person's diary is never affected by your delete**, in any of the three modes. "Delete including history" removes only *your* logged entries; a family member who logged the same item keeps theirs in full.
+**Another person's diary is never affected by your delete**, in any of the three modes. "Delete including history" removes only _your_ logged entries; a family member who logged the same item keeps theirs in full.
 
-If someone else still uses the item — they have logged it, or it sits in their meals, meal plans, presets or workout plans — **Hide is the only option offered**. Meals, meal plans, presets and workout plans are linked to the library item itself rather than snapshotted, so genuinely deleting it would silently strip the item out of their templates too. Hiding removes it from search for everyone from that point on while leaving all existing history and templates intact.
+Workout Plan assignment links are also protected. If deleting an exercise or
+plan would cascade through an assignment still linked to diary history, deletion
+is refused rather than silently clearing that link. Hide the exercise instead
+when you want it out of library search without changing its prescriptions.
+
+If someone else still uses an exercise/food — in their diary or a linked template — **Hide is the only option offered**. Meal ingredients and individual exercise assignments retain live library links. Workout Session preset assignments instead retain their own frozen prescription when the source preset is deleted. Hiding removes an item from search without changing history or prescriptions.
 
 ### 7. Meal-to-Meal Composition
+
 A meal's ingredient list can link another reusable meal (e.g. a sauce or side) instead of a plain food. Linking a sub-meal into a parent meal requires the same library access to the sub-meal that reading it directly would require — you cannot link a sub-meal you cannot otherwise view. This check applies independently of, and in addition to, owning the parent meal.

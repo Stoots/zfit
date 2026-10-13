@@ -10,6 +10,43 @@ const plan = (id: string): WorkoutPlanTemplate => ({
   id,
   user_id: 'athlete',
   plan_name: id,
+  sessions: [
+    {
+      id: `workout-${id}`,
+      name: 'A',
+      day_of_week: null,
+      is_optional: false,
+      sort_order: 0,
+      assignments: [
+        {
+          id: Number(id) * 10,
+          exercise_id: 'exercise',
+          sets: [
+            { set_number: 1, reps: 8 },
+            { set_number: 2, reps: 8 },
+          ],
+        },
+      ],
+    },
+    {
+      id: `later-${id}`,
+      name: 'A',
+      day_of_week: null,
+      is_optional: false,
+      sort_order: 1,
+      assignments: [
+        {
+          id: Number(id) * 10 + 1,
+          exercise_id: 'exercise',
+          sets: [
+            { set_number: 1, reps: 8 },
+            { set_number: 2, reps: 8 },
+            { set_number: 3, reps: 8 },
+          ],
+        },
+      ],
+    },
+  ],
 });
 const session = (
   planId: number,
@@ -21,6 +58,9 @@ const session = (
   name: `Session ${planId}`,
   workout_plan_id: planId,
   workout_plan_name: String(planId),
+  workout_session_id: `workout-${planId}`,
+  workout_session_name: 'A',
+  is_optional: false,
   scheduled_date: scheduledDate,
   effective_date: date,
   status,
@@ -70,13 +110,36 @@ describe('dashboard next workout selection', () => {
     ).toEqual(['2']);
   });
 
-  it('keeps authored same-day precedence and unrelated plans in their existing order', () => {
+  it('offers same-day optional sessions in authored order and skips omitted optionals', () => {
+    const plans = ['1', '2'].map(plan);
+    const sameDayOptional = {
+      ...session(2, '2026-10-12'),
+      is_optional: true,
+    };
+    const sameDay = selectDashboardWorkoutPlans(plans, [
+      program([sameDayOptional, session(1, '2026-10-12')]),
+    ]);
+    expect(sameDay.programPlan?.id).toBe('2');
+    expect(sameDay.programPlan?.training_program_session_id).toBe(
+      sameDayOptional.id
+    );
+
+    const omitted = {
+      ...session(2, '2026-10-10', 'omitted'),
+      is_optional: true,
+    };
+    const afterOmission = selectDashboardWorkoutPlans(plans, [
+      program([omitted, session(1, '2026-10-12')]),
+    ]);
+    expect(afterOmission.programPlan?.id).toBe('1');
+  });
+
+  it('keeps unrelated plans in their existing order', () => {
     const plans = ['9', '1', '8', '2', '3'].map(plan);
-    const programs = [
+    const result = selectDashboardWorkoutPlans(plans, [
       program([session(2, '2026-10-12'), session(1, '2026-10-12')]),
       program([session(3, '2026-10-12')]),
-    ];
-    const result = selectDashboardWorkoutPlans(plans, programs);
+    ]);
     expect(result.programPlan?.id).toBe('2');
     expect(result.standalonePlans.map((p) => p.id)).toEqual(['9', '8']);
     expect(selectDashboardWorkoutPlans(plans, [])).toEqual({
@@ -97,7 +160,26 @@ describe('dashboard next workout selection', () => {
     ).toEqual(['9']);
   });
 
-  it('selects from eligible plans without inventing advancement or reactivating unavailable workouts', () => {
+  it('clears a later preview when an earlier planned binding is unavailable', () => {
+    const later = session(2, '2026-10-13');
+    const missingPlan = session(1, '2026-10-12');
+    const missingSession = {
+      ...session(1, '2026-10-12'),
+      workout_session_id: 'missing',
+    };
+
+    expect(
+      selectDashboardWorkoutPlans([plan('2')], [program([later, missingPlan])])
+        .programPlan
+    ).toBeUndefined();
+    expect(
+      selectDashboardWorkoutPlans(
+        [plan('1'), plan('2')],
+        [program([later, missingSession])]
+      ).programPlan
+    ).toBeUndefined();
+  });
+  it('does not advance to a later Program date when the earliest binding is unavailable', () => {
     const programs = [
       program([
         session(1, '2026-10-12'),
@@ -106,13 +188,54 @@ describe('dashboard next workout selection', () => {
       ]),
     ];
     const eligible = [plan('3')];
-    expect(selectDashboardWorkoutPlans(eligible, programs)).toEqual({
-      programPlan: eligible[0],
-      standalonePlans: [],
-    });
+    const selected = selectDashboardWorkoutPlans(eligible, programs);
+    expect(selected.programPlan).toBeUndefined();
+    expect(selected.standalonePlans).toEqual([]);
     expect(selectDashboardWorkoutPlans([], programs)).toEqual({
       programPlan: undefined,
       standalonePlans: [],
     });
+  });
+
+  it('shows one exact Program session and keeps standalone plans separate', () => {
+    const inactive = { ...plan('1'), is_active: false, next_session: null };
+    const standalone = { ...plan('9'), is_active: true };
+    const first = session(1, '2026-10-12');
+    const later = {
+      ...session(1, '2026-10-12'),
+      id: 'planned-later',
+      workout_session_id: 'later-1',
+    };
+    const selected = selectDashboardWorkoutPlans(
+      [inactive, standalone],
+      [program([first, later])]
+    );
+
+    expect(selected.programPlan?.id).toBe('1');
+    expect(selected.programPlan?.training_program_session_id).toBe(first.id);
+    expect(selected.programPlan?.next_session?.id).toBe('workout-1');
+    expect(
+      selected.programPlan?.next_assignments?.[0]?.sets.map((s) => s.reps)
+    ).toEqual([8, 8]);
+    expect(selected.standalonePlans.map((item) => item.id)).toEqual(['9']);
+    expect(inactive.next_session).toBeNull();
+  });
+
+  it('does not advance past a missing earliest Program binding', () => {
+    const source = plan('1');
+    source.next_session = source.sessions[0];
+    const later = plan('2');
+    const unavailable = {
+      ...session(1, '2026-10-12'),
+      workout_session_id: 'missing',
+    };
+    const nextProgramSession = session(2, '2026-10-13');
+
+    expect(
+      selectDashboardWorkoutPlans(
+        [source, later],
+        [program([unavailable, nextProgramSession])]
+      )
+    ).toEqual({ programPlan: undefined, standalonePlans: [] });
   });
 });

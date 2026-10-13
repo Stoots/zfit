@@ -23,12 +23,13 @@ router.use(authenticate, onBehalfOfMiddleware, requireSelfActor);
  *     PlannedSessionInput:
  *       type: object
  *       additionalProperties: false
- *       required: [name, scheduled_date, workout_plan_id]
+ *       required: [name, scheduled_date, workout_session_id]
  *       properties:
  *         id: { type: string, format: uuid, description: Existing session ID on edits only. }
  *         name: { type: string, maxLength: 200 }
  *         scheduled_date: { type: string, format: date, description: Fixed calendar date within the week. }
- *         workout_plan_id: { type: integer, minimum: 1, description: An existing Workout Plan owned by the caller. }
+ *         workout_session_id: { type: string, format: uuid, description: The exact Workout Session inside a Workout Plan owned by the caller. }
+ *         is_optional: { type: boolean, description: Explicit optionality. New bindings inherit the selected Workout Session when omitted; existing bindings retain their flag. }
  *     PlannedSession:
  *       type: object
  *       properties:
@@ -37,9 +38,12 @@ router.use(authenticate, onBehalfOfMiddleware, requireSelfActor);
  *         sort_order: { type: integer }
  *         scheduled_date: { type: string, format: date, description: Authored date within its week. }
  *         effective_date: { type: string, format: date, description: Resulting schedule date; may extend beyond the authored week or Program. }
- *         workout_plan_id: { type: integer }
- *         workout_plan_name: { type: string, description: Snapshotted for recorded outcomes. }
- *         status: { type: string, enum: [planned, completed, missed] }
+ *         workout_session_id: { type: string, format: uuid }
+ *         is_optional: { type: boolean, description: Persisted binding optionality, independent of later library edits. }
+ *         workout_session_name: { type: string, description: Exact selected Workout Session label; snapshotted for recorded outcomes. }
+ *         workout_plan_id: { type: integer, description: Display-only parent plan ID; not accepted as a session selection input. }
+ *         workout_plan_name: { type: string, description: Display-only parent plan name; snapshotted for recorded outcomes. }
+ *         status: { type: string, enum: [planned, completed, missed, omitted], description: Unfinished optional work is omitted after its effective calendar day in the athlete timezone; no read-side mutations or app-open requirement. }
  *         outcome_at: { type: string, format: date-time, nullable: true }
  *         completed_workout:
  *           type: object
@@ -209,7 +213,7 @@ router.use(authenticate, onBehalfOfMiddleware, requireSelfActor);
  * /training-programs/{id}/sessions/{sessionId}/outcome:
  *   post:
  *     summary: Record a permanent missed outcome or link a completed diary workout
- *     description: Owner-only. Completion links a grouped preset entry or standalone exercise entry and snapshots its name/date and Workout Plan name. Diary renames, date edits and deletion do not rewrite history. One workout can fulfill only one session. Identical retries are idempotent; conflicting final outcomes return 409. With auto_shift enabled, a new miss adds one Gregorian calendar day to every still-planned session on a strictly later effective date. Same-day sessions (equal effective date, even with a later sort order) and recorded sessions never move. A missed outcome is only accepted when the session's effective date is on or before the athlete's today (their timezone); a later session returns 409, because outcomes are permanent. Effective dates can leave their authored week/Program without reparenting; overflow past 9999-12-31 rolls back the whole operation. Recording and aggregate edits serialize on the Program lock.
+ *     description: Owner-only. Completion links a grouped preset entry or standalone exercise entry and snapshots its name/date and Workout Plan name. Automatically omitted optional sessions can receive an explicit late completion; optional sessions cannot be marked missed. Diary renames, date edits and deletion do not rewrite completed history. One workout can fulfill only one session. Identical retries are idempotent; conflicting recorded outcomes return 409. With auto_shift enabled, a new required miss adds one Gregorian calendar day to every still-planned session on a strictly later effective date. Same-day, omitted and recorded sessions never move. A missed outcome is only accepted when the session's effective date is on or before the athlete's today (their timezone); a later session returns 409, because outcomes are permanent. Effective dates can leave their authored week/Program without reparenting; overflow past 9999-12-31 rolls back the whole operation. Recording and aggregate edits serialize on the Program lock.
  *     tags: [Training Programs]
  *     parameters:
  *       - in: path

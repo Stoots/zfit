@@ -2,442 +2,380 @@ import { act, renderHook } from '@testing-library/react';
 import { useWorkoutPlanAssignments } from '@/hooks/Exercises/useWorkoutPlanAssignments';
 import type { WorkoutPlanTemplate, WorkoutPreset } from '@/types/workout';
 import type { Exercise } from '@/types/exercises';
-import { toast } from '@/hooks/use-toast';
+import { apiCall } from '@/api/api';
+import {
+  createWorkoutPlanTemplate,
+  updateWorkoutPlanTemplate,
+} from '@/api/Exercises/workoutPlanTemplates';
+import {
+  workoutPlanCreateRequestSchema,
+  workoutPlanUpdateRequestSchema,
+} from '@workspace/shared';
 
-jest.mock('@/contexts/PreferencesContext', () => ({
-  usePreferences: () => ({
-    loggingLevel: 'ERROR',
-    weightUnit: 'kg',
-    convertWeight: (value: number) => value,
-  }),
-}));
+jest.mock('@/hooks/use-toast', () => ({ toast: jest.fn() }));
+jest.mock('@/api/api', () => ({ apiCall: jest.fn() }));
 
-jest.mock('@/hooks/use-toast', () => ({
-  toast: jest.fn(),
-}));
-
-jest.mock('@/hooks/Exercises/useWorkoutPresets', () => ({
-  useWorkoutPresets: () => ({ data: undefined }),
-}));
-
-jest.mock('@/hooks/useAuth', () => ({
-  useAuth: () => ({ user: { id: 'user-1' } }),
-}));
-
+beforeEach(() => {
+  jest.mocked(apiCall).mockReset();
+});
 jest.mock('react-i18next', () => ({
-  useTranslation: () => ({
-    t: (key: string, defaultValueOrValues?: unknown) => {
-      if (typeof defaultValueOrValues === 'string') {
-        return defaultValueOrValues;
-      }
-      if (defaultValueOrValues && typeof defaultValueOrValues === 'object') {
-        const values = defaultValueOrValues as Record<string, unknown>;
-        // Mirrors the en/translation.json templates these toasts interpolate.
-        if (key === 'addWorkoutPlanDialog.copiedToastDescription') {
-          return `${values['itemName']} copied to clipboard.`;
-        }
-        if (key === 'addWorkoutPlanDialog.pastedToastDescription') {
-          return `Pasted ${values['itemName']} to the new day.`;
-        }
-      }
-      return key;
-    },
-  }),
+  useTranslation: () => ({ t: (_key: string, fallback: string) => fallback }),
 }));
 
-const mockedToast = toast as jest.MockedFunction<typeof toast>;
-
-const planWithTimedSet = {
-  id: 'plan-1',
-  user_id: 'user-1',
-  plan_name: 'Core',
-  assignments: [
-    {
-      id: 'assignment-1',
-      template_id: 'plan-1',
-      day_of_week: 1,
-      exercise_id: 'exercise-1',
-      exercise_name: 'Plank',
-      sets: [
-        {
-          id: 1,
-          set_number: 1,
-          set_type: 'Working Set',
-          reps: null,
-          weight: null,
-          duration: 45,
-        },
-        {
-          id: 2,
-          set_number: 2,
-          set_type: 'Working Set',
-          reps: 5,
-          weight: 0,
-          duration: null,
-        },
-      ],
-    },
-  ],
-} as unknown as WorkoutPlanTemplate;
-
-const planWithWeightedSet = {
-  id: 'plan-2',
-  user_id: 'user-1',
-  plan_name: 'Push',
-  assignments: [
-    {
-      id: 'assignment-2',
-      template_id: 'plan-2',
-      day_of_week: 1,
-      exercise_id: 'exercise-4',
-      exercise_name: 'Bench Press',
-      sets: [
-        {
-          id: 3,
-          set_number: 1,
-          set_type: 'Working Set',
-          reps: 5,
-          weight: 100,
-          duration: null,
-        },
-      ],
-    },
-  ],
-} as unknown as WorkoutPlanTemplate;
-
-const addExercise = (exercise: Partial<Exercise>) => {
-  const { result } = renderHook(() => useWorkoutPlanAssignments(null));
-
-  act(() => {
-    result.current.setSelectedDayForAssignment(2);
-  });
-  act(() => {
-    result.current.handleAddExerciseOrPreset(exercise as Exercise, 'internal');
-  });
-
-  return result.current.assignments[0];
+const firstId = '00000000-0000-4000-8000-000000000001';
+const secondId = '00000000-0000-4000-8000-000000000002';
+const set = {
+  set_number: 1,
+  reps: 8,
+  weight: null,
+  duration: null,
+  distance: 0.2,
+  rest_time: 75,
+  rpe: 7,
+  rir: 3,
+  notes: '8–10 per side',
 };
-
-describe('useWorkoutPlanAssignments weight handling', () => {
-  it('preserves null weight on time-only sets through load and save', () => {
-    const { result } = renderHook(() =>
-      useWorkoutPlanAssignments(planWithTimedSet)
-    );
-
-    const savedSets = result.current.buildAssignmentsForSave()[0]?.sets;
-
-    expect(savedSets?.[0]).toEqual(
-      expect.objectContaining({ weight: null, duration: 45 })
-    );
-    // An explicit 0 is a real value and must not be nulled.
-    expect(savedSets?.[1]).toEqual(expect.objectContaining({ weight: 0 }));
-  });
-
-  it('keeps a populated weight unchanged through load and save (no unit conversion)', () => {
-    const { result } = renderHook(() =>
-      useWorkoutPlanAssignments(planWithWeightedSet)
-    );
-
-    expect(result.current.assignments[0]?.sets?.[0]?.weight).toBe(100);
-
-    const savedSets = result.current.buildAssignmentsForSave()[0]?.sets;
-
-    expect(savedSets?.[0]).toEqual(expect.objectContaining({ weight: 100 }));
-  });
-});
-
-describe('useWorkoutPlanAssignments modality seeding', () => {
-  it('stamps category and modality and seeds a blank timed set for cardio', () => {
-    const added = addExercise({
-      id: 'exercise-2',
-      name: 'Outdoor Run',
-      category: 'cardio',
-    });
-
-    expect(added?.category).toBe('cardio');
-    expect(added?.modality).toBe('duration_distance');
-    expect(added?.sets[0]).toEqual(
-      expect.objectContaining({ reps: null, weight: null, duration: null })
-    );
-  });
-
-  it('seeds a rep-based set for a strength exercise', () => {
-    const added = addExercise({
-      id: 'exercise-3',
-      name: 'Squat',
-      category: 'strength',
-    });
-
-    expect(added?.modality).toBe('weight_reps');
-    expect(added?.sets[0]).toEqual(
-      expect.objectContaining({ reps: 10, weight: null })
-    );
-  });
-});
-
-// The preset query only ever loads one page, so a preset outside it is missing
-// from `workoutPresets`; the assignment's own joined name has to be used.
-const planWithLaterPreset = {
-  id: 'plan-2',
-  user_id: 'user-1',
-  plan_name: 'Split',
-  assignments: [
+const preset: WorkoutPreset = {
+  id: 42,
+  user_id: 'athlete',
+  name: 'A',
+  workout_format: 'standard',
+  exercises: [
     {
-      id: 'assignment-9',
-      template_id: 'plan-2',
-      day_of_week: 1,
-      workout_preset_id: 'preset-42',
-      workout_preset_name: 'Push Day A',
-      sets: [],
+      id: '9',
+      exercise_id: 'exercise',
+      exercise_name: 'Lunge',
+      exercise: { id: 'exercise', name: 'Lunge' } as Exercise,
+      sets: [set, { ...set, set_number: 2 }],
     },
   ],
-} as unknown as WorkoutPlanTemplate;
-
-describe('useWorkoutPlanAssignments preset naming', () => {
-  beforeEach(() => {
-    mockedToast.mockReset();
-  });
-
-  it('names a preset that is not on the loaded page in the copy toast', () => {
-    const { result } = renderHook(() =>
-      useWorkoutPlanAssignments(planWithLaterPreset)
-    );
-
-    act(() => {
-      result.current.handleCopyAssignment(result.current.assignments[0]!);
-    });
-
-    expect(mockedToast).toHaveBeenCalledWith(
-      expect.objectContaining({
-        description: 'Preset: Push Day A copied to clipboard.',
-      })
-    );
-  });
-
-  it('names the preset in the paste toast as well', () => {
-    const { result } = renderHook(() =>
-      useWorkoutPlanAssignments(planWithLaterPreset)
-    );
-
-    act(() => {
-      result.current.handleCopyAssignment(result.current.assignments[0]!);
-    });
-    act(() => {
-      result.current.handlePasteAssignment(3);
-    });
-
-    expect(mockedToast).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        description: 'Pasted Preset: Push Day A to the new day.',
-      })
-    );
-  });
-
-  it('carries the preset name onto a preset added from the picker', () => {
-    const { result } = renderHook(() => useWorkoutPlanAssignments(null));
-
-    act(() => {
-      result.current.setSelectedDayForAssignment(2);
-    });
-    act(() => {
-      result.current.handleAddExerciseOrPreset(
-        { id: 'preset-42', name: 'Push Day A' } as unknown as WorkoutPreset,
-        'preset'
-      );
-    });
-
-    expect(result.current.assignments[0]).toEqual(
-      expect.objectContaining({
-        workout_preset_id: 'preset-42',
-        workout_preset_name: 'Push Day A',
-      })
-    );
-  });
-});
-
-describe('useWorkoutPlanAssignments sequential mode', () => {
-  const sequentialPlan = {
-    id: 'plan-seq',
-    user_id: 'user-1',
-    plan_name: 'PPL Cycle',
+};
+function fixture(): WorkoutPlanTemplate {
+  return {
+    id: '17',
+    user_id: 'athlete',
+    plan_name: 'Build',
     schedule_type: 'sequential',
-    assignments: [
+    sessions: [
       {
-        id: 'asgn-1',
-        template_id: 'plan-seq',
+        id: firstId,
+        name: 'A',
         day_of_week: null,
-        sort_order: 1,
-        workout_preset_id: 'preset-1',
-        workout_preset_name: 'Push',
-        sets: [],
+        is_optional: false,
+        sort_order: 0,
+        assignments: [
+          {
+            id: 101,
+            workout_preset_id: 42,
+            preset_snapshot: structuredClone(preset),
+            sort_order: 0,
+            sets: [],
+          },
+        ],
       },
       {
-        id: 'asgn-2',
-        template_id: 'plan-seq',
+        id: secondId,
+        name: 'A',
         day_of_week: null,
-        sort_order: 2,
-        workout_preset_id: 'preset-2',
-        workout_preset_name: 'Pull',
-        sets: [],
+        is_optional: false,
+        sort_order: 1,
+        assignments: [
+          {
+            id: 102,
+            workout_preset_id: 42,
+            preset_snapshot: {
+              ...structuredClone(preset),
+              exercises: [
+                {
+                  ...structuredClone(preset.exercises[0]!),
+                  sets: [
+                    set,
+                    { ...set, set_number: 2 },
+                    { ...set, set_number: 3 },
+                  ],
+                },
+              ],
+            },
+            sort_order: 0,
+            sets: [],
+          },
+        ],
       },
     ],
-  } as unknown as WorkoutPlanTemplate;
+  };
+}
 
-  it('loads scheduleType as sequential and maintains assignments', () => {
-    const { result } = renderHook(() =>
-      useWorkoutPlanAssignments(sequentialPlan)
-    );
+it('edits one repeated-label prescription without changing another session or loaded source', () => {
+  const original = fixture();
+  const { result } = renderHook(() => useWorkoutPlanAssignments(original));
+  const changed = structuredClone(
+    result.current.assignments[0]!.preset_snapshot!
+  );
+  changed.exercises[0]!.sets[0]!.reps = 10;
+  act(() => result.current.handlePresetSnapshotChange(0, changed));
+  const saved = result.current.buildSessionsForSave();
+  expect(
+    saved[0]!.assignments[0]!.preset_snapshot!.exercises[0]!.sets[0]!.reps
+  ).toBe(10);
+  expect(
+    original.sessions[0]!.assignments[0]!.preset_snapshot!.exercises[0]!
+      .sets[0]!.reps
+  ).toBe(8);
+  expect(saved[1]!.assignments[0]!.preset_snapshot).toEqual(
+    original.sessions[1]!.assignments[0]!.preset_snapshot
+  );
+  expect(saved.map((s) => [s.id, s.assignments[0]!.id])).toEqual([
+    [firstId, 101],
+    [secondId, 102],
+  ]);
+});
 
-    expect(result.current.scheduleType).toBe('sequential');
-    expect(result.current.assignments).toHaveLength(2);
-  });
+it('keeps UUID membership and persisted assignment IDs when reordering or removing sessions', () => {
+  const { result } = renderHook(() => useWorkoutPlanAssignments(fixture()));
+  act(() => result.current.moveSession(secondId, 'up'));
+  expect(
+    result.current
+      .buildSessionsForSave()
+      .map((s) => [s.id, s.sort_order, s.assignments[0]!.id])
+  ).toEqual([
+    [secondId, 0, 102],
+    [firstId, 1, 101],
+  ]);
+  act(() => result.current.removeSession(firstId));
+  expect(
+    result.current
+      .buildSessionsForSave()
+      .map((s) => [s.id, s.assignments[0]!.id])
+  ).toEqual([[secondId, 102]]);
+});
 
-  it('buildAssignmentsForSave assigns sort_order and nulls day_of_week for sequential mode', () => {
-    const { result } = renderHook(() => useWorkoutPlanAssignments(null));
+it('copies a full frozen preset into another session without sharing mutable prescriptions or assignment identities', () => {
+  const { result } = renderHook(() => useWorkoutPlanAssignments(fixture()));
+  act(() =>
+    result.current.handleCopyAssignment(result.current.assignments[0]!)
+  );
+  act(() => result.current.handlePasteAssignment(secondId));
+  const pasted = result.current.assignments[2]!;
+  const changed = structuredClone(pasted.preset_snapshot!);
+  changed.exercises[0]!.sets[0]!.rest_time = 120;
+  act(() => result.current.handlePresetSnapshotChange(2, changed));
+  const saved = result.current.buildSessionsForSave();
+  expect(saved[1]!.assignments[1]!.id).toBeUndefined();
+  expect(
+    saved[1]!.assignments[1]!.preset_snapshot!.exercises[0]!.sets[0]
+  ).toMatchObject({ ...set, rest_time: 120 });
+  expect(
+    saved[0]!.assignments[0]!.preset_snapshot!.exercises[0]!.sets[0]
+  ).toEqual(set);
+});
 
-    act(() => {
-      result.current.setScheduleType('sequential');
-    });
+it('preserves null, zero and complete per-set fields for individual exercises through local editing', () => {
+  const plan = fixture();
+  plan.sessions[0]!.assignments = [
+    {
+      id: 101,
+      exercise_id: 'exercise',
+      sets: [set, { ...set, set_number: 2, weight: 0 }],
+    },
+  ];
+  const { result } = renderHook(() => useWorkoutPlanAssignments(plan));
+  act(() => result.current.handleSetChangeInPlan(0, 0, 'reps', 9));
+  const saved = result.current.buildSessionsForSave()[0]!.assignments[0]!;
+  expect(saved.sets[0]).toMatchObject({ ...set, reps: 9 });
+  expect(saved.sets[1]!.weight).toBe(0);
+  act(() => result.current.handleDuplicateSetInPlan(0, 0));
+  expect(
+    result.current
+      .buildSessionsForSave()[0]!
+      .assignments[0]!.sets.map((s) => [
+        s.set_number,
+        s.reps,
+        s.weight,
+        s.rpe,
+        s.rest_time,
+      ])
+  ).toEqual([
+    [1, 9, null, 7, 75],
+    [2, 9, null, 7, 75],
+    [3, 8, 0, 7, 75],
+  ]);
+});
 
-    act(() => {
-      result.current.handleAddExerciseOrPreset(
-        { id: 'preset-1', name: 'Push A' } as unknown as WorkoutPreset,
-        'preset'
-      );
-    });
-    act(() => {
-      result.current.handleAddExerciseOrPreset(
-        { id: 'preset-2', name: 'Pull A' } as unknown as WorkoutPreset,
-        'preset'
-      );
-    });
-
-    const saved = result.current.buildAssignmentsForSave();
-    expect(saved).toHaveLength(2);
-    expect(saved[0]).toEqual(
-      expect.objectContaining({
-        day_of_week: null,
-        sort_order: 0,
-        workout_preset_id: 'preset-1',
-      })
-    );
-    expect(saved[1]).toEqual(
-      expect.objectContaining({
-        day_of_week: null,
-        sort_order: 1,
-        workout_preset_id: 'preset-2',
-      })
-    );
-  });
-
-  it('reorders sequential items correctly via handleDragEnd', () => {
-    const { result } = renderHook(() =>
-      useWorkoutPlanAssignments(sequentialPlan)
-    );
-
-    act(() => {
-      // Drag asgn-1 over asgn-2
-      result.current.handleDragEnd({
-        active: { id: 'asgn-1' },
-        over: { id: 'asgn-2' },
-      } as unknown as Parameters<typeof result.current.handleDragEnd>[0]);
-    });
-
-    const saved = result.current.buildAssignmentsForSave();
-    expect(saved[0]?.workout_preset_name).toBe('Pull');
-    expect(saved[0]?.sort_order).toBe(0);
-    expect(saved[1]?.workout_preset_name).toBe('Push');
-    expect(saved[1]?.sort_order).toBe(1);
-  });
-
-  it('allows adding multiple exercises to the same session', () => {
-    const { result } = renderHook(() => useWorkoutPlanAssignments(null));
-
-    act(() => {
-      result.current.setScheduleType('sequential');
-      result.current.setSelectedSessionForAssignment(1);
-    });
-
-    act(() => {
-      result.current.handleAddExerciseOrPreset(
-        { id: 'preset-1', name: 'Bench Press' } as unknown as WorkoutPreset,
-        'preset',
-        1
-      );
-    });
-
-    act(() => {
-      result.current.handleAddExerciseOrPreset(
-        {
-          id: 'preset-2',
-          name: 'Incline Dumbbell',
-        } as unknown as WorkoutPreset,
-        'preset',
-        1
-      );
-    });
-
-    act(() => {
-      result.current.addSession();
-      result.current.handleAddExerciseOrPreset(
-        { id: 'preset-3', name: 'Squats' } as unknown as WorkoutPreset,
-        'preset',
-        2
-      );
-    });
-
-    expect(result.current.sessionList).toEqual([1, 2]);
-    const saved = result.current.buildAssignmentsForSave();
-    expect(saved).toHaveLength(3);
-    expect(saved[0]).toEqual(
-      expect.objectContaining({
-        session_index: 1,
-        sort_order: 0,
-        workout_preset_id: 'preset-1',
-      })
-    );
-    expect(saved[1]).toEqual(
-      expect.objectContaining({
-        session_index: 1,
-        sort_order: 1,
-        workout_preset_id: 'preset-2',
-      })
-    );
-    expect(saved[2]).toEqual(
-      expect.objectContaining({
-        session_index: 2,
-        sort_order: 0,
-        workout_preset_id: 'preset-3',
-      })
+it('keeps weekly membership independent even on the same weekday and freezes picker prescriptions', () => {
+  const { result } = renderHook(() => useWorkoutPlanAssignments(null));
+  act(() => result.current.addSession());
+  const ids = result.current.sessions.map((s) => s.id);
+  const pickedPreset = structuredClone(preset);
+  act(() => {
+    result.current.setScheduleType('weekly');
+    ids.forEach((id) => result.current.setSessionDay(id, 2));
+    result.current.handleAddExerciseOrPreset(pickedPreset, 'preset', ids[0]);
+    result.current.handleAddExerciseOrPreset(
+      {
+        id: 'run',
+        name: 'Run',
+        category: 'Cardio',
+        modality: 'duration_distance',
+      } as Exercise,
+      'internal',
+      ids[1]
     );
   });
-
-  it('removes a session and re-indexes subsequent sessions', () => {
-    const multiSessionPlan = {
-      id: 'plan-multi',
-      schedule_type: 'sequential',
-      assignments: [
-        { id: 'a-1', session_index: 1, sort_order: 0, workout_preset_id: 'p1' },
-        { id: 'a-2', session_index: 2, sort_order: 0, workout_preset_id: 'p2' },
-        { id: 'a-3', session_index: 3, sort_order: 0, workout_preset_id: 'p3' },
-      ],
-    } as unknown as WorkoutPlanTemplate;
-
-    const { result } = renderHook(() =>
-      useWorkoutPlanAssignments(multiSessionPlan)
-    );
-
-    expect(result.current.sessionList).toEqual([1, 2, 3]);
-
-    act(() => {
-      result.current.removeSession(2);
-    });
-
-    expect(result.current.sessionList).toEqual([1, 2]);
-    const saved = result.current.buildAssignmentsForSave();
-    expect(saved).toHaveLength(2);
-    expect(saved[0]?.session_index).toBe(1);
-    expect(saved[1]?.session_index).toBe(2);
-    expect(saved[1]?.workout_preset_id).toBe('p3');
+  pickedPreset.exercises[0]!.sets[0]!.reps = 99;
+  const saved = result.current.buildSessionsForSave();
+  expect(
+    saved.map((s) => [s.id, s.day_of_week, s.assignments[0]!.exercise_id])
+  ).toEqual([
+    [undefined, 2, undefined],
+    [undefined, 2, 'run'],
+  ]);
+  expect(
+    saved[0]!.assignments[0]!.preset_snapshot!.exercises[0]!.sets[0]!.reps
+  ).toBe(8);
+  expect(saved[1]!.assignments[0]!.sets[0]).toMatchObject({
+    reps: null,
+    weight: null,
   });
+});
+
+it('creates repeated-label sessions without sending editor UUIDs as persisted identities', async () => {
+  jest.mocked(apiCall).mockResolvedValue({ id: 17 });
+  const { result } = renderHook(() => useWorkoutPlanAssignments(null));
+  act(() => result.current.addSession());
+  const first = result.current.sessions[0];
+  const second = result.current.sessions[1];
+  if (!first || !second)
+    throw new Error('The authoring draft must contain both sessions.');
+  const laterPrescription = structuredClone(preset);
+  const exercise = laterPrescription.exercises[0];
+  if (!exercise)
+    throw new Error('The library preset must contain its prescribed exercise.');
+  exercise.sets.push({ ...set, set_number: 3 });
+  act(() => {
+    result.current.setSessionName(first.id, 'A');
+    result.current.setSessionName(second.id, 'A');
+    result.current.setSessionOptional(second.id, true);
+    result.current.handleAddExerciseOrPreset(preset, 'preset', first.id);
+    result.current.handleAddExerciseOrPreset(preset, 'preset', second.id);
+  });
+  act(() => result.current.handlePresetSnapshotChange(1, laterPrescription));
+  await createWorkoutPlanTemplate({
+    plan_name: 'Build',
+    schedule_type: 'sequential',
+    sessions: result.current.buildSessionsForSave(),
+  });
+  const request = jest.mocked(apiCall).mock.calls[0]?.[1];
+  if (typeof request?.body !== 'string')
+    throw new Error('Plan creation must serialize its request body.');
+  const payload = workoutPlanCreateRequestSchema.parse(
+    JSON.parse(request.body)
+  );
+  expect(payload.sessions.map((session) => session.is_optional)).toEqual([
+    false,
+    true,
+  ]);
+  expect(
+    payload.sessions.map((session) => [
+      session.id,
+      session.name,
+      session.sort_order,
+    ])
+  ).toEqual([
+    [undefined, 'A', 0],
+    [undefined, 'A', 1],
+  ]);
+  payload.sessions.forEach((session) =>
+    expect(session).not.toHaveProperty('id')
+  );
+  expect(
+    payload.sessions.map((session) =>
+      session.assignments.flatMap(
+        (assignment) =>
+          assignment.preset_snapshot?.exercises.flatMap((item) =>
+            item.sets.map((prescription) => prescription.reps)
+          ) ?? []
+      )
+    )
+  ).toEqual([
+    [8, 8],
+    [8, 8, 8],
+  ]);
+  expect(result.current.sessions.map((session) => session.id)).toEqual([
+    first.id,
+    second.id,
+  ]);
+  expect(
+    preset.exercises[0]?.sets.map((prescription) => prescription.reps)
+  ).toEqual([8, 8]);
+});
+
+it('preserves loaded session and assignment identities while adding and reordering a new session on update', async () => {
+  jest.mocked(apiCall).mockResolvedValue({ id: 17 });
+  const original = fixture();
+  original.sessions[1]!.is_optional = true;
+  const { result } = renderHook(() => useWorkoutPlanAssignments(original));
+  act(() => result.current.addSession());
+  const added = result.current.sessions[2];
+  if (!added)
+    throw new Error('Adding a session must retain its editor identity.');
+  act(() => {
+    result.current.setSessionName(added.id, 'A');
+    result.current.handleAddExerciseOrPreset(preset, 'preset', added.id);
+    result.current.moveSession(added.id, 'up');
+    result.current.moveSession(added.id, 'up');
+    result.current.moveSession(secondId, 'up');
+  });
+  await updateWorkoutPlanTemplate(original.id, {
+    schedule_type: 'sequential',
+    sessions: result.current.buildSessionsForSave(),
+  });
+  const request = jest.mocked(apiCall).mock.calls[0]?.[1];
+  if (typeof request?.body !== 'string')
+    throw new Error('Plan update must serialize its request body.');
+  const payload = workoutPlanUpdateRequestSchema.parse(
+    JSON.parse(request.body)
+  );
+  if (!payload.sessions)
+    throw new Error('Plan update must contain the authored sessions.');
+  expect(payload.sessions.map((session) => session.is_optional)).toEqual([
+    false,
+    true,
+    false,
+  ]);
+  expect(
+    payload.sessions.map((session) => [
+      session.id,
+      session.sort_order,
+      session.assignments.map((assignment) => assignment.id),
+    ])
+  ).toEqual([
+    [undefined, 0, [undefined]],
+    [secondId, 1, [102]],
+    [firstId, 2, [101]],
+  ]);
+  expect(payload.sessions[0]).not.toHaveProperty('id');
+  expect(
+    payload.sessions
+      .slice(1)
+      .map((session) =>
+        session.assignments.flatMap(
+          (assignment) =>
+            assignment.preset_snapshot?.exercises.flatMap((item) =>
+              item.sets.map((prescription) => prescription.reps)
+            ) ?? []
+        )
+      )
+  ).toEqual([
+    [8, 8, 8],
+    [8, 8],
+  ]);
+  expect(result.current.sessions.map((session) => session.id)).toEqual([
+    added.id,
+    secondId,
+    firstId,
+  ]);
+  expect(original.sessions.map((session) => session.id)).toEqual([
+    firstId,
+    secondId,
+  ]);
 });

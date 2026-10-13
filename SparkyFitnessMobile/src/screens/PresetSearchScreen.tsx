@@ -2,6 +2,7 @@ import React, { useCallback, useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   ActivityIndicator,
+  Alert,
   View,
   Text,
   TouchableOpacity,
@@ -20,8 +21,18 @@ import {
   useWorkoutPresetSearch,
   useRefetchOnFocus,
   useProfile,
+  useDailySummary,
 } from '../hooks';
-import { useActiveWorkoutPlan } from '../hooks/useActiveWorkoutPlan';
+import { useWorkoutPlanCandidates } from '../hooks/useActiveWorkoutPlan';
+import {
+  getDuePlanSessions,
+  getLoggedAssignmentIds,
+  getUncompletedActivePlans,
+} from '../utils/workoutPlanSchedule';
+import { buildWorkoutPlanSessionStart } from '../utils/workoutPlanSession';
+import type { WorkoutPlanSession } from '../types/workoutPlans';
+import { selectDashboardWorkoutPlans } from '@workspace/shared';
+import { getTodayDate } from '../utils/dateUtils';
 import {
   deriveShareStatus,
   filterByOwnership,
@@ -79,7 +90,26 @@ const PresetSearchScreen: React.FC<PresetSearchScreenProps> = ({
   const [startingId, setStartingId] = useState<string | number | null>(null);
 
   const { presets, isLoading, isError, refetch } = useWorkoutPresets();
-  const { plan: activePlan } = useActiveWorkoutPlan();
+  const {
+    plans: activePlans,
+    programs,
+    isLoading: plansLoading,
+  } = useWorkoutPlanCandidates();
+  const { summary: dailySummary } = useDailySummary({ date: getTodayDate() });
+  const scheduledSessions = useMemo(() => {
+    if (plansLoading || !dailySummary) return [];
+    const selected = selectDashboardWorkoutPlans(activePlans, programs ?? []);
+    const eligible = [
+      ...(selected.programPlan ? [selected.programPlan] : []),
+      ...selected.standalonePlans,
+    ];
+    return getUncompletedActivePlans(
+      eligible,
+      getLoggedAssignmentIds(dailySummary.exerciseEntries)
+    ).flatMap((plan) =>
+      getDuePlanSessions(plan).map((session) => ({ plan, session }))
+    );
+  }, [activePlans, programs, plansLoading, dailySummary]);
   const { searchResults, isSearching, isSearchActive, isSearchError } =
     useWorkoutPresetSearch(searchText);
   const filteredPresets = useMemo(
@@ -139,6 +169,24 @@ const PresetSearchScreen: React.FC<PresetSearchScreenProps> = ({
       });
     },
     [startLiveWorkout]
+  );
+
+  const handleSelectSession = useCallback(
+    (session: WorkoutPlanSession) => {
+      try {
+        const args = buildWorkoutPlanSessionStart(session);
+        setStartingId(`session:${session.id}`);
+        void startLiveWorkout(args);
+      } catch {
+        Alert.alert(
+          t('presetSearch.loadFailed', {
+            defaultValue: 'Failed to load presets',
+          }),
+          t('common.tryAgain', { defaultValue: 'Please try again.' })
+        );
+      }
+    },
+    [startLiveWorkout, t]
   );
 
   const handlePreviewPreset = useCallback(
@@ -223,17 +271,6 @@ const PresetSearchScreen: React.FC<PresetSearchScreenProps> = ({
                 >
                   {item.name}
                 </Text>
-                {activePlan?.next_assignment?.workout_preset_id != null &&
-                  Number(activePlan.next_assignment.workout_preset_id) ===
-                    Number(item.id) && (
-                    <View className="bg-accent-primary/20 px-1.5 py-0.5 rounded">
-                      <Text className="text-[10px] text-accent-primary font-bold">
-                        {t('exerciseSummary.suggestedPlanSession', {
-                          defaultValue: 'Suggested',
-                        })}
-                      </Text>
-                    </View>
-                  )}
                 <ShareStatusBadge status={status} />
               </View>
               <Text className="text-sm mt-0.5" style={{ color: textSecondary }}>
@@ -280,7 +317,6 @@ const PresetSearchScreen: React.FC<PresetSearchScreenProps> = ({
       getImageSource,
       profile,
       t,
-      activePlan,
     ]
   );
 
@@ -489,6 +525,54 @@ const PresetSearchScreen: React.FC<PresetSearchScreenProps> = ({
           />
         )}
       </TouchableOpacity>
+
+      {!isSearchActive && scheduledSessions.length > 0 && (
+        <FlatList
+          data={scheduledSessions}
+          keyExtractor={({ session }) => session.id}
+          style={{ flexGrow: 0, maxHeight: '40%' }}
+          keyboardShouldPersistTaps="handled"
+          renderItem={({ item: { plan, session } }) => (
+            <TouchableOpacity
+              className="flex-row items-center px-4 py-3 border-b border-border-subtle"
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={`${plan.plan_name}: ${session.name}`}
+              disabled={isStarting}
+              testID={`scheduled-session-${session.id}`}
+              onPress={() => handleSelectSession(session)}
+            >
+              <View className="flex-1">
+                <Text className="text-text-primary text-base font-medium">
+                  {session.name}
+                  {session.is_optional
+                    ? ` · ${t('trainingPrograms.optional', 'Optional')}`
+                    : ''}
+                </Text>
+                <Text
+                  className="text-sm mt-0.5"
+                  style={{ color: textSecondary }}
+                >
+                  {plan.plan_name} ·{' '}
+                  {plan.schedule_type === 'sequential'
+                    ? t('exerciseSummary.sessionNumber', {
+                        defaultValue: 'Session {{current}} of {{total}}',
+                        current: plan.sequence_position?.current ?? 1,
+                        total:
+                          plan.sequence_position?.total ?? plan.sessions.length,
+                      })
+                    : t('exerciseSummary.scheduledToday', {
+                        defaultValue: 'Scheduled Today',
+                      })}
+                </Text>
+              </View>
+              {isStarting && startingId === `session:${session.id}` && (
+                <ActivityIndicator size="small" color={accentColor} />
+              )}
+            </TouchableOpacity>
+          )}
+        />
+      )}
 
       {/* Content */}
       {renderContent()}

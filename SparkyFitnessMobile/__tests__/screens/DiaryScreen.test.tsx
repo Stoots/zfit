@@ -18,10 +18,34 @@ import { useSleepDay } from '../../src/hooks/useSleepDay';
 import { getTodayDate } from '../../src/utils/dateUtils';
 import { useNativeIOSTabsActive } from '../../src/services/nativeTabBarPreference';
 import { setNativeHeaderDatePickerOptions } from '../../src/utils/nativeHeaderDatePicker';
-import { EMPTY_SUPPLEMENT_TOTALS } from '@workspace/shared';
+import {
+  EMPTY_SUPPLEMENT_TOTALS,
+  type TrainingProgram,
+} from '@workspace/shared';
 import type { DailySummary, MacroSummary } from '../../src/types/dailySummary';
 import type { FoodEntry } from '../../src/types/foodEntries';
 import { buildSleepEntry } from '../helpers/sleepFixtures';
+import type {
+  WorkoutPlanSession,
+  WorkoutPlanTemplate,
+} from '../../src/types/workoutPlans';
+import type { StartLiveWorkoutArgs } from '../../src/hooks/useStartLiveWorkout';
+
+let mockPlanCandidates: {
+  plans: WorkoutPlanTemplate[];
+  programs: TrainingProgram[] | undefined;
+  isLoading: boolean;
+  isError: boolean;
+} = { plans: [], programs: [], isLoading: false, isError: false };
+let mockProgramsFailed = false;
+
+const mockStartLiveWorkout = jest.fn<Promise<void>, [StartLiveWorkoutArgs]>(
+  async () => {}
+);
+let mockPlanSessionChoices: {
+  plan: WorkoutPlanTemplate;
+  session: WorkoutPlanSession;
+}[] = [];
 
 type DiaryScreenProps = React.ComponentProps<typeof DiaryScreen>;
 type DateNavigatorProps = React.ComponentProps<typeof DateNavigatorComponent>;
@@ -138,14 +162,20 @@ jest.mock('../../src/stores/activeWorkoutStore', () => ({
 
 jest.mock('../../src/hooks/useStartLiveWorkout', () => ({
   useStartLiveWorkout: () => ({
-    startLiveWorkout: jest.fn(),
+    startLiveWorkout: mockStartLiveWorkout,
     isStarting: false,
   }),
 }));
 
 jest.mock('../../src/hooks/useActiveWorkoutPlan', () => ({
-  useActiveWorkoutPlan: () => ({ plan: null, plans: [], isLoading: false }),
-  useActiveWorkoutPlans: () => ({ plan: null, plans: [], isLoading: false }),
+  useWorkoutPlanCandidates: () => mockPlanCandidates,
+}));
+
+jest.mock('../../src/hooks/useTrainingPrograms', () => ({
+  useTrainingPrograms: () => ({
+    data: mockPlanCandidates.programs,
+    isError: mockProgramsFailed,
+  }),
 }));
 
 jest.mock('../../src/hooks/useWorkoutPresets', () => ({
@@ -222,10 +252,29 @@ jest.mock('../../src/components/FoodSummary', () => {
 });
 
 jest.mock('../../src/components/ExerciseSummary', () => {
-  const { View } = require('react-native');
+  const { View, Pressable, Text } = require('react-native');
   return {
     __esModule: true,
-    default: () => <View testID="exercise-summary" />,
+    default: ({
+      onPressPlanSession,
+    }: {
+      onPressPlanSession?: (
+        plan: WorkoutPlanTemplate,
+        session: WorkoutPlanSession
+      ) => void;
+    }) => (
+      <View testID="exercise-summary">
+        {mockPlanSessionChoices.map(({ plan, session }) => (
+          <Pressable
+            key={session.id}
+            testID={`diary-session-${session.id}`}
+            onPress={() => onPressPlanSession?.(plan, session)}
+          >
+            <Text>{session.name}</Text>
+          </Pressable>
+        ))}
+      </View>
+    ),
   };
 });
 
@@ -800,8 +849,9 @@ describe('DiaryScreen sleep cards', () => {
     );
 
     mockUseSleepDay.mockClear();
-    useDiaryDateStore.setState({ selectedDate: '2024-06-16' });
-    renderScreen();
+    act(() => {
+      useDiaryDateStore.setState({ selectedDate: '2024-06-16' });
+    });
 
     expect(mockUseSleepDay).toHaveBeenCalledWith(
       '2024-06-16',
@@ -844,7 +894,9 @@ describe('DiaryScreen sleep cards', () => {
 
     const onRefresh = UNSAFE_getByType(RefreshControl).props
       .onRefresh as () => Promise<void>;
-    await onRefresh();
+    await act(async () => {
+      await onRefresh();
+    });
 
     expect(refetchSleep).toHaveBeenCalled();
     expect(refetchSummary).toHaveBeenCalled();
@@ -859,5 +911,184 @@ describe('DiaryScreen progress photo markers', () => {
 
     expect(mockUseCheckInPhotoDates).toHaveBeenCalledWith(false);
     expect(mockUseCheckInPhotoDates).not.toHaveBeenCalledWith(true);
+  });
+});
+
+describe('Diary exact session execution', () => {
+  afterEach(() => {
+    mockPlanSessionChoices = [];
+  });
+
+  it('starts the selected same-label 3x8 session, not the plan current 2x8 session', () => {
+    jest.clearAllMocks();
+    configureConnection(true);
+    configureOnlineData();
+    configureFamilyUsers([]);
+    const ids = [
+      '11111111-1111-4111-8111-111111111111',
+      '22222222-2222-4222-8222-222222222222',
+    ];
+    // Partial API fixtures contain every execution field but omit unused audit/display fields.
+    const sessions = ids.map((id, index) => ({
+      id,
+      name: 'A',
+      day_of_week: null,
+      is_optional: false,
+      sort_order: index,
+      assignments: [
+        {
+          id: index + 1,
+          workout_session_id: id,
+          exercise_id: 'row',
+          sort_order: 0,
+          sets: Array.from({ length: index + 2 }, (_, setIndex) => ({
+            set_number: setIndex + 1,
+            reps: 8,
+            weight: null,
+            notes: '8 per side',
+            rest_time: 90,
+          })),
+        },
+      ],
+    })) as unknown as WorkoutPlanSession[];
+    const plan = {
+      id: 1,
+      plan_name: 'Plan',
+      sessions,
+      next_session: sessions[0],
+      next_assignments: sessions[0]!.assignments,
+    } as unknown as WorkoutPlanTemplate;
+    mockPlanSessionChoices = sessions.map((session) => ({ plan, session }));
+    const screen = renderScreen();
+    fireEvent.press(screen.getByTestId(`diary-session-${ids[1]}`));
+    expect(mockStartLiveWorkout).toHaveBeenCalledTimes(1);
+    const args = mockStartLiveWorkout.mock.calls[0]![0];
+    expect(args.workoutSessionId).toBe(ids[1]);
+    expect(args.exercises[0]!.workout_plan_assignment_id).toBe(2);
+    expect(args.exercises[0]!.sets).toHaveLength(3);
+    expect(args.exercises[0]!.sets[0]).toEqual(
+      expect.objectContaining({
+        reps: 8,
+        weight: null,
+        notes: '8 per side',
+        rest_time: 90,
+      })
+    );
+    expect(args.sourcePresetId).toBeUndefined();
+  });
+});
+
+describe('DiaryScreen scheduled plans when Programs are unavailable', () => {
+  const sessionId = '33333333-3333-4333-8333-333333333333';
+  const session = {
+    id: sessionId,
+    name: 'Standalone session',
+    day_of_week: null,
+    is_optional: false,
+    sort_order: 0,
+    assignments: [
+      {
+        id: 3,
+        workout_session_id: sessionId,
+        exercise_id: 'row',
+        sort_order: 0,
+        sets: [],
+      },
+    ],
+  };
+  const plan = {
+    id: 3,
+    user_id: 'athlete',
+    plan_name: 'Standalone plan',
+    start_date: '2024-06-15',
+    is_active: true,
+    schedule_type: 'sequential',
+    sessions: [session],
+    next_session: session,
+    next_assignments: session.assignments,
+    sequence_position: { current: 1, total: 1 },
+  } as WorkoutPlanTemplate;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    useDiaryDateStore.setState({
+      selectedDate: '2024-06-15',
+      lastKnownToday: getTodayDate(),
+    });
+    configureConnection(true);
+    configureOnlineData();
+    configureFamilyUsers([]);
+    mockUseNativeIOSTabsActive.mockReturnValue(false);
+    mockUseSleepDay.mockReturnValue({
+      wakeUp: null,
+      naps: [],
+      bedTime: null,
+      isLoading: false,
+      isError: false,
+      isForbidden: false,
+      refetch: refetchSleep,
+    });
+    mockPlanCandidates = {
+      plans: [plan],
+      programs: undefined,
+      isLoading: false,
+      isError: true,
+    };
+    mockProgramsFailed = true;
+  });
+
+  afterEach(() => {
+    mockPlanCandidates = {
+      plans: [],
+      programs: [],
+      isLoading: false,
+      isError: false,
+    };
+    mockProgramsFailed = false;
+  });
+
+  it('mounts ExerciseSummary for a standalone scheduled plan after the Programs read fails without data', () => {
+    const { getByTestId, queryByTestId } = renderScreen();
+
+    expect(getByTestId('exercise-summary')).toBeTruthy();
+    expect(queryByTestId('empty-day')).toBeNull();
+  });
+
+  it('keeps ExerciseSummary mounted when Programs change from loading to failed with no data', () => {
+    mockPlanCandidates = {
+      ...mockPlanCandidates,
+      isLoading: true,
+      isError: false,
+    };
+    mockProgramsFailed = false;
+    const { getByTestId, queryByTestId, rerender } = renderScreen();
+
+    expect(getByTestId('exercise-summary')).toBeTruthy();
+    expect(queryByTestId('empty-day')).toBeNull();
+
+    mockPlanCandidates = {
+      ...mockPlanCandidates,
+      isLoading: false,
+      isError: true,
+    };
+    mockProgramsFailed = true;
+    rerender(
+      <SafeAreaProvider initialMetrics={{ frame, insets }}>
+        <DiaryScreen navigation={mockNavigation} route={diaryRoute} />
+      </SafeAreaProvider>
+    );
+
+    expect(getByTestId('exercise-summary')).toBeTruthy();
+    expect(queryByTestId('empty-day')).toBeNull();
+  });
+
+  it('does not use a plan query error as the Programs failure fallback', () => {
+    // A paused Programs read can have no data without loading or failing.
+    // The combined candidate error belongs to a different query.
+    mockProgramsFailed = false;
+    const { getByTestId, queryByTestId } = renderScreen();
+
+    expect(getByTestId('empty-day')).toBeTruthy();
+    expect(queryByTestId('exercise-summary')).toBeNull();
   });
 });

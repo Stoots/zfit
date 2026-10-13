@@ -1,7 +1,205 @@
 import express from 'express';
+import { z } from 'zod';
+import {
+  workoutPlanCreateRequestSchema,
+  workoutPlanUpdateRequestSchema,
+  workoutPlanBulkRequestSchema,
+  workoutPlanBulkApplyRequestSchema,
+} from '@workspace/shared';
+import exerciseService from '../services/exerciseService.js';
+import checkPermissionMiddleware from '../middleware/checkPermissionMiddleware.js';
 import { authenticate } from '../middleware/authMiddleware.js';
 import workoutPlanTemplateService from '../services/workoutPlanTemplateService.js';
 const router = express.Router();
+
+const bulkCandidateParamsSchema = z.object({
+  id: z.coerce.number().int().positive(),
+});
+const bulkCandidateQuerySchema = z.strictObject({
+  program_id: z.uuid().optional(),
+});
+
+/**
+ * @swagger
+ * /workout-plan-templates/{id}/bulk-prescriptions/candidates:
+ *   get:
+ *     summary: List exact future Workout Session candidates
+ *     description: Owner-only, read-only. Reports every binding and exclusion reason. Omit program_id for standalone scope.
+ *     tags: [Fitness & Workouts]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: integer } }
+ *       - { in: query, name: program_id, schema: { type: string, format: uuid } }
+ *     responses:
+ *       200: { description: Candidates with assignments, bindings and eligibility. }
+ *       400: { description: Invalid plan or Program identifier. }
+ *       403: { description: Authenticated owner required. }
+ *       404: { description: Owned plan or Program not found. }
+ * /workout-plan-templates/bulk-prescriptions/preview:
+ *   post:
+ *     summary: Preview explicit prescription changes without writing
+ *     description: Returns per-target before/after prescriptions and a revision. Cancellation needs no API call.
+ *     tags: [Fitness & Workouts]
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200: { description: Before/after batch and confirmation revision. }
+ *       400: { description: Invalid request or source identity change. }
+ *       403: { description: Authenticated owner required. }
+ *       404: { description: Owned source or target not found. }
+ *       409: { description: Incompatible mapping, history or unaccounted bindings. }
+ * /workout-plan-templates/bulk-prescriptions/apply:
+ *   post:
+ *     summary: Atomically apply a confirmed bulk prescription preview
+ *     description: Accepts request and revision; revalidates ownership, prescriptions, future bindings and history before any write. Returns the canonical saved plan.
+ *     tags: [Fitness & Workouts]
+ *     security:
+ *       - cookieAuth: []
+ *     responses:
+ *       200: { description: Canonical saved plan. }
+ *       400: { description: Invalid confirmation request. }
+ *       403: { description: Authenticated owner required. }
+ *       404: { description: Owned source or target not found. }
+ *       409: { description: Stale preview or ineligible target; nothing applied. }
+ */
+router.get(
+  '/:id/bulk-prescriptions/candidates',
+  authenticate,
+  async (req, res, next) => {
+    try {
+      const params = bulkCandidateParamsSchema.safeParse(req.params);
+      const query = bulkCandidateQuerySchema.safeParse(req.query);
+      if (!params.success || !query.success)
+        return res.status(400).json({
+          error: 'Select a valid plan ID and optional Training Program UUID.',
+        });
+      const candidates =
+        await workoutPlanTemplateService.getBulkPrescriptionCandidates(
+          req.userId,
+          req.originalUserId || req.authenticatedUserId || req.userId,
+          params.data.id,
+          query.data.program_id ?? null
+        );
+      res.json(candidates);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+router.post(
+  '/bulk-prescriptions/preview',
+  authenticate,
+  async (req, res, next) => {
+    try {
+      const parsed = workoutPlanBulkRequestSchema.safeParse(req.body);
+      if (!parsed.success)
+        return res.status(400).json({
+          error: 'Invalid bulk prescription preview request.',
+          details: parsed.error.flatten(),
+        });
+      const preview = await workoutPlanTemplateService.previewBulkPrescriptions(
+        req.userId,
+        req.originalUserId || req.authenticatedUserId || req.userId,
+        parsed.data
+      );
+      res.json(preview);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+router.post(
+  '/bulk-prescriptions/apply',
+  authenticate,
+  async (req, res, next) => {
+    try {
+      const parsed = workoutPlanBulkApplyRequestSchema.safeParse(req.body);
+      if (!parsed.success)
+        return res.status(400).json({
+          error: 'Invalid bulk prescription apply request.',
+          details: parsed.error.flatten(),
+        });
+      const saved = await workoutPlanTemplateService.applyBulkPrescriptions(
+        req.userId,
+        req.originalUserId || req.authenticatedUserId || req.userId,
+        parsed.data
+      );
+      res.json(saved);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+const startSessionParamsSchema = z.object({
+  workoutSessionId: z.string().uuid(),
+});
+const startSessionBodySchema = z.strictObject({ entry_date: z.iso.date() });
+/**
+ * @swagger
+ * /workout-plan-templates/sessions/{workoutSessionId}/start:
+ *   post:
+ *     summary: Start the exact prescribed Workout Session
+ *     description: Expands this session's individual assignments and frozen preset prescriptions, never a plan's first/current session or a live library preset.
+ *     tags: [Fitness & Workouts]
+ *     security:
+ *       - cookieAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: workoutSessionId
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             additionalProperties: false
+ *             required: [entry_date]
+ *             properties:
+ *               entry_date: { type: string, format: date }
+ *     responses:
+ *       201: { description: Created diary workouts from the exact session prescription. }
+ *       400: { description: Invalid session ID or date. }
+ *       401: { description: Authentication required. }
+ *       403: { description: Diary write permission required. }
+ *       404: { description: Workout Session not found or inaccessible. }
+ */
+router.post(
+  '/sessions/:workoutSessionId/start',
+  authenticate,
+  checkPermissionMiddleware('diary'),
+  async (req, res, next) => {
+    try {
+      const params = startSessionParamsSchema.safeParse(req.params);
+      const body = startSessionBodySchema.safeParse(req.body);
+      if (!params.success || !body.success) {
+        const error = !params.success
+          ? params.error
+          : !body.success
+            ? body.error
+            : undefined;
+        return res.status(400).json({
+          error: 'Invalid workout session start payload.',
+          details: error?.flatten(),
+        });
+      }
+      const workouts = await exerciseService.logWorkoutPlanSession(
+        req.userId,
+        req.originalUserId || req.authenticatedUserId || req.userId,
+        params.data.workoutSessionId,
+        body.data.entry_date
+      );
+      res.status(201).json(workouts);
+    } catch (error) {
+      next(error);
+    }
+  }
+);
 /**
  * @swagger
  * /workout-plan-templates:
@@ -31,9 +229,16 @@ const router = express.Router();
  */
 router.post('/', authenticate, async (req, res, next) => {
   try {
+    const parsedBody = workoutPlanCreateRequestSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      return res.status(400).json({
+        error: 'Invalid workout plan payload.',
+        details: parsedBody.error.flatten(),
+      });
+    }
     const newPlan = await workoutPlanTemplateService.createWorkoutPlanTemplate(
       req.userId,
-      req.body
+      parsedBody.data
     );
     res.status(201).json(newPlan);
   } catch (error) {
@@ -169,11 +374,18 @@ router.get('/:id', authenticate, async (req, res, next) => {
  */
 router.put('/:id', authenticate, async (req, res, next) => {
   try {
+    const parsedBody = workoutPlanUpdateRequestSchema.safeParse(req.body);
+    if (!parsedBody.success) {
+      return res.status(400).json({
+        error: 'Invalid workout plan payload.',
+        details: parsedBody.error.flatten(),
+      });
+    }
     const updatedPlan =
       await workoutPlanTemplateService.updateWorkoutPlanTemplate(
         req.userId,
         req.params.id,
-        req.body
+        parsedBody.data
       );
     res.status(200).json(updatedPlan);
   } catch (error) {
@@ -216,6 +428,8 @@ router.put('/:id', authenticate, async (req, res, next) => {
  *         description: Unauthorized.
  *       403:
  *         description: Forbidden.
+ *       409:
+ *         description: Completed, past, or Program-linked diary history prevents deletion.
  *       404:
  *         description: Workout plan template not found or could not be deleted.
  *       500:

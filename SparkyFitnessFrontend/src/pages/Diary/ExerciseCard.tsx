@@ -20,11 +20,10 @@ import { debug, info, error } from '@/utils/logging';
 import type {
   WorkoutPresetSet,
   WorkoutPreset,
-  WorkoutPresetExercise,
   PresetExercise,
   ExerciseToLog,
-  WorkoutPlanAssignment,
   WorkoutPlanTemplate,
+  WorkoutPlanSession,
 } from '@/types/workout';
 import { formatMinutesToHHMM } from '@/utils/timeFormatters';
 import DashboardPlanCard from './DashboardPlanCard';
@@ -38,27 +37,23 @@ import {
   useDeleteExercisePresetEntryMutation,
   useExerciseEntries,
 } from '@/hooks/Exercises/useExerciseEntries';
-import { useActiveWorkoutPlans } from '@/hooks/Exercises/useWorkoutPlans';
+import {
+  useActiveWorkoutPlans,
+  useWorkoutPlanTemplates,
+} from '@/hooks/Exercises/useWorkoutPlans';
 import { useTrainingProgramsList } from '@/hooks/TrainingPrograms/useTrainingPrograms';
 import {
-  useWorkoutPresets,
-  workoutPresetByIdOptions,
-} from '@/hooks/Exercises/useWorkoutPresets';
-import {
-  isCardioModality,
   resolveExerciseCalories,
-  resolveExerciseModality,
   setsDurationMinutes,
   selectDashboardWorkoutPlans,
 } from '@workspace/shared';
-import { defaultSetForModality } from '@/constants/exercises';
-import { generateClientId } from '@/utils/generateClientId';
 import { useQueryClient } from '@tanstack/react-query';
 import { exerciseByIdOptions } from '@/hooks/Exercises/useExercises';
 import {
   createWorkoutPlaybackRouteState,
   createWorkoutPlaybackRouteStateFromExercise,
 } from '@/utils/workoutPlayback';
+import { buildWorkoutPlanSessionPreset } from '@/utils/workoutPlanSession';
 import {
   Exercise,
   ExerciseEntry,
@@ -132,143 +127,49 @@ const ExerciseCard = ({
   const { data: trainingPrograms, isError: trainingProgramsError } =
     useTrainingProgramsList(user?.id, !isActingOnBehalf);
 
-  const { data: presetData } = useWorkoutPresets(currentUserId);
-  const workoutPresets = useMemo(() => presetData?.presets ?? [], [presetData]);
+  const { data: allPlans } = useWorkoutPlanTemplates(currentUserId);
 
   const { data: exerciseEntries, isLoading: loading } = useExerciseEntries(
     selectedDate,
     currentUserId
   );
 
+  const [startingSession, setStartingSession] = useState<string | null>(null);
   const handleStartPlanSession = async (
     targetPlan: WorkoutPlanTemplate,
-    assignment: WorkoutPlanAssignment
+    session: WorkoutPlanSession
   ) => {
-    if (!targetPlan) return;
-
-    // Collect all assignments in this session
-    const isSequential = targetPlan.schedule_type === 'sequential';
-    const sessionAssignments = isSequential
-      ? targetPlan.assignments?.filter(
-          (a: WorkoutPlanAssignment) =>
-            (a.session_index ?? 1) === (assignment.session_index ?? 1)
-        ) || [assignment]
-      : targetPlan.assignments?.filter(
-          (a: WorkoutPlanAssignment) => a.day_of_week === assignment.day_of_week
-        ) || [assignment];
-
-    const combinedExercises: WorkoutPresetExercise[] = [];
-
-    for (const a of sessionAssignments) {
-      if (a.workout_preset_id) {
-        let preset = workoutPresets.find(
-          (p) => String(p.id) === String(a.workout_preset_id)
-        );
-        if (!preset) {
-          try {
-            preset = await queryClient.fetchQuery(
-              workoutPresetByIdOptions(a.workout_preset_id)
-            );
-          } catch (err) {
-            error(
-              loggingLevel,
-              `Failed to fetch preset for session: ${a.workout_preset_id}`,
-              err
-            );
-          }
-        }
-        if (preset && preset.exercises && preset.exercises.length > 0) {
-          combinedExercises.push(
-            ...preset.exercises.map((ex) => ({
-              ...ex,
-              workout_plan_assignment_id: a.id ?? null,
-            }))
-          );
-        }
-      } else if (a.exercise_id) {
-        try {
-          const fullExercise = await queryClient.fetchQuery(
-            exerciseByIdOptions(a.exercise_id)
-          );
-          const modality = resolveExerciseModality(
-            fullExercise.modality,
-            fullExercise.category
-          );
-          combinedExercises.push({
-            id: String(a.id || generateClientId()),
-            exercise_id: fullExercise.id,
-            exercise_name: fullExercise.name,
-            exercise: fullExercise,
-            category: fullExercise.category ?? undefined,
-            modality,
-            superset_group: null,
-            workout_plan_assignment_id: a.id ?? null,
-            sets:
-              a.sets && a.sets.length > 0
-                ? a.sets.map((set: WorkoutPresetSet, sIdx: number) => ({
-                    set_number: sIdx + 1,
-                    set_type: set.set_type ?? 'normal',
-                    reps: set.reps ?? null,
-                    weight: set.weight ?? null,
-                    duration: set.duration ?? null,
-                    distance: isCardioModality(modality)
-                      ? (set.distance ?? null)
-                      : null,
-                    rest_time: isCardioModality(modality)
-                      ? 0
-                      : (set.rest_time ?? null),
-                    notes: set.notes ?? null,
-                    rpe: null,
-                    completed_at: null,
-                  }))
-                : [defaultSetForModality(modality)],
-          });
-        } catch (err) {
-          error(
-            loggingLevel,
-            `Failed to fetch exercise for session: ${a.exercise_id}`,
-            err
-          );
-        }
-      }
-    }
-
-    if (combinedExercises.length === 0) {
+    const sessionId = session.id;
+    setStartingSession(sessionId);
+    try {
+      const preset = await buildWorkoutPlanSessionPreset(
+        targetPlan,
+        sessionId,
+        currentUserId ?? '',
+        (id) => queryClient.fetchQuery(exerciseByIdOptions(id))
+      );
+      navigate(`/workout-playback?date=${selectedDate}`, {
+        state: createWorkoutPlaybackRouteState(
+          preset,
+          selectedDate,
+          `${window.location.pathname}${window.location.search}`
+        ),
+      });
+    } catch (err) {
       toast({
         title: t('common.error', 'Error'),
-        description: t(
-          'exerciseCard.noExercisesInPlanSession',
-          'No exercises found in this session.'
-        ),
+        description:
+          err instanceof Error
+            ? err.message
+            : t(
+                'exerciseCard.sessionStartError',
+                'Could not start the selected session.'
+              ),
         variant: 'destructive',
       });
-      return;
+    } finally {
+      setStartingSession(null);
     }
-
-    const sessionName =
-      assignment.session_name ||
-      targetPlan.sequence_position?.session_name ||
-      assignment.workout_preset_name ||
-      assignment.exercise_name ||
-      targetPlan.plan_name;
-
-    const sessionPreset: WorkoutPreset = {
-      id: `plan-${targetPlan.id}-session-${assignment.session_index ?? assignment.day_of_week ?? 1}`,
-      user_id: currentUserId || '',
-      name: sessionName,
-      description: targetPlan.description || `${targetPlan.plan_name} session`,
-      exercises: combinedExercises,
-    };
-
-    const routeState = createWorkoutPlaybackRouteState(
-      sessionPreset,
-      selectedDate,
-      `${window.location.pathname}${window.location.search}`
-    );
-
-    navigate(`/workout-playback?date=${selectedDate}`, {
-      state: routeState,
-    });
   };
 
   // Effect to handle initialExercisesToLog prop
@@ -610,20 +511,48 @@ const ExerciseCard = ({
     if (!isActingOnBehalf && !trainingPrograms && !trainingProgramsError) {
       return none;
     }
-    const eligiblePlans = activePlans.filter((plan: WorkoutPlanTemplate) => {
-      if (!plan.next_assignment) return false;
-      return !(plan.assignments || []).some((assignment) =>
-        loggedAssignmentIds.has(String(assignment.id))
-      );
-    });
+    const standaloneEligible = activePlans.filter(
+      (plan) =>
+        plan.next_session?.assignments.some(
+          (assignment) => !loggedAssignmentIds.has(String(assignment.id))
+        ) ?? false
+    );
     // Programs are owner-only, and a failed schedule lookup falls back to the
     // pre-Program behaviour of listing every eligible plan.
     if (isActingOnBehalf || trainingProgramsError || !trainingPrograms) {
-      return { programPlan: undefined, standalonePlans: eligiblePlans };
+      return { programPlan: undefined, standalonePlans: standaloneEligible };
     }
-    return selectDashboardWorkoutPlans(eligiblePlans, trainingPrograms);
+    const linkedPlanIds = new Set(
+      trainingPrograms.flatMap((program) =>
+        program.phases.flatMap((phase) =>
+          phase.weeks.flatMap((week) =>
+            week.sessions.map((session) => String(session.workout_plan_id))
+          )
+        )
+      )
+    );
+    const activePlanIds = new Set(activePlans.map((plan) => String(plan.id)));
+    const programCandidates = [
+      ...activePlans,
+      ...(allPlans ?? []).filter(
+        (plan) =>
+          linkedPlanIds.has(String(plan.id)) &&
+          !activePlanIds.has(String(plan.id))
+      ),
+    ];
+    const selected = selectDashboardWorkoutPlans(
+      programCandidates,
+      trainingPrograms
+    );
+    return {
+      programPlan: selected.programPlan,
+      standalonePlans: selected.standalonePlans.filter((plan) =>
+        standaloneEligible.some((candidate) => candidate.id === plan.id)
+      ),
+    };
   }, [
     activePlans,
+    allPlans,
     trainingPrograms,
     trainingProgramsError,
     loggedAssignmentIds,
@@ -689,6 +618,7 @@ const ExerciseCard = ({
             key={`program-${programPlan.id}`}
             plan={programPlan}
             allowSessionPicker={false}
+            startingSessionId={startingSession}
             onStart={handleStartPlanSession}
           />
         )}
@@ -697,6 +627,7 @@ const ExerciseCard = ({
             key={plan.id}
             plan={plan}
             allowSessionPicker
+            startingSessionId={startingSession}
             onStart={handleStartPlanSession}
           />
         ))}

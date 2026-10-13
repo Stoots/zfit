@@ -70,11 +70,13 @@ BEGIN
     'workout_plan_assignment_sets',
     'workout_plan_template_assignments',
     'workout_plan_templates',
+    'workout_plan_sessions',
     'training_programs',
     'training_program_phases',
     'training_program_weeks',
     'training_program_sessions',
     'cardio_test_attempts',
+    'workout_program_consolidations',
     'workout_preset_exercise_sets',
     'workout_preset_exercises',
     'workout_presets',
@@ -622,6 +624,7 @@ SELECT create_owner_policy('training_programs');
 SELECT create_owner_policy('training_program_phases');
 SELECT create_owner_policy('training_program_weeks');
 SELECT create_owner_policy('training_program_sessions');
+SELECT create_owner_policy('workout_program_consolidations');
 
 -- Cardio Test Attempts are diary records and follow diary delegation.
 SELECT create_diary_policy('cardio_test_attempts');
@@ -919,13 +922,34 @@ WITH CHECK (EXISTS (SELECT 1 FROM public.meal_plan_templates mpt WHERE mpt.id = 
            (((item_type = 'food') AND EXISTS (SELECT 1 FROM public.foods f WHERE f.id = meal_plan_template_assignments.food_id)) OR
             ((item_type = 'meal') AND EXISTS (SELECT 1 FROM public.meals m WHERE m.id = meal_plan_template_assignments.meal_id))));
 
-CREATE POLICY owner_policy ON public.workout_plan_assignment_sets FOR ALL TO PUBLIC
-USING (EXISTS (SELECT 1 FROM public.workout_plan_template_assignments wpta WHERE wpta.id = workout_plan_assignment_sets.assignment_id))
-WITH CHECK (EXISTS (SELECT 1 FROM public.workout_plan_template_assignments wpta WHERE wpta.id = workout_plan_assignment_sets.assignment_id));
+-- Session reads inherit the plan library boundary; only the plan owner authors
+-- sessions. Programs remain owner-only and cannot use shared sessions.
+CREATE POLICY select_policy ON public.workout_plan_sessions FOR SELECT TO PUBLIC
+USING (EXISTS (SELECT 1 FROM public.workout_plan_templates p WHERE p.id = workout_plan_sessions.template_id AND p.user_id = workout_plan_sessions.user_id));
+CREATE POLICY modify_policy ON public.workout_plan_sessions FOR ALL TO PUBLIC
+USING (user_id = authenticated_user_id())
+WITH CHECK (user_id = authenticated_user_id() AND EXISTS (
+  SELECT 1 FROM public.workout_plan_templates p WHERE p.id = workout_plan_sessions.template_id AND p.user_id = workout_plan_sessions.user_id
+));
 
-CREATE POLICY owner_policy ON public.workout_plan_template_assignments FOR ALL TO PUBLIC
-USING (EXISTS (SELECT 1 FROM public.workout_plan_templates wpt WHERE wpt.id = workout_plan_template_assignments.template_id AND has_diary_access(wpt.user_id)))
-WITH CHECK (EXISTS (SELECT 1 FROM public.workout_plan_templates wpt WHERE wpt.id = workout_plan_template_assignments.template_id AND has_diary_access(wpt.user_id)));
+CREATE POLICY select_policy ON public.workout_plan_template_assignments FOR SELECT TO PUBLIC
+USING (EXISTS (SELECT 1 FROM public.workout_plan_sessions s
+  WHERE s.id = workout_plan_template_assignments.workout_session_id
+    AND s.template_id = workout_plan_template_assignments.template_id AND s.user_id = workout_plan_template_assignments.user_id));
+CREATE POLICY modify_policy ON public.workout_plan_template_assignments FOR ALL TO PUBLIC
+USING (has_diary_access(user_id))
+WITH CHECK (has_diary_access(user_id) AND EXISTS (
+  SELECT 1 FROM public.workout_plan_sessions s WHERE s.id = workout_plan_template_assignments.workout_session_id
+    AND s.template_id = workout_plan_template_assignments.template_id AND s.user_id = workout_plan_template_assignments.user_id
+) AND (exercise_id IS NULL OR EXISTS (SELECT 1 FROM public.exercises e WHERE e.id = workout_plan_template_assignments.exercise_id)));
+
+CREATE POLICY select_policy ON public.workout_plan_assignment_sets FOR SELECT TO PUBLIC
+USING (EXISTS (SELECT 1 FROM public.workout_plan_template_assignments a WHERE a.id = workout_plan_assignment_sets.assignment_id));
+CREATE POLICY modify_policy ON public.workout_plan_assignment_sets FOR ALL TO PUBLIC
+USING (EXISTS (SELECT 1 FROM public.workout_plan_template_assignments a
+  WHERE a.id = workout_plan_assignment_sets.assignment_id AND has_diary_access(a.user_id)))
+WITH CHECK (EXISTS (SELECT 1 FROM public.workout_plan_template_assignments a
+  WHERE a.id = workout_plan_assignment_sets.assignment_id AND has_diary_access(a.user_id)));
 
 CREATE POLICY select_policy ON public.workout_preset_exercise_sets FOR SELECT TO PUBLIC
 USING (EXISTS (SELECT 1 FROM public.workout_preset_exercises wpe WHERE wpe.id = workout_preset_exercise_sets.workout_preset_exercise_id));

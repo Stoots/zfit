@@ -1,4 +1,17 @@
 import { getClient } from '../db/poolManager.js';
+import type { PoolClient } from 'pg';
+import type {
+  CreatePresetSessionRequest,
+  PresetSessionExerciseRequest,
+  WorkoutPlanPresetSnapshot,
+  WorkoutFormat,
+} from '@workspace/shared';
+import type { CreateExerciseEntryRequest } from '@workspace/shared';
+import { workoutPlanSessionResponseSchema } from '@workspace/shared';
+import {
+  getWorkoutSessionForExecution,
+  getWorkoutSessionForAssignments,
+} from '../models/exerciseTemplate.js';
 import exerciseRepository from '../models/exerciseRepository.js';
 import exerciseDb from '../models/exercise.js';
 import exerciseEntryDb, {
@@ -19,7 +32,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { resolveExerciseIdToUuid } from '../utils/uuidUtils.js';
 import { normalizeToStringArray } from '../utils/exerciseJsonFields.js';
-import { resolveTemplateStartDay } from '../utils/timezoneLoader.js';
 import {
   deriveExerciseModality,
   canEditGroupedWorkout,
@@ -328,11 +340,21 @@ async function createExercise(authenticatedUserId: any, exerciseData: any) {
   }
 }
 
+type ExerciseEntryPreparationInput = Omit<
+  Partial<CreateExerciseEntryRequest>,
+  'exercise_id' | 'workout_plan_assignment_id'
+> & {
+  exercise_id?: string | null;
+  workout_plan_assignment_id?: string | number | null;
+  exercise_name?: string;
+  sort_order?: number;
+  superset_group?: number | null;
+} & Record<string, unknown>;
+
 async function prepareExerciseEntryForCreate(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  authenticatedUserId: any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  entryData: any
+  authenticatedUserId: string,
+  entryData: ExerciseEntryPreparationInput,
+  frozenExerciseSnapshot?: WorkoutPlanPresetSnapshot['exercises'][number]
 ) {
   // A null exercise_id is a preserved entry: the library exercise it was logged
   // from has been deleted, and the entry now stands on the snapshot columns it
@@ -341,12 +363,22 @@ async function prepareExerciseEntryForCreate(
   // uneditable.
   const hasLibraryExercise =
     entryData.exercise_id !== null && entryData.exercise_id !== undefined;
-  const resolvedExerciseId = hasLibraryExercise
-    ? await resolveExerciseIdToUuid(entryData.exercise_id, authenticatedUserId)
-    : null;
-  const exercise = hasLibraryExercise
-    ? await exerciseDb.getExerciseById(resolvedExerciseId, authenticatedUserId)
-    : null;
+  const resolvedExerciseId = frozenExerciseSnapshot
+    ? frozenExerciseSnapshot.exercise_id
+    : hasLibraryExercise
+      ? await resolveExerciseIdToUuid(
+          entryData.exercise_id,
+          authenticatedUserId
+        )
+      : null;
+  const exercise = frozenExerciseSnapshot
+    ? { ...frozenExerciseSnapshot, name: frozenExerciseSnapshot.exercise_name }
+    : hasLibraryExercise
+      ? await exerciseDb.getExerciseById(
+          resolvedExerciseId,
+          authenticatedUserId
+        )
+      : null;
   if (hasLibraryExercise && !exercise) {
     throw new Error('Exercise not found for snapshot.');
   }
@@ -368,6 +400,17 @@ async function prepareExerciseEntryForCreate(
       );
     calculatedCaloriesBurned = (caloriesPerHour / 60) * durationMinutes;
   }
+  const snapshotFields: {
+    exercise_name?: string;
+    calories_per_hour?: number | null;
+    calories_burned?: number;
+  } = exercise
+    ? {
+        exercise_name: exercise.name,
+        calories_per_hour: exercise.calories_per_hour,
+        calories_burned: calculatedCaloriesBurned ?? 0,
+      }
+    : { calories_burned: calculatedCaloriesBurned ?? undefined };
   return {
     ...entryData,
     user_id: authenticatedUserId,
@@ -376,16 +419,12 @@ async function prepareExerciseEntryForCreate(
     // snapshot fields absent and let the update path keep what the entry
     // already stores (see mergedData in models/exerciseEntry.ts). The same goes
     // for calories: undefined preserves the stored value rather than zeroing it.
-    ...(exercise
-      ? {
-          exercise_name: exercise.name,
-          calories_per_hour: exercise.calories_per_hour,
-          calories_burned: calculatedCaloriesBurned ?? 0,
-        }
-      : { calories_burned: calculatedCaloriesBurned ?? undefined }),
+    ...snapshotFields,
     duration_minutes: durationMinutes ?? 0,
     workout_plan_assignment_id: entryData.workout_plan_assignment_id || null,
-    image_url: entryData.image_url || null,
+    image_url: frozenExerciseSnapshot
+      ? frozenExerciseSnapshot.image_url
+      : (entryData.image_url ?? null),
     // Explicit client value wins; otherwise derive the total from per-set
     // distances (null when no set carries one).
     distance: entryData.distance ?? setsDistanceKm(entryData.sets),
@@ -790,10 +829,10 @@ async function updateExercise(
  *
  * - `hide`: the exercise stops appearing in search. Nothing else changes, so
  *   every diary entry, preset and plan keeps working exactly as before.
- * - `delete`: the library row goes. Presets and plans lose it (they cascade),
- *   but diary entries survive on their own snapshot with a null exercise_id.
- * - `delete_with_history`: a `delete`, plus this user's own diary entries for
- *   the exercise.
+ * - `delete`: removes the library row and unlinked template uses; diary
+ *   snapshots survive with a null exercise_id. Linked plan history rejects.
+ * - `delete_with_history`: also removes this user's unlinked diary entries,
+ *   but never removes history to evade a linked assignment's RESTRICT.
  *
  * In every mode another user's diary is left alone.
  */
@@ -809,8 +848,7 @@ function isExerciseDeleteMode(value: unknown): value is ExerciseDeleteMode {
 async function deleteExercise(
   authenticatedUserId: string,
   exerciseId: string,
-  mode: ExerciseDeleteMode = 'delete',
-  currentClientDate?: string
+  mode: ExerciseDeleteMode = 'delete'
 ) {
   log(
     'info',
@@ -827,6 +865,11 @@ async function deleteExercise(
         `deleteExercise: Exercise ${exerciseId} not found for user ${authenticatedUserId}.`
       );
       throw new Error('Exercise not found.');
+    }
+    if (exerciseOwnerId !== authenticatedUserId) {
+      throw new Error(
+        'Forbidden: Only the exercise owner can remove or hide it.'
+      );
     }
 
     if (mode === 'hide') {
@@ -869,14 +912,9 @@ async function deleteExercise(
       };
     }
 
-    const today = await resolveTemplateStartDay(
-      authenticatedUserId,
-      currentClientDate
-    );
     const deleteResult = await exerciseDb.deleteExerciseAndDependencies(
       exerciseId,
       authenticatedUserId,
-      today,
       { deleteHistory: mode === 'delete_with_history' }
     );
     if (!deleteResult.success) {
@@ -904,12 +942,9 @@ async function deleteExercise(
   }
 }
 async function getExerciseEntriesByDate(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  authenticatedUserId: any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  targetUserId: any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  selectedDate: any
+  authenticatedUserId: string,
+  targetUserId: string,
+  selectedDate: string
 ) {
   try {
     if (!targetUserId) {
@@ -919,23 +954,11 @@ async function getExerciseEntriesByDate(
       );
       return [];
     }
-    // Use the exerciseEntryDb directly to avoid circular dependency where exerciseRepository
-    // may not have fully exported its properties yet at runtime.
-    const entries = await exerciseEntryDb.getExerciseEntriesByDate(
+    // Keep the legacy route's full row projection; v2 serves the curated DTO.
+    return await exerciseEntryDb.getExerciseEntriesByDate(
       targetUserId,
       selectedDate
     );
-    if (!entries || entries.length === 0) {
-      return [];
-    }
-    // exerciseEntryDb.getExerciseEntriesByDate already attaches `activity_details` per
-    // entry/preset via a single batched query, with raw provider sync dumps
-    // (full_activity_data/full_workout_data) stripped of their payload. Previously this
-    // function re-fetched activity details per entry (N+1 queries) and, worse, used
-    // getActivityDetailsByEntryOrPresetId — which does NOT strip the raw dump — so it
-    // silently re-inflated every diary response with the full Garmin JSON blob this
-    // fix removes. Do not re-fetch here.
-    return entries;
   } catch (error) {
     log(
       'error',
@@ -1626,12 +1649,34 @@ async function getExerciseHistory(
     throw error;
   }
 }
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function importExercisesFromCSV(authenticatedUserId: any, filePath: any) {
+type CsvImportFailure = { row: object; reason: string };
+type CsvExerciseData = {
+  name: string;
+  description: string | null;
+  instructions: string[];
+  category: string | null;
+  force: string | null;
+  level: string | null;
+  mechanic: string | null;
+  equipment: string[];
+  primary_muscles: string[];
+  secondary_muscles: string[];
+  calories_per_hour: number | null;
+  user_id: string;
+  is_custom: boolean;
+  shared_with_public: boolean;
+  source: string;
+  source_id: string;
+  images: string[];
+};
+async function importExercisesFromCSV(
+  authenticatedUserId: string,
+  filePath: string
+) {
   let createdCount = 0;
   let updatedCount = 0;
   let failedCount = 0;
-  const failedRows = [];
+  const failedRows: CsvImportFailure[] = [];
   try {
     const fileContent = fs.readFileSync(filePath, 'utf8');
     // parseCsv (shared, not a raw papa.parse call) so delimiter detection
@@ -1674,8 +1719,7 @@ async function importExercisesFromCSV(authenticatedUserId: any, filePath: any) {
           continue;
         }
         const primaryMuscles = row.primary_muscles
-          ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            row.primary_muscles.split(',').map((m: any) => m.trim())
+          ? row.primary_muscles.split(',').map((muscle) => muscle.trim())
           : [];
         if (primaryMuscles.length === 0) {
           failedCount++;
@@ -1683,29 +1727,28 @@ async function importExercisesFromCSV(authenticatedUserId: any, filePath: any) {
           continue;
         }
         const sourceId = exerciseName.toLowerCase().replace(/\s/g, '_');
-        const exerciseData = {
+        const exerciseData: CsvExerciseData = {
           name: exerciseName,
           description: row.description || null,
           instructions: row.instructions
-            ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              row.instructions.split(',').map((i: any) => i.trim())
+            ? row.instructions
+                .split(',')
+                .map((instruction) => instruction.trim())
             : [],
           category: row.category || null,
           force: row.force || null,
           level: row.level || null,
           mechanic: row.mechanic || null,
           equipment: row.equipment
-            ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              row.equipment.split(',').map((e: any) => e.trim())
+            ? row.equipment.split(',').map((item) => item.trim())
             : [],
           primary_muscles: primaryMuscles,
           secondary_muscles: row.secondary_muscles
-            ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              row.secondary_muscles.split(',').map((m: any) => m.trim())
+            ? row.secondary_muscles.split(',').map((muscle) => muscle.trim())
             : [],
-          // toNumber (not parseFloat) so a locale-comma decimal like "300,5"
-          // parses to 300.5 instead of parseFloat's silent truncation at the
-          // comma — the same #1960 bug already fixed client-side.
+          // toNumber (not parseFloat) preserves locale-comma decimals such as
+          // "300,5" as 300.5 instead of silently truncating at the comma
+          // (the #1960 bug also fixed client-side).
           calories_per_hour: row.calories_per_hour
             ? (toNumber(row.calories_per_hour, resolvedDecimal) ?? null)
             : null,
@@ -1714,12 +1757,12 @@ async function importExercisesFromCSV(authenticatedUserId: any, filePath: any) {
           shared_with_public: row.shared_with_public === 'true',
           source: 'CSV',
           source_id: sourceId,
+          images: [],
         };
         // Handle images: download and store local paths
         if (row.images) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const imageUrls = row.images.split(',').map((url: any) => url.trim());
-          const localImagePaths = [];
+          const imageUrls = row.images.split(',').map((url) => url.trim());
+          const localImagePaths: string[] = [];
           const exerciseFolderName = exerciseName.replace(/[^a-zA-Z0-9]/g, '_');
           for (const imageUrl of imageUrls) {
             try {
@@ -1737,22 +1780,18 @@ async function importExercisesFromCSV(authenticatedUserId: any, filePath: any) {
               // Continue without this image, but log the error
             }
           }
-          // @ts-expect-error TS(2339): Property 'images' does not exist on type '{ name: ... Remove this comment to see the full error message
           exerciseData.images = localImagePaths;
         } else {
-          // @ts-expect-error TS(2339): Property 'images' does not exist on type '{ name: ... Remove this comment to see the full error message
           exerciseData.images = [];
         }
-        const existingExercise = await exerciseDb.searchExercises(
+        const existingExercise = await exerciseDb.findExerciseByNameAndUserId(
           exerciseName,
           authenticatedUserId,
-          [],
-          []
+          { visibleOnly: true }
         );
-        if (existingExercise && existingExercise.length > 0) {
-          // Assuming the first match is the one to update
+        if (existingExercise?.user_id === authenticatedUserId) {
           await exerciseDb.updateExercise(
-            existingExercise[0].id,
+            existingExercise.id,
             authenticatedUserId,
             exerciseData
           );
@@ -1763,8 +1802,11 @@ async function importExercisesFromCSV(authenticatedUserId: any, filePath: any) {
         }
       } catch (rowError) {
         failedCount++;
-        // @ts-expect-error TS(2571): Object is of type 'unknown'.
-        failedRows.push({ row, reason: rowError.message });
+        failedRows.push({
+          row,
+          reason:
+            rowError instanceof Error ? rowError.message : String(rowError),
+        });
         log(
           'error',
           `Error processing CSV row for user ${authenticatedUserId}:`,
@@ -1837,10 +1879,25 @@ function createServiceError(status: any, message: any) {
   error.status = status;
   return error;
 }
+type GroupedExerciseEntryInput = Omit<
+  Partial<PresetSessionExerciseRequest>,
+  'id' | 'exercise_id'
+> & {
+  id?: string | number;
+  exercise_id: string | null;
+  exercise_name?: string;
+  distance?: number | null;
+  avg_heart_rate?: number | null;
+};
+type ExerciseDurationInput = {
+  duration_minutes?: number | null;
+  sets?: Parameters<typeof setsDurationMinutes>[0];
+};
 function deriveDurationMinutes(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  exerciseData: any,
-  { preserveLegacyPresetDurationFallback = false } = {}
+  exerciseData: ExerciseDurationInput,
+  {
+    preserveLegacyPresetDurationFallback = false,
+  }: { preserveLegacyPresetDurationFallback?: boolean } = {}
 ) {
   if (typeof exerciseData.duration_minutes === 'number') {
     return exerciseData.duration_minutes;
@@ -1852,59 +1909,76 @@ function deriveDurationMinutes(
 }
 
 async function createGroupedExerciseEntriesWithClient(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  client: any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  userId: any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  actingUserId: any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  presetEntryId: any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  entryDate: any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  exercises: any,
-  options = {}
+  client: PoolClient,
+  userId: string,
+  actingUserId: string,
+  presetEntryId: string,
+  entryDate: string,
+  exercises: readonly GroupedExerciseEntryInput[],
+  options: {
+    entrySource?: string;
+    workoutPlanAssignmentId?: string | number | null;
+    preserveLegacyPresetDurationFallback?: boolean;
+    frozenExerciseSnapshots?: ReadonlyMap<
+      number,
+      readonly WorkoutPlanPresetSnapshot['exercises'][number][]
+    >;
+  } = {}
 ) {
   const {
-    // @ts-expect-error TS(2339): Property 'entrySource' does not exist on type '{}'... Remove this comment to see the full error message
     entrySource = 'manual',
-    // @ts-expect-error TS(2339): Property 'workoutPlanAssignmentId' does not exist ... Remove this comment to see the full error message
     workoutPlanAssignmentId = null,
-    // @ts-expect-error TS(2339): Property 'preserveLegacyPresetDurationFallback' do... Remove this comment to see the full error message
     preserveLegacyPresetDurationFallback = false,
+    frozenExerciseSnapshots,
   } = options;
   const createdEntries = [];
   for (const exercise of exercises || []) {
     const durationMinutes = deriveDurationMinutes(exercise, {
       preserveLegacyPresetDurationFallback,
     });
+    const assignmentId = Number(
+      exercise.workout_plan_assignment_id ?? workoutPlanAssignmentId
+    );
+    const frozenSnapshot = frozenExerciseSnapshots
+      ?.get(assignmentId)
+      ?.find((snapshot) => snapshot.exercise_id === exercise.exercise_id);
 
-    const preparedEntry = await prepareExerciseEntryForCreate(userId, {
-      // A client-minted entry uuid (create-in-reconcile for a mid-workout add)
-      // is inserted as-is so the entry keeps its identity across saves. Only a
-      // string id is forwarded: preset exercise definitions carry a numeric
-      // `id`, and the delete-and-recreate path sends none — neither must reach
-      // the uuid `exercise_entries.id` column.
-      ...(typeof exercise.id === 'string' ? { id: exercise.id } : {}),
-      exercise_id: exercise.exercise_id,
-      entry_date: entryDate,
-      notes: exercise.notes ?? null,
-      sets: exercise.sets || [],
-      duration_minutes: durationMinutes,
-      // A client-provided value is a manual override; omitting it lets
-      // prepareExerciseEntryForCreate recompute from duration and sets.
-      ...(typeof exercise.calories_burned === 'number'
-        ? { calories_burned: exercise.calories_burned }
-        : {}),
-      sort_order: exercise.sort_order ?? 0,
-      superset_group: exercise.superset_group ?? null,
-      workout_plan_assignment_id:
-        exercise.workout_plan_assignment_id || workoutPlanAssignmentId || null,
-      distance: exercise.distance,
-      avg_heart_rate: exercise.avg_heart_rate,
-      entry_time: exercise.entry_time ?? null,
-    });
+    const preparedEntry = await prepareExerciseEntryForCreate(
+      userId,
+      {
+        ...exercise,
+        id: undefined,
+        // A client-minted entry uuid (create-in-reconcile for a mid-workout add)
+        // is inserted as-is so the entry keeps its identity across saves. Only a
+        // string id is forwarded: preset exercise definitions carry a numeric
+        // `id`, and the delete-and-recreate path sends none — neither must reach
+        // the uuid `exercise_entries.id` column.
+        ...(typeof exercise.id === 'string' ? { id: exercise.id } : {}),
+        exercise_id: exercise.exercise_id,
+        entry_date: entryDate,
+        notes: exercise.notes ?? null,
+        sets: exercise.sets || [],
+        duration_minutes: durationMinutes,
+        // A client-provided value is a manual override; omitting it lets
+        // prepareExerciseEntryForCreate recompute from duration and sets.
+        ...(typeof exercise.calories_burned === 'number'
+          ? { calories_burned: exercise.calories_burned }
+          : {}),
+        sort_order: exercise.sort_order ?? 0,
+        superset_group: exercise.superset_group ?? null,
+        workout_plan_assignment_id:
+          exercise.workout_plan_assignment_id ||
+          workoutPlanAssignmentId ||
+          null,
+        distance: exercise.distance,
+        avg_heart_rate: exercise.avg_heart_rate,
+        entry_time: exercise.entry_time ?? null,
+      },
+      frozenSnapshot
+    );
+    if (entrySource === 'Workout Plan' && exercise.exercise_name) {
+      preparedEntry.exercise_name = exercise.exercise_name;
+    }
     const { entry: createdEntry } =
       await exerciseEntryDb._createExerciseEntryWithClient(
         client,
@@ -1912,7 +1986,10 @@ async function createGroupedExerciseEntriesWithClient(
         preparedEntry,
         actingUserId,
         entrySource,
-        presetEntryId
+        presetEntryId,
+        ...(frozenSnapshot
+          ? ([{ frozenExerciseSnapshot: frozenSnapshot }] as const)
+          : ([] as const))
       );
     createdEntries.push(createdEntry);
   }
@@ -1924,16 +2001,143 @@ async function getGroupedWorkoutSessionById(userId: any, presetEntryId: any) {
 }
 
 async function createGroupedWorkoutSession(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  userId: any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  actingUserId: any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  sessionData: any
+  userId: string,
+  actingUserId: string,
+  sessionData: Partial<CreatePresetSessionRequest> & {
+    entry_date: string;
+    preset_snapshot?: WorkoutPlanPresetSnapshot;
+    workout_format?: WorkoutFormat;
+    time_cap_seconds?: number | null;
+  },
+  transactionClient?: PoolClient,
+  authoritativePrescription = false,
+  frozenExerciseSnapshots = new Map<
+    number,
+    readonly WorkoutPlanPresetSnapshot['exercises'][number][]
+  >()
 ) {
-  const client = await getClient(userId);
+  const client = transactionClient ?? (await getClient(userId, actingUserId));
   try {
-    await client.query('BEGIN');
+    if (!transactionClient) await client.query('BEGIN');
+    if (!authoritativePrescription) {
+      const ids = new Set<number>();
+      if (
+        sessionData.workoutPlanAssignmentId !== null &&
+        sessionData.workoutPlanAssignmentId !== undefined
+      ) {
+        const id = Number(sessionData.workoutPlanAssignmentId);
+        if (!Number.isSafeInteger(id) || id <= 0) {
+          throw createServiceError(400, 'Invalid workout plan assignment.');
+        }
+        ids.add(id);
+      }
+      for (const exercise of sessionData.exercises ?? []) {
+        const rawId =
+          exercise.workout_plan_assignment_id ??
+          sessionData.workoutPlanAssignmentId;
+        if (rawId === null || rawId === undefined) continue;
+        const id = Number(rawId);
+        if (!Number.isSafeInteger(id) || id <= 0) {
+          throw createServiceError(400, 'Invalid workout plan assignment.');
+        }
+        ids.add(id);
+      }
+      // Reserved historical prescriptions come from persisted RLS-visible assignments,
+      // never a browser's mutable draft or the live preset library.
+      const details = (sessionData.activity_details ?? []).filter(
+        (detail) => detail.detail_type !== 'workout_plan_prescription'
+      );
+      if (ids.size > 0) {
+        const workoutSession = await getWorkoutSessionForAssignments(
+          userId,
+          [...ids],
+          client
+        );
+        if (!workoutSession) {
+          throw createServiceError(
+            404,
+            'Workout assignments must belong to one accessible workout session.'
+          );
+        }
+        const assignments = workoutSession.assignments.filter((assignment) =>
+          ids.has(assignment.id)
+        );
+        for (const assignment of assignments) {
+          if (assignment.preset_snapshot) {
+            frozenExerciseSnapshots.set(
+              assignment.id,
+              assignment.preset_snapshot.exercises
+            );
+          }
+        }
+        const formats = new Set(
+          assignments.flatMap((assignment) =>
+            assignment.preset_snapshot
+              ? [assignment.preset_snapshot.workout_format]
+              : []
+          )
+        );
+        const caps = new Set(
+          assignments.flatMap((assignment) =>
+            assignment.preset_snapshot
+              ? [assignment.preset_snapshot.time_cap_seconds ?? null]
+              : []
+          )
+        );
+        sessionData = {
+          ...sessionData,
+          source: 'Workout Plan',
+          workout_preset_id: null,
+          preset_snapshot: undefined,
+          workout_format: formats.size === 1 ? [...formats][0] : 'standard',
+          time_cap_seconds:
+            formats.size === 1 && caps.size === 1 ? [...caps][0] : null,
+          exercises: sessionData.exercises?.map((exercise) => {
+            const assignmentId = Number(
+              exercise.workout_plan_assignment_id ??
+                sessionData.workoutPlanAssignmentId
+            );
+            const assignment = assignments.find(
+              (candidate) => candidate.id === assignmentId
+            );
+            const frozenExercise = assignment?.preset_snapshot?.exercises.find(
+              (candidate) => candidate.exercise_id === exercise.exercise_id
+            );
+            if (
+              assignment &&
+              assignment.exercise_id !== exercise.exercise_id &&
+              !frozenExercise
+            ) {
+              throw createServiceError(
+                400,
+                'Exercise does not belong to its workout plan assignment.'
+              );
+            }
+            return {
+              ...exercise,
+              workout_plan_assignment_id: assignment?.id ?? null,
+              ...(frozenExercise
+                ? { exercise_name: frozenExercise.exercise_name }
+                : {}),
+            };
+          }),
+          activity_details: [
+            ...details,
+            {
+              provider_name: 'SparkyFitness',
+              detail_type: 'workout_plan_prescription',
+              detail_data: {
+                workout_session_id: workoutSession.id,
+                workout_session_name: workoutSession.name,
+                assignments,
+              },
+            },
+          ],
+        };
+      } else {
+        sessionData = { ...sessionData, activity_details: details };
+      }
+    }
     const {
       workout_preset_id,
       entry_date,
@@ -1944,13 +2148,45 @@ async function createGroupedWorkoutSession(
       source = 'manual',
       exercises,
       workoutPlanAssignmentId = null,
+      preset_snapshot,
     } = sessionData;
     let presetEntry: any;
     let exerciseDefinitions: any;
     let childEntrySource = source;
     let preserveLegacyPresetDurationFallback = false;
 
-    if (workout_preset_id !== undefined && workout_preset_id !== null) {
+    if (
+      source === 'Workout Plan' &&
+      workout_preset_id !== null &&
+      workout_preset_id !== undefined &&
+      !preset_snapshot
+    ) {
+      throw createServiceError(
+        400,
+        'Workout plan preset assignments require a frozen prescription.'
+      );
+    }
+    if (preset_snapshot) {
+      presetEntry =
+        await exercisePresetEntryRepository.createExercisePresetEntryWithClient(
+          client,
+          userId,
+          {
+            workout_preset_id: workout_preset_id ?? null,
+            name: preset_snapshot.name,
+            description: preset_snapshot.description,
+            workout_format: preset_snapshot.workout_format,
+            time_cap_seconds: preset_snapshot.time_cap_seconds ?? null,
+            entry_date,
+            notes: notes ?? null,
+            location: location ?? null,
+            source,
+          },
+          actingUserId
+        );
+      exerciseDefinitions = preset_snapshot.exercises;
+      childEntrySource = source;
+    } else if (workout_preset_id !== undefined && workout_preset_id !== null) {
       const workoutPreset = await workoutPresetRepository.getWorkoutPresetById(
         workout_preset_id,
         userId
@@ -1969,6 +2205,12 @@ async function createGroupedWorkoutSession(
               description !== undefined
                 ? description
                 : workoutPreset.description,
+            ...(sessionData.workout_format !== undefined
+              ? { workout_format: sessionData.workout_format }
+              : {}),
+            ...(sessionData.time_cap_seconds !== undefined
+              ? { time_cap_seconds: sessionData.time_cap_seconds }
+              : {}),
             entry_date,
             notes,
             location: location ?? null,
@@ -1999,6 +2241,8 @@ async function createGroupedWorkoutSession(
             workout_preset_id: null,
             name,
             description: description ?? null,
+            workout_format: sessionData.workout_format ?? 'standard',
+            time_cap_seconds: sessionData.time_cap_seconds ?? null,
             entry_date,
             notes: notes ?? null,
             location: location ?? null,
@@ -2020,6 +2264,7 @@ async function createGroupedWorkoutSession(
         entrySource: childEntrySource,
         workoutPlanAssignmentId,
         preserveLegacyPresetDurationFallback,
+        frozenExerciseSnapshots,
       }
     );
     if (
@@ -2046,14 +2291,14 @@ async function createGroupedWorkoutSession(
       userId,
       presetEntry.id
     );
-    await client.query('COMMIT');
+    if (!transactionClient) await client.query('COMMIT');
     return groupedSession;
   } catch (error) {
-    await client.query('ROLLBACK');
+    if (!transactionClient) await client.query('ROLLBACK');
     log('error', 'Error creating grouped workout session:', error);
     throw error;
   } finally {
-    client.release();
+    if (!transactionClient) client.release();
   }
 }
 /**
@@ -2075,8 +2320,8 @@ function resolveEditedCaloriesBurned(
   clientCalories: unknown,
   existingEntry:
     { active_calories?: unknown; calories_burned?: unknown } | null | undefined,
-  recomputed: number
-): number {
+  recomputed: number | undefined
+): number | undefined {
   if (typeof clientCalories === 'number') return clientCalories;
   const measured = parseMeasuredCalories(existingEntry?.active_calories);
   const saved = parseMeasuredCalories(existingEntry?.calories_burned);
@@ -2103,7 +2348,7 @@ async function updateGroupedWorkoutSession(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   updateData: any
 ) {
-  const client = await getClient(userId);
+  const client = await getClient(userId, actingUserId);
   try {
     await client.query('BEGIN');
     const existingSession = await getGroupedExerciseSessionByIdWithClient(
@@ -2117,6 +2362,33 @@ async function updateGroupedWorkoutSession(
     if (!existingSession) {
       throw createServiceError(404, 'Exercise preset entry not found.');
     }
+    const frozenExerciseSnapshots = new Map<
+      number,
+      readonly WorkoutPlanPresetSnapshot['exercises'][number][]
+    >();
+    for (const detail of existingSession.activity_details ?? []) {
+      if (detail.detail_type !== 'workout_plan_prescription') continue;
+      const data: unknown = detail.detail_data;
+      if (!data || typeof data !== 'object' || !('assignments' in data))
+        continue;
+      const parsed =
+        workoutPlanSessionResponseSchema.shape.assignments.safeParse(
+          data.assignments
+        );
+      if (!parsed.success)
+        throw createServiceError(
+          409,
+          'Stored workout prescription is invalid.'
+        );
+      for (const assignment of parsed.data) {
+        if (assignment.preset_snapshot) {
+          frozenExerciseSnapshots.set(
+            assignment.id,
+            assignment.preset_snapshot.exercises
+          );
+        }
+      }
+    }
     await exercisePresetEntryRepository.updateExercisePresetEntryWithClient(
       client,
       presetEntryId,
@@ -2127,6 +2399,12 @@ async function updateGroupedWorkoutSession(
         notes: updateData.notes,
         location: updateData.location,
         entry_date: updateData.entry_date,
+        ...(updateData.workout_format !== undefined
+          ? { workout_format: updateData.workout_format }
+          : {}),
+        ...(updateData.time_cap_seconds !== undefined
+          ? { time_cap_seconds: updateData.time_cap_seconds }
+          : {}),
       }
     );
     const targetEntryDate = updateData.entry_date || existingSession.entry_date;
@@ -2199,6 +2477,7 @@ async function updateGroupedWorkoutSession(
           {
             entrySource: existingSession.source,
             workoutPlanAssignmentId,
+            frozenExerciseSnapshots,
           }
         );
       } else {
@@ -2242,6 +2521,7 @@ async function updateGroupedWorkoutSession(
               {
                 entrySource: existingSession.source,
                 workoutPlanAssignmentId,
+                frozenExerciseSnapshots,
               }
             );
             continue;
@@ -2251,20 +2531,33 @@ async function updateGroupedWorkoutSession(
           // recomputed from the new duration/sets the same way the legacy
           // delete-and-recreate path does — otherwise the helper would
           // preserve the stale value.
-          const preparedEntry = await prepareExerciseEntryForCreate(userId, {
-            exercise_id: ex.exercise_id,
-            entry_date: targetEntryDate,
-            notes: ex.notes ?? null,
-            sets: ex.sets || [],
-            duration_minutes: deriveDurationMinutes(ex),
-            ...(typeof ex.calories_burned === 'number'
-              ? { calories_burned: ex.calories_burned }
-              : {}),
-            sort_order: ex.sort_order ?? 0,
-            superset_group: ex.superset_group ?? null,
-            distance: ex.distance,
-            avg_heart_rate: ex.avg_heart_rate,
-          });
+          const frozenSnapshot = frozenExerciseSnapshots
+            .get(
+              Number(
+                ex.workout_plan_assignment_id ??
+                  existingById.get(ex.id)?.workout_plan_assignment_id ??
+                  workoutPlanAssignmentId
+              )
+            )
+            ?.find((snapshot) => snapshot.exercise_id === ex.exercise_id);
+          const preparedEntry = await prepareExerciseEntryForCreate(
+            userId,
+            {
+              exercise_id: ex.exercise_id,
+              entry_date: targetEntryDate,
+              notes: ex.notes ?? null,
+              sets: ex.sets || [],
+              duration_minutes: deriveDurationMinutes(ex),
+              ...(typeof ex.calories_burned === 'number'
+                ? { calories_burned: ex.calories_burned }
+                : {}),
+              sort_order: ex.sort_order ?? 0,
+              superset_group: ex.superset_group ?? null,
+              distance: ex.distance,
+              avg_heart_rate: ex.avg_heart_rate,
+            },
+            frozenSnapshot
+          );
 
           await exerciseEntryDb._updateExerciseEntryWithClient(
             client,
@@ -2321,6 +2614,7 @@ async function updateGroupedWorkoutSession(
       const providersToReplace = new Set<string>();
       if (updateData.activity_details.length > 0) {
         for (const detail of updateData.activity_details) {
+          if (detail.detail_type === 'workout_plan_prescription') continue;
           const providerName = detail.provider_name || 'SparkyFitness';
           const detailType = detail.detail_type || 'wod_score';
           providersToReplace.add(`${providerName}::${detailType}`);
@@ -2340,6 +2634,7 @@ async function updateGroupedWorkoutSession(
       }
       if (updateData.activity_details.length > 0) {
         for (const detail of updateData.activity_details) {
+          if (detail.detail_type === 'workout_plan_prescription') continue;
           await activityDetailsRepository._createActivityDetailWithClient(
             client,
             {
@@ -2370,6 +2665,119 @@ async function updateGroupedWorkoutSession(
     client.release();
   }
 }
+async function logWorkoutPlanSession(
+  userId: string,
+  actingUserId: string,
+  workoutSessionId: string,
+  entryDate: string,
+  transactionClient?: PoolClient,
+  assignmentIds?: ReadonlySet<number>
+) {
+  const client = transactionClient ?? (await getClient(userId, actingUserId));
+  try {
+    if (!transactionClient) await client.query('BEGIN');
+    const session = await getWorkoutSessionForExecution(
+      userId,
+      workoutSessionId,
+      client
+    );
+    if (!session) throw createServiceError(404, 'Workout session not found.');
+    const assignments = assignmentIds
+      ? session.assignments.filter((assignment) =>
+          assignmentIds.has(assignment.id)
+        )
+      : session.assignments;
+    const formats = new Set(
+      assignments.flatMap((assignment) =>
+        assignment.preset_snapshot
+          ? [assignment.preset_snapshot.workout_format]
+          : []
+      )
+    );
+    const caps = new Set(
+      assignments.flatMap((assignment) =>
+        assignment.preset_snapshot
+          ? [assignment.preset_snapshot.time_cap_seconds ?? null]
+          : []
+      )
+    );
+    let sortOrder = 0;
+    const exercises = assignments.flatMap<
+      PresetSessionExerciseRequest & { exercise_name?: string }
+    >((assignment) => {
+      if (assignment.exercise_id) {
+        return [
+          {
+            exercise_id: assignment.exercise_id,
+            exercise_name: assignment.exercise_name ?? undefined,
+            sets: assignment.sets,
+            sort_order: sortOrder++,
+            duration_minutes: setsDurationMinutes(assignment.sets),
+            workout_plan_assignment_id: assignment.id,
+          },
+        ];
+      }
+      if (!assignment.preset_snapshot) {
+        throw createServiceError(
+          400,
+          'Workout plan assignment has no frozen prescription.'
+        );
+      }
+      return assignment.preset_snapshot.exercises.map((exercise) => ({
+        ...exercise,
+        id: undefined,
+        sort_order: sortOrder++,
+        duration_minutes: deriveDurationMinutes(exercise),
+        workout_plan_assignment_id: assignment.id,
+      }));
+    });
+    const groupedSession = await createGroupedWorkoutSession(
+      userId,
+      actingUserId,
+      {
+        entry_date: entryDate,
+        name: session.name,
+        source: 'Workout Plan',
+        workout_format: formats.size === 1 ? [...formats][0] : 'standard',
+        time_cap_seconds:
+          formats.size === 1 && caps.size === 1 ? [...caps][0] : null,
+        exercises,
+        activity_details: [
+          {
+            provider_name: 'SparkyFitness',
+            detail_type: 'workout_plan_prescription',
+            detail_data: {
+              workout_session_id: session.id,
+              workout_session_name: session.name,
+              assignments,
+            },
+          },
+        ],
+      },
+      client,
+      true,
+      new Map(
+        assignments.flatMap((assignment) =>
+          assignment.preset_snapshot
+            ? [[assignment.id, assignment.preset_snapshot.exercises] as const]
+            : []
+        )
+      )
+    );
+    if (!transactionClient) await client.query('COMMIT');
+    return {
+      workout_session_id: session.id,
+      workout_session_name: session.name,
+      session: groupedSession,
+    };
+  } catch (error) {
+    if (!transactionClient) await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    if (!transactionClient) client.release();
+  }
+}
+
 async function logWorkoutPresetGrouped(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   userId: any,
@@ -2535,7 +2943,7 @@ async function importExercisesFromJson(
   exercisesArray: any
 ) {
   let createdCount = 0;
-  let updatedCount = 0;
+  const updatedCount = 0;
   let failedCount = 0;
   const failedRows = [];
   const duplicates = [];
@@ -2632,7 +3040,7 @@ async function importExercisesFromJson(
         []
       );
       if (existingExercise && existingExercise.length > 0) {
-        // Check for exact duplicate before updating
+        // Reject exact duplicates; substring matches are different movements.
         const isDuplicate = existingExercise.some(
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           (ex: any) => ex.name.toLowerCase() === exerciseName.toLowerCase()
@@ -2649,17 +3057,9 @@ async function importExercisesFromJson(
           });
           continue;
         }
-        // Assuming the first match is the one to update
-        await exerciseDb.updateExercise(
-          existingExercise[0].id,
-          authenticatedUserId,
-          newExerciseData
-        );
-        updatedCount++;
-      } else {
-        await exerciseDb.createExercise(newExerciseData);
-        createdCount++;
       }
+      await exerciseDb.createExercise(newExerciseData);
+      createdCount++;
     } catch (rowError) {
       failedCount++;
       // @ts-expect-error TS(2571): Object is of type 'unknown'.
@@ -2722,6 +3122,7 @@ export { getExercisesNeedingReview };
 export { updateExerciseEntriesSnapshot };
 export { getActivityDetailsByExerciseEntryIdAndProvider };
 export { logWorkoutPresetGrouped };
+export { logWorkoutPlanSession };
 export { createGroupedWorkoutSession };
 export { updateGroupedWorkoutSession };
 export { getGroupedWorkoutSessionById };
@@ -2760,6 +3161,7 @@ export default {
   updateExerciseEntriesSnapshot,
   getActivityDetailsByExerciseEntryIdAndProvider,
   logWorkoutPresetGrouped,
+  logWorkoutPlanSession,
   createGroupedWorkoutSession,
   updateGroupedWorkoutSession,
   getGroupedWorkoutSessionById,

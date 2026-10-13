@@ -1,4 +1,5 @@
 import { compareByEntryTime, earliestEntryTime } from '@workspace/shared';
+import type { WorkoutPlanPresetSnapshot } from '@workspace/shared';
 import { getClient } from '../db/poolManager.js';
 import type { PoolClient } from 'pg';
 // @ts-expect-error TS(7016): Could not find a declaration file for module 'pg-f... Remove this comment to see the full error message
@@ -908,7 +909,11 @@ async function _createExerciseEntryWithClient(
   createdByUserId: any,
   entrySource = 'Manual',
   exercisePresetEntryId: string | null = null,
-  options: { skipDuplicateCheck?: boolean } = {}
+  options: {
+    skipDuplicateCheck?: boolean;
+    /** Internal only: prescription already resolved through an authorized plan session. */
+    frozenExerciseSnapshot?: WorkoutPlanPresetSnapshot['exercises'][number];
+  } = {}
 ) {
   try {
     // Check for existing entry
@@ -1024,16 +1029,36 @@ async function _createExerciseEntryWithClient(
       operation = 'updated';
     } else {
       // No existing entry, create a new one
-      // 1. Fetch the exercise details to create the snapshot
-      const exerciseSnapshotQuery = await client.query(
-        `SELECT name, calories_per_hour, category, source, source_id, force, level, mechanic, equipment, primary_muscles, secondary_muscles, instructions, images, modality
-         FROM exercises WHERE id = $1`,
-        [entryData.exercise_id]
-      );
+      // Authorized plan execution uses its frozen metadata, even when the library
+      // exercise is renamed, reclassified or no longer visible to this actor.
+      const exerciseSnapshotQuery = options.frozenExerciseSnapshot
+        ? {
+            rows: [
+              {
+                ...options.frozenExerciseSnapshot,
+                name: options.frozenExerciseSnapshot.exercise_name,
+              },
+            ],
+          }
+        : await client.query(
+            `SELECT name, calories_per_hour, category, source, source_id, force, level, mechanic, equipment, primary_muscles, secondary_muscles, instructions, images, modality
+             FROM exercises WHERE id = $1`,
+            [entryData.exercise_id]
+          );
       if (exerciseSnapshotQuery.rows.length === 0) {
         throw new Error('Exercise not found for snapshotting.');
       }
       const snapshot = exerciseSnapshotQuery.rows[0];
+      let linkedExerciseId = entryData.exercise_id;
+      if (options.frozenExerciseSnapshot) {
+        const visibleExercise = await client.query(
+          'SELECT id FROM exercises WHERE id = $1',
+          [options.frozenExerciseSnapshot.exercise_id]
+        );
+        // Missing or inaccessible library identities must not prevent an
+        // authorized frozen prescription from becoming a historical diary row.
+        linkedExerciseId = visibleExercise.rows[0]?.id ?? null;
+      }
       // 2. Insert the exercise entry with the snapshot data. A client-provided
       // entry id (a new app adds an exercise mid-workout with its own uuid via
       // create-in-reconcile) is inserted explicitly so the entry keeps its
@@ -1042,7 +1067,7 @@ async function _createExerciseEntryWithClient(
       // list unchanged.
       const entryValues = [
         userId,
-        entryData.exercise_id,
+        linkedExerciseId,
         entryData.duration_minutes || 0, // Ensure duration_minutes is not null
         entryData.calories_burned || 0,
         entryData.entry_date,
@@ -1050,7 +1075,9 @@ async function _createExerciseEntryWithClient(
         entryData.workout_plan_assignment_id || null,
         entryData.image_url || null,
         createdByUserId,
-        entryData.exercise_name || snapshot.name, // exercise_name
+        options.frozenExerciseSnapshot
+          ? snapshot.name
+          : entryData.exercise_name || snapshot.name,
         snapshot.calories_per_hour,
         snapshot.category,
         entrySource,
@@ -1058,11 +1085,11 @@ async function _createExerciseEntryWithClient(
         snapshot.force,
         snapshot.level,
         snapshot.mechanic,
-        snapshot.equipment,
-        snapshot.primary_muscles,
-        snapshot.secondary_muscles,
-        snapshot.instructions,
-        snapshot.images,
+        toJsonColumnText(snapshot.equipment),
+        toJsonColumnText(snapshot.primary_muscles),
+        toJsonColumnText(snapshot.secondary_muscles),
+        toJsonColumnText(snapshot.instructions),
+        toJsonColumnText(snapshot.images),
         entryData.distance ?? null, // Ensure distance is not undefined
         entryData.avg_heart_rate || null, // Ensure avg_heart_rate is not undefined
         exercisePresetEntryId, // New parameter
@@ -1475,7 +1502,7 @@ async function getExerciseEntriesByDate(userId: any, selectedDate: any) {
   try {
     // 1. Fetch all exercise preset entries for the given date and user
     const presetEntriesResult = await client.query(
-      `SELECT id, workout_preset_id, name, description, notes, created_at, source, location
+      `SELECT id, workout_preset_id, name, description, notes, created_at, source, location, workout_format, time_cap_seconds
        FROM exercise_preset_entries
        WHERE user_id = $1 AND entry_date = $2
        ORDER BY created_at ASC`,
@@ -1514,6 +1541,8 @@ async function getExerciseEntriesByDate(userId: any, selectedDate: any) {
         workout_preset_id: preset.workout_preset_id,
         name: preset.name,
         description: preset.description,
+        workout_format: preset.workout_format ?? 'standard',
+        time_cap_seconds: preset.time_cap_seconds ?? null,
         notes: preset.notes,
         location: preset.location ?? null,
         created_at: preset.created_at,
@@ -1928,7 +1957,7 @@ async function deleteExerciseEntriesByEntrySourceAndDateWithClient(
            SELECT 1
            FROM exercises e
            WHERE e.id = exercise_entries.exercise_id
-             AND e.name = $5
+             AND e.name = public.normalize_exercise_name_initial($5)
          )
        )
        AND (

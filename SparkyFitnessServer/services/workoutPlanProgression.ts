@@ -1,156 +1,95 @@
 export interface AssignmentProgressionInput {
   id: string | number;
-  session_index?: number | null;
-  session_name?: string | null;
   sort_order?: number | null;
-  day_of_week?: number | null;
-  workout_preset_id?: number | null;
-  exercise_id?: string | null;
 }
-
+export interface SessionProgressionInput<
+  T extends AssignmentProgressionInput = AssignmentProgressionInput,
+> {
+  id: string;
+  name: string;
+  sort_order: number;
+  assignments: T[];
+}
 export interface LoggedEntryProgressionInput {
   id?: string | number;
   workout_plan_assignment_id?: string | number | null;
   entry_date?: string | Date;
-  created_at?: string | Date;
+  created_at?: string | Date | null;
 }
-
 export interface SequencePosition {
   current: number;
   total: number;
-  session_name?: string | null;
+  session_name: string;
 }
-
 export interface SequentialProgressionResult<
-  T extends AssignmentProgressionInput,
+  T extends SessionProgressionInput,
 > {
-  nextAssignments: T[];
-  nextAssignment: T | null;
+  nextSession: T | null;
+  nextAssignments: T['assignments'];
   sequencePosition: SequencePosition | null;
 }
 
-/**
- * Computes the active session and progress position for a sequential workout plan.
- * Pure function: given assignments and chronologically sorted logged entries,
- * finds the next incomplete session in the progression cycle.
- */
+/** Preserve chronological cycle progression, using stable session membership
+ * rather than grouping assignments by an index or a repeated display label. */
 export function computeSequentialPlanProgression<
-  T extends AssignmentProgressionInput,
+  T extends SessionProgressionInput,
 >(
-  assignments: T[],
+  sessions: T[],
   loggedRows: LoggedEntryProgressionInput[]
 ): SequentialProgressionResult<T> {
-  if (!assignments || assignments.length === 0) {
-    return {
-      nextAssignments: [],
-      nextAssignment: null,
-      sequencePosition: null,
-    };
+  const ordered = sessions
+    .filter((session) => session.assignments.length > 0)
+    .sort((a, b) => a.sort_order - b.sort_order || a.id.localeCompare(b.id));
+  if (!ordered.length)
+    return { nextSession: null, nextAssignments: [], sequencePosition: null };
+  const logOrders = new Map<string, number[]>();
+  for (const [order, entry] of loggedRows.entries()) {
+    if (
+      entry.workout_plan_assignment_id === null ||
+      entry.workout_plan_assignment_id === undefined
+    )
+      continue;
+    const id = String(entry.workout_plan_assignment_id);
+    const orders = logOrders.get(id);
+    if (orders) orders.push(order);
+    else logOrders.set(id, [order]);
   }
-
-  // Group distinct session indices (sorted ascending)
-  const sessionIndices: number[] = Array.from(
-    new Set<number>(assignments.map((a) => a.session_index ?? 1))
-  ).sort((a: number, b: number) => a - b);
-
-  if (sessionIndices.length === 0) {
-    return {
-      nextAssignments: [],
-      nextAssignment: null,
-      sequencePosition: null,
-    };
-  }
-
-  // Map assignment ID -> array of monotonic log sequence indices
-  const logOrderIndicesByAssignment = new Map<string | number, number[]>();
-  for (const [logOrder, row] of loggedRows.entries()) {
-    const aid = row.workout_plan_assignment_id;
-    if (aid === null || aid === undefined) continue;
-    // Normalize numeric IDs to match assignment IDs
-    const normalizedAid =
-      typeof aid === 'string' && !isNaN(Number(aid)) ? Number(aid) : aid;
-    const list = logOrderIndicesByAssignment.get(normalizedAid) || [];
-    list.push(logOrder);
-    logOrderIndicesByAssignment.set(normalizedAid, list);
-  }
-
-  let nextSessionIndex = sessionIndices[0] ?? 1;
-  let nextSessionOrder = 0;
-  let cycleThreshold = -1;
-  let hasActiveSession = false;
-
-  // Loop cycles to find first incomplete session
-  while (!hasActiveSession) {
-    let cycleCompleted = true;
-    for (let i = 0; i < sessionIndices.length; i++) {
-      const sIndex = sessionIndices[i]!;
-      const sAssignments = assignments.filter(
-        (a) => (a.session_index ?? 1) === sIndex
-      );
-      if (sAssignments.length === 0) continue;
-
-      // Check if every assignment in this session has been completed after cycleThreshold
-      let sessionCanComplete = true;
-      let sessionCompletionOrder = cycleThreshold;
-
-      for (const a of sAssignments) {
-        const aid =
-          typeof a.id === 'string' && !isNaN(Number(a.id))
-            ? Number(a.id)
-            : a.id;
-        const orders = logOrderIndicesByAssignment.get(aid) || [];
-        const nextOrder = orders.find((o) => o > cycleThreshold);
-        if (nextOrder === undefined) {
-          sessionCanComplete = false;
+  let threshold = -1;
+  let activeOrder = 0;
+  // Each complete session consumes a strictly later log, so this loop is bounded
+  // by loggedRows.length. Empty authoring containers never block progression.
+  while (true) {
+    let incomplete = false;
+    for (const [index, session] of ordered.entries()) {
+      let completion = threshold;
+      for (const assignment of session.assignments) {
+        const order = logOrders
+          .get(String(assignment.id))
+          ?.find((value) => value > threshold);
+        if (order === undefined) {
+          incomplete = true;
           break;
         }
-        if (nextOrder > sessionCompletionOrder) {
-          sessionCompletionOrder = nextOrder;
-        }
+        completion = Math.max(completion, order);
       }
-
-      if (!sessionCanComplete) {
-        nextSessionIndex = sIndex;
-        nextSessionOrder = i;
-        hasActiveSession = true;
-        cycleCompleted = false;
+      if (incomplete) {
+        activeOrder = index;
         break;
-      } else {
-        cycleThreshold = sessionCompletionOrder;
       }
+      threshold = completion;
     }
-
-    if (cycleCompleted) {
-      // Check if there are any further entries logged after the latest cycleThreshold
-      let hasFutureLogs = false;
-      for (const orders of logOrderIndicesByAssignment.values()) {
-        if (orders.some((o) => o > cycleThreshold)) {
-          hasFutureLogs = true;
-          break;
-        }
-      }
-      if (!hasFutureLogs) {
-        // Wrap around to the start of the next cycle
-        nextSessionIndex = sessionIndices[0] ?? 1;
-        nextSessionOrder = 0;
-        hasActiveSession = true;
-      }
-    }
+    if (incomplete || threshold >= loggedRows.length - 1) break;
+    // Unrelated/out-of-order logs cannot complete another whole cycle; the next
+    // pass stops at the first missing assignment, as in the previous algorithm.
   }
-
-  const activeSessionAssignments = assignments.filter(
-    (a) => (a.session_index ?? 1) === nextSessionIndex
-  );
-
-  const currentSessionName = activeSessionAssignments[0]?.session_name || null;
-
+  const nextSession = ordered[activeOrder]!;
   return {
-    nextAssignments: activeSessionAssignments,
-    nextAssignment: activeSessionAssignments[0] || null,
+    nextSession,
+    nextAssignments: nextSession.assignments,
     sequencePosition: {
-      current: nextSessionOrder + 1,
-      total: sessionIndices.length,
-      session_name: currentSessionName,
+      current: activeOrder + 1,
+      total: ordered.length,
+      session_name: nextSession.name,
     },
   };
 }

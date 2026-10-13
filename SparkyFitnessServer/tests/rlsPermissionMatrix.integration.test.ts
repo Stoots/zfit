@@ -7,13 +7,12 @@
  * with a mocked pool (the rest of the suite mocks `db/poolManager.js`, which
  * bypasses RLS entirely). This test runs against a REAL Postgres, connecting as
  * the non-superuser app role via `getClient(...)` (RLS enforced) and seeding via
- * `getSystemClient()` (superuser, RLS bypassed). It pins the two layers that
- * historically drifted:
+ * `getSystemClient()` (superuser, RLS bypassed). It checks:
  *
- *   Part A — policy wiring: every table's policy references the EXPECTED helper
- *            (catches "checkin table wired to the diary policy" misclassification).
- *   Part B — helper behavior: each RLS helper returns the EXPECTED allow/deny per
- *            permission (catches logic regressions, e.g. removing dead key variants).
+ *   Part A — domain classification covers every RLS-enabled table.
+ *   Part B — permission helpers return the expected allow/deny decisions.
+ *   Part C — real row visibility and writes enforce those boundaries, including
+ *            nested Workout Sessions and strictly owner-only Training Programs.
  *
  * HOW TO RUN
  * ----------
@@ -31,13 +30,41 @@
  * instead of failing to connect. Set SKIP_RLS_MATRIX=1 to force-skip even when
  * a database is up.
  */
-import pg from 'pg';
+import pg, { type PoolClient } from 'pg';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import exerciseDb from '../models/exercise.js';
 import exerciseEntryDb from '../models/exerciseEntry.js';
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { getClient, getSystemClient, endPool } from '../db/poolManager.js';
+
+function assertDisposableJournalDatabase() {
+  const database = process.env.SPARKY_FITNESS_DB_NAME ?? '';
+  const host = process.env.SPARKY_FITNESS_DB_HOST ?? '';
+  if (
+    process.env.RUN_CONSOLIDATION_DB !== '1' ||
+    !/^zfit_consolidation14_disposable(?:_[a-z0-9]+)?$/.test(database) ||
+    !['localhost', '127.0.0.1', '::1'].includes(host)
+  ) {
+    throw new Error(
+      'Journal fixtures require RUN_CONSOLIDATION_DB=1 and a loopback zfit_consolidation14_disposable database'
+    );
+  }
+}
+
+if (process.env.RUN_CONSOLIDATION_DB === '1') {
+  assertDisposableJournalDatabase();
+}
+
+async function assertDisposableJournalConnection(client: PoolClient) {
+  assertDisposableJournalDatabase();
+  const result = await client.query<{ database: string }>(
+    'SELECT current_database() AS database'
+  );
+  expect(result.rows).toStrictEqual([
+    { database: process.env.SPARKY_FITNESS_DB_NAME },
+  ]);
+}
 
 // Probe the app role RLS actually needs, with a short timeout, using a
 // standalone client. Returns false on any failure so the suite skips rather
@@ -103,6 +130,9 @@ describe.runIf(RUN)('RLS permission matrix', () => {
   beforeAll(async () => {
     const sys = await getSystemClient();
     try {
+      if (process.env.RUN_CONSOLIDATION_DB === '1') {
+        await assertDisposableJournalConnection(sys);
+      }
       // Idempotent clean slate (cascades remove family_access).
       await sys.query('DELETE FROM public."user" WHERE id = ANY($1::uuid[])', [
         ALL_IDS,
@@ -134,6 +164,9 @@ describe.runIf(RUN)('RLS permission matrix', () => {
   afterAll(async () => {
     const sys = await getSystemClient();
     try {
+      if (process.env.RUN_CONSOLIDATION_DB === '1') {
+        await assertDisposableJournalConnection(sys);
+      }
       await sys.query('DELETE FROM public."user" WHERE id = ANY($1::uuid[])', [
         ALL_IDS,
       ]);
@@ -144,18 +177,9 @@ describe.runIf(RUN)('RLS permission matrix', () => {
   });
 
   // ---------------------------------------------------------------------------
-  // Part A — policy wiring. Asserts EVERY RLS-enabled table is classified into a
-  // domain, and that each table's policies reference the expected helper.
-  //
-  // DOMAIN below is the single source of truth: every one of the RLS-enabled
-  // tables must appear exactly once. The completeness test fails if the database
-  // has an RLS table missing from this map (a new table nobody classified) or a
-  // map entry that is no longer RLS-enabled — so this list cannot silently rot.
-  //
-  // Generic helper-policy domains (diary/checkin/medication/library) get their
-  // expected helper asserted automatically. `custom` tables have bespoke,
-  // hand-written policies; the well-known ones are pinned explicitly below, the
-  // rest are only required to *exist* (no unprotected table).
+  // Part A — classify every RLS-enabled table into a permission domain.
+  // The completeness guard catches newly unclassified or stale tables without
+  // pinning policy names, helper wiring or PostgreSQL's expression rendering.
   // ---------------------------------------------------------------------------
   type Domain =
     | 'owner'
@@ -190,6 +214,7 @@ describe.runIf(RUN)('RLS permission matrix', () => {
     training_program_phases: 'owner',
     training_program_weeks: 'owner',
     training_program_sessions: 'owner',
+    workout_program_consolidations: 'owner',
     // diary
     exercise_entries: 'diary',
     exercise_preset_entries: 'diary',
@@ -264,13 +289,13 @@ describe.runIf(RUN)('RLS permission matrix', () => {
     onboarding_data: 'custom',
     onboarding_status: 'custom',
     profiles: 'custom',
-    // symptom_entries: symptom helpers plus a cycle-source carve-out, so it has
-    // bespoke (pinned) policies rather than the generic generator's.
+    // Symptom entries also retain owner-only access for cycle-source rows.
     symptom_entries: 'custom',
     user_dashboard_layouts: 'custom',
     user_medication_display_preferences: 'custom',
     user_nutrient_display_preferences: 'custom',
     user_preferences: 'custom',
+    workout_plan_sessions: 'custom',
     workout_plan_assignment_sets: 'custom',
     workout_plan_template_assignments: 'custom',
     workout_preset_exercise_sets: 'custom',
@@ -282,50 +307,7 @@ describe.runIf(RUN)('RLS permission matrix', () => {
     rate_limit: 'custom',
   };
 
-  // Expected helper substrings for the generic-policy domains.
-  const HELPER: Record<
-    'diary' | 'checkin' | 'medication' | 'symptom' | 'library',
-    { read: string; write: string }
-  > = {
-    diary: { read: 'has_diary_read_access', write: 'has_diary_access' },
-    checkin: { read: 'has_checkin_read_access', write: 'can_manage_checkin' },
-    medication: {
-      read: 'has_medication_read_access',
-      write: 'has_medication_access',
-    },
-    symptom: {
-      read: 'has_symptom_read_access',
-      write: 'has_symptom_access',
-    },
-    library: {
-      read: 'has_library_access_with_public',
-      write: 'authenticated_user_id() = user_id',
-    },
-  };
-
-  const norm = (s: string) => s.replace(/\s+/g, ' ');
-
-  async function policies(table: string) {
-    const sys = await getSystemClient();
-    try {
-      const { rows } = await sys.query(
-        'SELECT policyname, qual, with_check FROM pg_policies WHERE schemaname = $1 AND tablename = $2',
-        ['public', table]
-      );
-      return rows as Array<{
-        policyname: string;
-        qual: string | null;
-        with_check: string | null;
-      }>;
-    } finally {
-      sys.release();
-    }
-  }
-
-  const tablesIn = (...d: Domain[]) =>
-    Object.keys(DOMAIN).filter((t) => d.includes(DOMAIN[t]));
-
-  describe('policy wiring (pg_policies)', () => {
+  describe('domain classification', () => {
     it('every RLS-enabled table is classified in DOMAIN (completeness guard)', async () => {
       const sys = await getSystemClient();
       let enabled: string[];
@@ -352,241 +334,6 @@ describe.runIf(RUN)('RLS permission matrix', () => {
         `DOMAIN entries that are no longer RLS-enabled: ${stale}`
       ).toEqual([]);
     });
-
-    // Generic helper-policy tables: select_policy uses the read helper,
-    // modify_policy's WITH CHECK uses the write helper.
-    it.each(tablesIn('diary', 'checkin', 'medication', 'symptom', 'library'))(
-      'helper table "%s" wires select+modify to its domain helper',
-      async (table) => {
-        const exp = HELPER[DOMAIN[table] as keyof typeof HELPER];
-        const ps = await policies(table);
-        const sel = ps.find((p) => p.policyname === 'select_policy');
-        const mod = ps.find((p) => p.policyname === 'modify_policy');
-        expect(sel, `${table} has no select_policy`).toBeTruthy();
-        expect(mod, `${table} has no modify_policy`).toBeTruthy();
-        expect(norm(sel!.qual ?? '')).toContain(exp.read);
-        expect(norm(mod!.with_check ?? '')).toContain(exp.write);
-      }
-    );
-
-    // Owner-only tables: the single ALL policy keys off the authenticated user
-    // and must NOT delegate (no family_access / has_* helper).
-    it.each(tablesIn('owner'))(
-      'owner-only table "%s" has no delegation',
-      async (table) => {
-        const ps = await policies(table);
-        expect(ps.length, `${table} has no policy`).toBeGreaterThan(0);
-        const all = norm(
-          ps.map((p) => `${p.qual ?? ''} ${p.with_check ?? ''}`).join(' ')
-        );
-        expect(all).toContain('authenticated_user_id()');
-        expect(all).not.toMatch(
-          /family_access|has_\w+_access|has_family_access/
-        );
-      }
-    );
-
-    // Custom tables: at minimum, every one must actually have a policy (no
-    // RLS-enabled-but-unprotected table).
-    it.each(tablesIn('custom'))(
-      'custom table "%s" has at least one policy',
-      async (table) => {
-        const ps = await policies(table);
-        expect(
-          ps.length,
-          `${table} is RLS-enabled but has no policy`
-        ).toBeGreaterThan(0);
-      }
-    );
-
-    // Pinned expectations for the well-known custom tables (the bug-prone ones).
-    const customPins: Array<{
-      table: string;
-      policy: string;
-      col: 'qual' | 'with_check';
-      mustContain: string;
-    }> = [
-      {
-        table: 'food_entries',
-        policy: 'select_policy',
-        col: 'qual',
-        mustContain: 'has_diary_read_access',
-      },
-      {
-        table: 'food_entries',
-        policy: 'insert_policy',
-        col: 'with_check',
-        mustContain: 'has_diary_access',
-      },
-      {
-        table: 'food_variants',
-        policy: 'modify_policy',
-        col: 'with_check',
-        mustContain: 'authenticated_user_id() = f.user_id',
-      },
-      {
-        table: 'meal_foods',
-        policy: 'modify_policy',
-        col: 'with_check',
-        mustContain: 'authenticated_user_id() = m.user_id',
-      },
-      {
-        table: 'exercise_entry_sets',
-        policy: 'modify_policy',
-        col: 'with_check',
-        mustContain: 'has_diary_access',
-      },
-      {
-        table: 'exercise_entry_activity_details',
-        policy: 'modify_policy',
-        col: 'with_check',
-        mustContain: 'has_diary_access',
-      },
-      {
-        table: 'profiles',
-        policy: 'select_policy',
-        col: 'qual',
-        mustContain: 'has_profile_read_access',
-      },
-      {
-        table: 'user_medication_display_preferences',
-        policy: 'select_policy',
-        col: 'qual',
-        mustContain: 'has_medication_read_access',
-      },
-      // Symptom entries: symptom helpers, and cycle-hub rows stay owner-only
-      // (Tier 1) even for a delegate that holds the symptoms permission.
-      {
-        table: 'symptom_entries',
-        policy: 'select_policy',
-        col: 'qual',
-        mustContain: 'has_symptom_read_access',
-      },
-      {
-        table: 'symptom_entries',
-        policy: 'select_policy',
-        col: 'qual',
-        mustContain: "'cycle'::text",
-      },
-      {
-        table: 'symptom_entries',
-        policy: 'modify_policy',
-        col: 'with_check',
-        mustContain: 'has_symptom_access',
-      },
-      {
-        table: 'symptom_entries',
-        policy: 'modify_policy',
-        col: 'with_check',
-        mustContain: "'cycle'::text",
-      },
-      // Delegate-readable (any meaningful perm), owner-only write — profile-style.
-      {
-        table: 'user_preferences',
-        policy: 'select_policy',
-        col: 'qual',
-        mustContain: 'has_profile_read_access',
-      },
-      {
-        table: 'user_dashboard_layouts',
-        policy: 'select_policy',
-        col: 'qual',
-        mustContain: 'has_profile_read_access',
-      },
-      {
-        table: 'user_nutrient_display_preferences',
-        policy: 'select_policy',
-        col: 'qual',
-        mustContain: 'has_profile_read_access',
-      },
-      {
-        table: 'onboarding_data',
-        policy: 'select_policy',
-        col: 'qual',
-        mustContain: 'has_profile_read_access',
-      },
-      {
-        table: 'onboarding_status',
-        policy: 'select_policy',
-        col: 'qual',
-        mustContain: 'has_profile_read_access',
-      },
-      // Admin / global / sharing-specific logic.
-      {
-        table: 'admin_activity_logs',
-        policy: 'admin_only_select',
-        col: 'qual',
-        mustContain: 'is_admin()',
-      },
-      {
-        table: 'ai_service_settings',
-        policy: 'ai_service_settings_select_policy',
-        col: 'qual',
-        mustContain: 'is_public',
-      },
-      {
-        table: 'external_data_providers',
-        policy: 'select_policy',
-        col: 'qual',
-        mustContain: 'share_external_providers',
-      },
-      // Bidirectional visibility (owner OR the family member sees the grant).
-      {
-        table: 'family_access',
-        policy: 'select_policy',
-        col: 'qual',
-        mustContain: 'family_user_id',
-      },
-      // System rows (user_id NULL) readable by all, else diary-read.
-      {
-        table: 'meal_types',
-        policy: 'select_policy',
-        col: 'qual',
-        mustContain: 'has_diary_read_access',
-      },
-      // Diary-domain assignments gated through the parent template's owner.
-      {
-        table: 'meal_plan_template_assignments',
-        policy: 'owner_policy',
-        col: 'with_check',
-        mustContain: 'has_diary_access',
-      },
-      {
-        table: 'workout_plan_template_assignments',
-        policy: 'owner_policy',
-        col: 'with_check',
-        mustContain: 'has_diary_access',
-      },
-      {
-        table: 'workout_plan_assignment_sets',
-        policy: 'owner_policy',
-        col: 'with_check',
-        mustContain: 'workout_plan_template_assignments',
-      },
-      // Workout-preset children: write gated to the preset owner.
-      {
-        table: 'workout_preset_exercises',
-        policy: 'modify_policy',
-        col: 'with_check',
-        mustContain: 'authenticated_user_id() = wp.user_id',
-      },
-      {
-        table: 'workout_preset_exercise_sets',
-        policy: 'modify_policy',
-        col: 'with_check',
-        mustContain: 'authenticated_user_id() = wp.user_id',
-      },
-    ];
-
-    it.each(customPins)(
-      'pinned: $table $policy ($col) contains $mustContain',
-      async ({ table, policy, col, mustContain }) => {
-        const ps = await policies(table);
-        const row = ps.find((p) => p.policyname === policy);
-        expect(row, `${table}.${policy} not found`).toBeTruthy();
-        expect(norm(row![col] ?? '')).toContain(norm(mustContain));
-      }
-    );
   });
 
   // ---------------------------------------------------------------------------
@@ -778,10 +525,18 @@ describe.runIf(RUN)('RLS permission matrix', () => {
   // ---------------------------------------------------------------------------
   describe('behavioral access (real DML as delegate)', () => {
     const KEYS = Object.keys(D) as DelegateKey[];
+    type Actor = DelegateKey | 'owner';
+    const ACTORS: Actor[] = ['owner', ...KEYS];
     const RLS_DENIED = '42501';
 
-    async function canSelect(key: DelegateKey, table: string, id: string) {
-      const client = await getClient(OWNER, D[key] as unknown as null);
+    async function canSelect(
+      key: Actor,
+      table: string,
+      id: string | number,
+      switched = true
+    ) {
+      const actorId = key === 'owner' ? OWNER : D[key];
+      const client = await getClient(switched ? OWNER : actorId, actorId);
       try {
         const { rows } = await client.query(
           `SELECT 1 FROM public.${table} WHERE id = $1`,
@@ -794,12 +549,13 @@ describe.runIf(RUN)('RLS permission matrix', () => {
     }
 
     // INSERT: allowed unless RLS raises 42501.
-    async function canInsert(key: DelegateKey, sql: string, params: unknown[]) {
-      const client = await getClient(OWNER, D[key] as unknown as null);
+    async function canInsert(key: Actor, sql: string, params: unknown[]) {
+      const client = await getClient(OWNER, key === 'owner' ? OWNER : D[key]);
       try {
         await client.query('BEGIN');
         try {
           await client.query(sql, params);
+          await client.query('SET CONSTRAINTS ALL IMMEDIATE');
           return true;
         } catch (e) {
           if ((e as { code?: string }).code === RLS_DENIED) return false;
@@ -814,12 +570,13 @@ describe.runIf(RUN)('RLS permission matrix', () => {
 
     // UPDATE/DELETE: allowed only if a row was actually affected (USING hides
     // rows the delegate may not write, yielding rowCount 0 with no error).
-    async function canAffect(key: DelegateKey, sql: string, params: unknown[]) {
-      const client = await getClient(OWNER, D[key] as unknown as null);
+    async function canAffect(key: Actor, sql: string, params: unknown[]) {
+      const client = await getClient(OWNER, key === 'owner' ? OWNER : D[key]);
       try {
         await client.query('BEGIN');
         try {
           const res = await client.query(sql, params);
+          await client.query('SET CONSTRAINTS ALL IMMEDIATE');
           return (res.rowCount ?? 0) > 0;
         } catch (e) {
           if ((e as { code?: string }).code === RLS_DENIED) return false;
@@ -835,44 +592,767 @@ describe.runIf(RUN)('RLS permission matrix', () => {
     // Runs SELECT/INSERT/UPDATE/DELETE allow-deny assertions for one table.
     function crudSuite(opts: {
       table: string;
-      read: DelegateKey[];
-      write: DelegateKey[];
+      read: Actor[];
+      write: Actor[];
+      deleteWrite?: Actor[];
+      actors?: Actor[];
       // lazy so it can read seed ids captured in beforeAll
       insert: () => { sql: string; params: unknown[] };
-      // a no-op self-assignment column so UPDATE touches nothing real
-      touchColumn: string;
-      rowId: () => string;
+      // Legacy cases use a self-assignment; nested cases supply a real edit.
+      touchColumn?: string;
+      update?: () => { sql: string; params: unknown[] };
+      rowId: () => string | number;
     }) {
-      it.each(KEYS)(`${opts.table} SELECT as "%s"`, async (key) => {
-        expect(await canSelect(key, opts.table, opts.rowId())).toBe(
-          opts.read.includes(key)
-        );
-      });
-      it.each(KEYS)(`${opts.table} INSERT as "%s"`, async (key) => {
-        const { sql, params } = opts.insert();
-        expect(await canInsert(key, sql, params)).toBe(
-          opts.write.includes(key)
-        );
-      });
-      it.each(KEYS)(`${opts.table} UPDATE as "%s"`, async (key) => {
-        expect(
-          await canAffect(
-            key,
-            `UPDATE public.${opts.table} SET ${opts.touchColumn} = ${opts.touchColumn} WHERE id = $1`,
-            [opts.rowId()]
-          )
-        ).toBe(opts.write.includes(key));
-      });
-      it.each(KEYS)(`${opts.table} DELETE as "%s"`, async (key) => {
-        expect(
-          await canAffect(
-            key,
-            `DELETE FROM public.${opts.table} WHERE id = $1`,
-            [opts.rowId()]
-          )
-        ).toBe(opts.write.includes(key));
-      });
+      it.each(opts.actors ?? KEYS)(
+        `${opts.table} SELECT as "%s"`,
+        async (key) => {
+          expect(await canSelect(key, opts.table, opts.rowId())).toBe(
+            opts.read.includes(key)
+          );
+        }
+      );
+      it.each(opts.actors ?? KEYS)(
+        `${opts.table} INSERT as "%s"`,
+        async (key) => {
+          const { sql, params } = opts.insert();
+          expect(await canInsert(key, sql, params)).toBe(
+            opts.write.includes(key)
+          );
+        }
+      );
+      it.each(opts.actors ?? KEYS)(
+        `${opts.table} UPDATE as "%s"`,
+        async (key) => {
+          const edit = opts.update?.() ?? {
+            sql: `UPDATE public.${opts.table} SET ${opts.touchColumn} = ${opts.touchColumn} WHERE id = $1`,
+            params: [opts.rowId()],
+          };
+          expect(await canAffect(key, edit.sql, edit.params)).toBe(
+            opts.write.includes(key)
+          );
+        }
+      );
+      it.each(opts.actors ?? KEYS)(
+        `${opts.table} DELETE as "%s"`,
+        async (key) => {
+          expect(
+            await canAffect(
+              key,
+              `DELETE FROM public.${opts.table} WHERE id = $1`,
+              [opts.rowId()]
+            )
+          ).toBe((opts.deleteWrite ?? opts.write).includes(key));
+        }
+      );
     }
+
+    describe('Workout Session hierarchy and private Program structure', () => {
+      type PlanFixture = {
+        planId: number;
+        sessionId: string;
+        assignmentId: number;
+        setId: number;
+      };
+      type ProgramFixture = {
+        programId: string;
+        phaseId: string;
+        weekId: string;
+        sessionId: string;
+      };
+      let exerciseId: string;
+      let presetId: number;
+      let presetExerciseId: number;
+      let presetSetId: number;
+      let boundSessionId: string;
+      let boundAssignmentId: number;
+      let plan: PlanFixture;
+      let secondPlan: PlanFixture;
+      let foreignPlan: PlanFixture;
+      let program: ProgramFixture;
+      let foreignProgram: ProgramFixture;
+
+      async function seedPlan(
+        client: PoolClient,
+        userId: string
+      ): Promise<PlanFixture> {
+        const parent = await client.query<{ id: number }>(
+          `INSERT INTO workout_plan_templates (user_id, plan_name, schedule_type)
+           VALUES ($1, 'rls-session-plan', 'sequential') RETURNING id`,
+          [userId]
+        );
+        const session = await client.query<{ id: string }>(
+          `INSERT INTO workout_plan_sessions (template_id, user_id, name, sort_order)
+           VALUES ($1, $2, 'A', 0) RETURNING id`,
+          [parent.rows[0].id, userId]
+        );
+        const assignment = await client.query<{ id: number }>(
+          `INSERT INTO workout_plan_template_assignments
+             (template_id, workout_session_id, user_id, exercise_id, sort_order)
+           VALUES ($1, $2, $3, $4, 0) RETURNING id`,
+          [parent.rows[0].id, session.rows[0].id, userId, exerciseId]
+        );
+        const set = await client.query<{ id: number }>(
+          `INSERT INTO workout_plan_assignment_sets (assignment_id, set_number, set_type, reps)
+           VALUES ($1, 1, 'Working Set', 8) RETURNING id`,
+          [assignment.rows[0].id]
+        );
+        return {
+          planId: parent.rows[0].id,
+          sessionId: session.rows[0].id,
+          assignmentId: assignment.rows[0].id,
+          setId: set.rows[0].id,
+        };
+      }
+
+      async function seedProgram(
+        client: PoolClient,
+        userId: string,
+        workoutSessionId: string
+      ): Promise<ProgramFixture> {
+        const fixture = {
+          programId: randomUUID(),
+          phaseId: randomUUID(),
+          weekId: randomUUID(),
+          sessionId: randomUUID(),
+        };
+        await client.query(
+          `INSERT INTO training_programs (id, user_id, name, goal, start_date, end_date)
+           VALUES ($1, $2, 'rls-program', 'Strength', '2026-10-11', '2026-10-17')`,
+          [fixture.programId, userId]
+        );
+        await client.query(
+          `INSERT INTO training_program_phases (id, program_id, user_id, name, goal, sort_order)
+           VALUES ($1, $2, $3, 'Phase', 'Strength', 0)`,
+          [fixture.phaseId, fixture.programId, userId]
+        );
+        await client.query(
+          `INSERT INTO training_program_weeks
+             (id, program_id, phase_id, user_id, start_date, end_date, sort_order)
+           VALUES ($1, $2, $3, $4, '2026-10-11', '2026-10-17', 0)`,
+          [fixture.weekId, fixture.programId, fixture.phaseId, userId]
+        );
+        await client.query(
+          `INSERT INTO training_program_sessions
+             (id, program_id, week_id, user_id, name, scheduled_date, effective_date, workout_session_id, sort_order)
+           VALUES ($1, $2, $3, $4, 'A', '2026-10-11', '2026-10-11', $5, 0)`,
+          [
+            fixture.sessionId,
+            fixture.programId,
+            fixture.weekId,
+            userId,
+            workoutSessionId,
+          ]
+        );
+        return fixture;
+      }
+
+      beforeAll(async () => {
+        const sys: PoolClient = await getSystemClient();
+        try {
+          await sys.query('BEGIN');
+          const exercise = await sys.query<{ id: string }>(
+            `INSERT INTO exercises (user_id, name, category, is_custom, source, shared_with_public)
+             VALUES ($1, 'rls-session-exercise', 'Strength', true, 'custom', true) RETURNING id`,
+            [OWNER]
+          );
+          exerciseId = exercise.rows[0].id;
+          plan = await seedPlan(sys, OWNER);
+          secondPlan = await seedPlan(sys, OWNER);
+          foreignPlan = await seedPlan(sys, D.none);
+          // A genuine read-only family grant exposes the foreign plan, not authorship.
+          await sys.query(
+            `INSERT INTO family_access
+               (owner_user_id, family_user_id, family_email, access_permissions, is_active, status)
+             VALUES ($1, $2, 'rls-owner@example.test', '{"can_view_exercise_library":true}', true, 'active')`,
+            [D.none, OWNER]
+          );
+          const preset = await sys.query<{ id: number }>(
+            `INSERT INTO workout_presets (user_id, name, is_public, workout_format)
+             VALUES ($1, 'Public source preset', true, 'standard') RETURNING id`,
+            [OWNER]
+          );
+          presetId = preset.rows[0].id;
+          const presetExercise = await sys.query<{ id: number }>(
+            `INSERT INTO workout_preset_exercises (workout_preset_id, exercise_id, sort_order)
+             VALUES ($1, $2, 0) RETURNING id`,
+            [presetId, exerciseId]
+          );
+          presetExerciseId = presetExercise.rows[0].id;
+          const presetSet = await sys.query<{ id: number }>(
+            `INSERT INTO workout_preset_exercise_sets (workout_preset_exercise_id, set_number, reps)
+             VALUES ($1, 1, 8) RETURNING id`,
+            [presetExerciseId]
+          );
+          presetSetId = presetSet.rows[0].id;
+          // Public sources do not make their consuming plan/session/Program public.
+          // Keep this Program-bound session separate from deletion test targets.
+          const boundSession = await sys.query<{ id: string }>(
+            `INSERT INTO workout_plan_sessions (template_id, user_id, name, sort_order)
+             VALUES ($1, $2, 'Program-bound public prescription', 1) RETURNING id`,
+            [plan.planId, OWNER]
+          );
+          boundSessionId = boundSession.rows[0].id;
+          const boundAssignment = await sys.query<{ id: number }>(
+            `INSERT INTO workout_plan_template_assignments
+               (template_id, workout_session_id, user_id, workout_preset_id, preset_snapshot, sort_order)
+             SELECT $1, $2, $3, wp.id,
+               jsonb_build_object('id', wp.id, 'name', wp.name, 'description', wp.description,
+                 'workout_format', wp.workout_format, 'time_cap_seconds', wp.time_cap_seconds,
+                 'exercises', (SELECT jsonb_agg(
+                   (to_jsonb(pe) - 'workout_preset_id' - 'created_at' - 'updated_at') ||
+                   jsonb_build_object('exercise_name', e.name, 'category', e.category, 'modality', e.modality,
+                     'primary_muscles', e.primary_muscles, 'secondary_muscles', e.secondary_muscles,
+                     'equipment', e.equipment, 'instructions', e.instructions, 'images', e.images,
+                     'sets', (SELECT jsonb_agg(to_jsonb(ps) - 'workout_preset_exercise_id' - 'created_at' - 'updated_at'
+                       ORDER BY ps.set_number, ps.id) FROM workout_preset_exercise_sets ps
+                       WHERE ps.workout_preset_exercise_id = pe.id))
+                   ORDER BY pe.sort_order, pe.id)
+                 FROM workout_preset_exercises pe JOIN exercises e ON e.id = pe.exercise_id
+                 WHERE pe.workout_preset_id = wp.id)), 0
+             FROM workout_presets wp WHERE wp.id = $4 RETURNING id`,
+            [plan.planId, boundSessionId, OWNER, presetId]
+          );
+          boundAssignmentId = boundAssignment.rows[0].id;
+          program = await seedProgram(sys, OWNER, boundSessionId);
+          foreignProgram = await seedProgram(
+            sys,
+            D.none,
+            foreignPlan.sessionId
+          );
+          await sys.query('COMMIT');
+        } catch (error) {
+          await sys.query('ROLLBACK');
+          throw error;
+        } finally {
+          sys.release();
+        }
+      });
+
+      afterAll(async () => {
+        const sys: PoolClient = await getSystemClient();
+        try {
+          await sys.query(
+            'DELETE FROM training_programs WHERE id = ANY($1::uuid[])',
+            [
+              [program?.programId, foreignProgram?.programId].filter(
+                (id) => id !== undefined
+              ),
+            ]
+          );
+          await sys.query(
+            'DELETE FROM workout_plan_templates WHERE id = ANY($1::integer[])',
+            [
+              [plan?.planId, secondPlan?.planId, foreignPlan?.planId].filter(
+                (id) => id !== undefined
+              ),
+            ]
+          );
+          await sys.query('DELETE FROM workout_presets WHERE id = $1', [
+            presetId,
+          ]);
+          await sys.query('DELETE FROM exercises WHERE id = $1', [exerciseId]);
+          await sys.query(
+            'DELETE FROM family_access WHERE owner_user_id = $1 AND family_user_id = $2',
+            [D.none, OWNER]
+          );
+        } finally {
+          sys.release();
+        }
+      });
+
+      crudSuite({
+        table: 'workout_plan_sessions',
+        actors: ACTORS,
+        read: ['owner', 'reports', 'exlib'],
+        write: ['owner'],
+        rowId: () => plan.sessionId,
+        insert: () => ({
+          sql: `INSERT INTO workout_plan_sessions (template_id, user_id, name, sort_order)
+                VALUES ($1, $2, 'New session', 2)`,
+          params: [plan.planId, OWNER],
+        }),
+        update: () => ({
+          sql: "UPDATE workout_plan_sessions SET name = 'Edited session' WHERE id = $1",
+          params: [plan.sessionId],
+        }),
+      });
+      crudSuite({
+        table: 'workout_plan_template_assignments',
+        actors: ACTORS,
+        read: ['owner', 'diary', 'reports', 'exlib'],
+        // INSERT/UPDATE also require visible parent session membership.
+        write: ['owner'],
+        deleteWrite: ['owner', 'diary'],
+        rowId: () => plan.assignmentId,
+        insert: () => ({
+          sql: `INSERT INTO workout_plan_template_assignments
+                  (template_id, workout_session_id, user_id, exercise_id, sort_order)
+                VALUES ($1, $2, $3, $4, 2)`,
+          params: [plan.planId, plan.sessionId, OWNER, exerciseId],
+        }),
+        update: () => ({
+          sql: 'UPDATE workout_plan_template_assignments SET sort_order = 3 WHERE id = $1',
+          params: [plan.assignmentId],
+        }),
+      });
+      crudSuite({
+        table: 'workout_plan_assignment_sets',
+        actors: ACTORS,
+        read: ['owner', 'diary', 'reports', 'exlib'],
+        write: ['owner', 'diary'],
+        rowId: () => plan.setId,
+        insert: () => ({
+          sql: `INSERT INTO workout_plan_assignment_sets (assignment_id, set_number, set_type, reps)
+                VALUES ($1, 2, 'Working Set', 10)`,
+          params: [plan.assignmentId],
+        }),
+        update: () => ({
+          sql: 'UPDATE workout_plan_assignment_sets SET reps = 12 WHERE id = $1',
+          params: [plan.setId],
+        }),
+      });
+
+      it.each(['diary', 'exlib', 'reports', 'none'] as const)(
+        'respects the parent plan boundary in the reader own context as %s',
+        async (key) => {
+          const libraryRead = key === 'exlib' || key === 'reports';
+          expect(
+            await canSelect(key, 'workout_plan_templates', plan.planId, false)
+          ).toBe(libraryRead);
+          expect(
+            await canSelect(key, 'workout_plan_sessions', plan.sessionId, false)
+          ).toBe(libraryRead);
+          for (const [table, id] of [
+            ['workout_plan_template_assignments', plan.assignmentId],
+            ['workout_plan_assignment_sets', plan.setId],
+          ] as const) {
+            expect(await canSelect(key, table, id, false)).toBe(
+              libraryRead || key === 'diary'
+            );
+          }
+        }
+      );
+
+      it('allows diary assignment authoring with an additional session-library grant, not session authorship', async () => {
+        const client: PoolClient = await getClient(OWNER, OWNER);
+        try {
+          await client.query('BEGIN');
+          await client.query(
+            `UPDATE family_access SET access_permissions =
+               access_permissions || '{"can_view_exercise_library":true}'::jsonb
+             WHERE owner_user_id = $1 AND family_user_id = $2`,
+            [OWNER, D.diary]
+          );
+          await client.query('SELECT set_app_context($1, $2)', [
+            OWNER,
+            D.diary,
+          ]);
+          const inserted = await client.query<{ id: number }>(
+            `INSERT INTO workout_plan_template_assignments
+               (template_id, workout_session_id, user_id, exercise_id, sort_order)
+             VALUES ($1, $2, $3, $4, 2) RETURNING id`,
+            [plan.planId, plan.sessionId, OWNER, exerciseId]
+          );
+          const edited = await client.query(
+            'UPDATE workout_plan_template_assignments SET sort_order = 3 WHERE id = $1 RETURNING id, sort_order',
+            [inserted.rows[0].id]
+          );
+          expect(edited.rows).toEqual([
+            { id: inserted.rows[0].id, sort_order: 3 },
+          ]);
+          await expect(
+            client.query(
+              `INSERT INTO workout_plan_sessions (template_id, user_id, name, sort_order)
+               VALUES ($1, $2, 'Denied diary session', 2)`,
+              [plan.planId, OWNER]
+            )
+          ).rejects.toMatchObject({ code: RLS_DENIED });
+        } finally {
+          await client.query('ROLLBACK');
+          client.release();
+        }
+      });
+
+      it.each(['inactive', 'expired'] as const)(
+        'revokes nested plan reads for an %s library grant without hiding public sources',
+        async (state) => {
+          const client: PoolClient = await getClient(OWNER, OWNER);
+          try {
+            await client.query('BEGIN');
+            await client.query(
+              `UPDATE family_access SET is_active = $3, access_end_date = $4
+               WHERE owner_user_id = $1 AND family_user_id = $2`,
+              [
+                OWNER,
+                D.exlib,
+                state !== 'inactive',
+                state === 'expired' ? '2000-01-01' : null,
+              ]
+            );
+            await client.query('SELECT set_app_context($1, $2)', [
+              OWNER,
+              D.exlib,
+            ]);
+            for (const [table, id] of [
+              ['workout_plan_templates', plan.planId],
+              ['workout_plan_sessions', plan.sessionId],
+              ['workout_plan_template_assignments', plan.assignmentId],
+              ['workout_plan_assignment_sets', plan.setId],
+            ] as const) {
+              const hidden = await client.query(
+                `SELECT id FROM ${table} WHERE id = $1`,
+                [id]
+              );
+              expect(hidden.rows).toEqual([]);
+            }
+            for (const [table, id] of [
+              ['exercises', exerciseId],
+              ['workout_presets', presetId],
+              ['workout_preset_exercises', presetExerciseId],
+              ['workout_preset_exercise_sets', presetSetId],
+            ] as const) {
+              const visible = await client.query(
+                `SELECT id FROM ${table} WHERE id = $1`,
+                [id]
+              );
+              expect(visible.rows).toEqual([{ id }]);
+            }
+          } finally {
+            await client.query('ROLLBACK');
+            client.release();
+          }
+        }
+      );
+
+      it('rejects mismatched plan/session owners and cross-plan assignment moves', async () => {
+        expect(
+          await canSelect(
+            'owner',
+            'workout_plan_sessions',
+            foreignPlan.sessionId
+          )
+        ).toBe(true);
+        expect(
+          await canInsert(
+            'owner',
+            `INSERT INTO workout_plan_sessions (template_id, user_id, name, sort_order)
+             VALUES ($1, $2, 'Wrong owner', 2)`,
+            [foreignPlan.planId, OWNER]
+          )
+        ).toBe(false);
+        expect(
+          await canAffect(
+            'owner',
+            'UPDATE workout_plan_sessions SET template_id = $2 WHERE id = $1',
+            [plan.sessionId, foreignPlan.planId]
+          )
+        ).toBe(false);
+        expect(
+          await canInsert(
+            'owner',
+            `INSERT INTO workout_plan_template_assignments
+               (template_id, workout_session_id, user_id, exercise_id, sort_order)
+             VALUES ($1, $2, $3, $4, 2)`,
+            [plan.planId, secondPlan.sessionId, OWNER, exerciseId]
+          )
+        ).toBe(false);
+        expect(
+          await canAffect(
+            'owner',
+            'UPDATE workout_plan_template_assignments SET workout_session_id = $2 WHERE id = $1',
+            [plan.assignmentId, secondPlan.sessionId]
+          )
+        ).toBe(false);
+        expect(
+          await canAffect(
+            'owner',
+            'UPDATE workout_plan_assignment_sets SET assignment_id = $2 WHERE id = $1',
+            [plan.setId, foreignPlan.assignmentId]
+          )
+        ).toBe(false);
+      });
+
+      for (const spec of [
+        {
+          table: 'training_programs',
+          rowId: () => program.programId,
+          insert: () => ({
+            sql: `INSERT INTO training_programs (user_id, name, goal, start_date, end_date)
+                  VALUES ($1, 'New Program', 'Strength', '2026-10-11', '2026-10-17')`,
+            params: [OWNER],
+          }),
+          update: () => ({
+            sql: "UPDATE training_programs SET name = 'Edited Program' WHERE id = $1",
+            params: [program.programId],
+          }),
+        },
+        {
+          table: 'training_program_phases',
+          rowId: () => program.phaseId,
+          insert: () => ({
+            sql: `INSERT INTO training_program_phases (program_id, user_id, name, goal, sort_order)
+                  VALUES ($1, $2, 'New phase', 'Strength', 2)`,
+            params: [program.programId, OWNER],
+          }),
+          update: () => ({
+            sql: "UPDATE training_program_phases SET name = 'Edited phase' WHERE id = $1",
+            params: [program.phaseId],
+          }),
+        },
+        {
+          table: 'training_program_weeks',
+          rowId: () => program.weekId,
+          insert: () => ({
+            sql: `INSERT INTO training_program_weeks
+                    (program_id, phase_id, user_id, start_date, end_date, sort_order)
+                  VALUES ($1, $2, $3, '2026-10-11', '2026-10-17', 2)`,
+            params: [program.programId, program.phaseId, OWNER],
+          }),
+          update: () => ({
+            sql: 'UPDATE training_program_weeks SET sort_order = 3 WHERE id = $1',
+            params: [program.weekId],
+          }),
+        },
+        {
+          table: 'training_program_sessions',
+          rowId: () => program.sessionId,
+          insert: () => ({
+            sql: `INSERT INTO training_program_sessions
+                    (program_id, week_id, user_id, name, scheduled_date, effective_date, workout_session_id, sort_order)
+                  VALUES ($1, $2, $3, 'New Planned Session', '2026-10-12', '2026-10-12', $4, 2)`,
+            params: [program.programId, program.weekId, OWNER, plan.sessionId],
+          }),
+          update: () => ({
+            sql: "UPDATE training_program_sessions SET name = 'Edited Planned Session' WHERE id = $1",
+            params: [program.sessionId],
+          }),
+        },
+      ]) {
+        describe(`${spec.table} owner-only`, () => {
+          crudSuite({
+            ...spec,
+            actors: ACTORS,
+            read: ['owner'],
+            write: ['owner'],
+          });
+        });
+      }
+
+      describe.runIf(process.env.RUN_CONSOLIDATION_DB === '1')(
+        'consolidation journal owner-only access',
+        () => {
+          const journalId = randomUUID();
+          const initialResult = { acceptance_note: 'original journal result' };
+
+          beforeAll(async () => {
+            assertDisposableJournalDatabase();
+            const client = await getClient(OWNER, OWNER);
+            try {
+              await assertDisposableJournalConnection(client);
+              await client.query(
+                `INSERT INTO workout_program_consolidations
+                   (id, user_id, program_id, target_plan_id, manifest, result)
+                 VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb)`,
+                [
+                  journalId,
+                  OWNER,
+                  program.programId,
+                  plan.planId,
+                  JSON.stringify({ operation_id: journalId }),
+                  JSON.stringify(initialResult),
+                ]
+              );
+            } finally {
+              client.release();
+            }
+          });
+
+          afterAll(async () => {
+            assertDisposableJournalDatabase();
+            const client = await getClient(OWNER, OWNER);
+            try {
+              await client.query(
+                'DELETE FROM workout_program_consolidations WHERE id = $1',
+                [journalId]
+              );
+            } finally {
+              client.release();
+            }
+          });
+
+          it('owner can create, read, genuinely edit and delete a journal row', async () => {
+            assertDisposableJournalDatabase();
+            const client = await getClient(OWNER, OWNER);
+            const id = randomUUID();
+            const editedResult = {
+              acceptance_note: 'owner edited the stored result',
+              target_plan_id: plan.planId,
+            };
+            try {
+              await client.query('BEGIN');
+              await client.query(
+                `INSERT INTO workout_program_consolidations
+                   (id, user_id, program_id, target_plan_id, manifest, result)
+                 VALUES ($1, $2, $3, $4, '{}'::jsonb, $5::jsonb)`,
+                [
+                  id,
+                  OWNER,
+                  program.programId,
+                  plan.planId,
+                  JSON.stringify(initialResult),
+                ]
+              );
+              const original = await client.query(
+                'SELECT id, user_id, program_id, target_plan_id, result FROM workout_program_consolidations WHERE id = $1',
+                [id]
+              );
+              expect(original.rows).toEqual([
+                {
+                  id,
+                  user_id: OWNER,
+                  program_id: program.programId,
+                  target_plan_id: plan.planId,
+                  result: initialResult,
+                },
+              ]);
+              const edited = await client.query(
+                'UPDATE workout_program_consolidations SET result = $2::jsonb WHERE id = $1 RETURNING result',
+                [id, JSON.stringify(editedResult)]
+              );
+              expect(edited.rows).toEqual([{ result: editedResult }]);
+              const stored = await client.query(
+                'SELECT result FROM workout_program_consolidations WHERE id = $1',
+                [id]
+              );
+              expect(stored.rows).toEqual([{ result: editedResult }]);
+              const deleted = await client.query(
+                'DELETE FROM workout_program_consolidations WHERE id = $1 RETURNING id',
+                [id]
+              );
+              expect(deleted.rows).toEqual([{ id }]);
+              expect(
+                (
+                  await client.query(
+                    'SELECT id FROM workout_program_consolidations WHERE id = $1',
+                    [id]
+                  )
+                ).rows
+              ).toEqual([]);
+            } finally {
+              await client.query('ROLLBACK');
+              client.release();
+            }
+          });
+
+          it.for(KEYS)(
+            'delegate %s cannot access owner journals with or without switched context',
+            async (key) => {
+              assertDisposableJournalDatabase();
+              for (const switched of [false, true]) {
+                const client = await getClient(
+                  switched ? OWNER : D[key],
+                  D[key]
+                );
+                try {
+                  await client.query('BEGIN');
+                  expect(
+                    (
+                      await client.query(
+                        'SELECT id, manifest, result FROM workout_program_consolidations WHERE id = $1',
+                        [journalId]
+                      )
+                    ).rows
+                  ).toEqual([]);
+                  expect(
+                    (
+                      await client.query(
+                        'UPDATE workout_program_consolidations SET result = \'{"acceptance_note":"delegate overwrite"}\'::jsonb WHERE id = $1 RETURNING id',
+                        [journalId]
+                      )
+                    ).rows
+                  ).toEqual([]);
+                  expect(
+                    (
+                      await client.query(
+                        'DELETE FROM workout_program_consolidations WHERE id = $1 RETURNING id',
+                        [journalId]
+                      )
+                    ).rows
+                  ).toEqual([]);
+                  await expect(
+                    client.query(
+                      `INSERT INTO workout_program_consolidations
+                         (id, user_id, program_id, target_plan_id, manifest, result)
+                       VALUES ($1, $2, $3, $4, '{}'::jsonb, '{}'::jsonb)`,
+                      [randomUUID(), OWNER, program.programId, plan.planId]
+                    )
+                  ).rejects.toMatchObject({ code: RLS_DENIED });
+                } finally {
+                  await client.query('ROLLBACK');
+                  client.release();
+                }
+              }
+              const ownerClient = await getClient(OWNER, OWNER);
+              try {
+                expect(
+                  (
+                    await ownerClient.query(
+                      'SELECT result FROM workout_program_consolidations WHERE id = $1',
+                      [journalId]
+                    )
+                  ).rows
+                ).toEqual([{ result: initialResult }]);
+              } finally {
+                ownerClient.release();
+              }
+            }
+          );
+        }
+      );
+
+      it('public sources neither expose their consuming hierarchy nor permit another owner Program binding', async () => {
+        for (const [table, id] of [
+          ['exercises', exerciseId],
+          ['workout_presets', presetId],
+          ['workout_preset_exercises', presetExerciseId],
+          ['workout_preset_exercise_sets', presetSetId],
+        ] as const) {
+          expect(await canSelect('none', table, id, false)).toBe(true);
+        }
+        for (const [table, id] of [
+          ['workout_plan_templates', plan.planId],
+          ['workout_plan_sessions', boundSessionId],
+          ['workout_plan_template_assignments', boundAssignmentId],
+          ['training_programs', program.programId],
+          ['training_program_phases', program.phaseId],
+          ['training_program_weeks', program.weekId],
+          ['training_program_sessions', program.sessionId],
+        ] as const) {
+          expect(await canSelect('none', table, id, false)).toBe(false);
+        }
+        const client: PoolClient = await getClient(D.none, D.none);
+        try {
+          await client.query('BEGIN');
+          await client.query(
+            `INSERT INTO training_program_sessions
+               (program_id, week_id, user_id, name, scheduled_date, effective_date, workout_session_id, sort_order)
+             VALUES ($1, $2, $3, 'Invalid shared-source binding', '2026-10-12', '2026-10-12', $4, 2)`,
+            [
+              foreignProgram.programId,
+              foreignProgram.weekId,
+              D.none,
+              boundSessionId,
+            ]
+          );
+          await expect(
+            client.query('SET CONSTRAINTS ALL IMMEDIATE')
+          ).rejects.toMatchObject({ code: '23503' });
+        } finally {
+          await client.query('ROLLBACK');
+          client.release();
+        }
+      });
+    });
 
     // -- diary domain: full CRUD for can_manage_diary, read-only for reports ---
     describe('goal_presets (diary)', () => {

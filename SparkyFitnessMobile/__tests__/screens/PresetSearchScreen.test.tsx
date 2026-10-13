@@ -14,6 +14,9 @@ import {
 import { useNavigationActionGuard } from '../../src/hooks/useNavigationActionGuard';
 import { useScreenHeader } from '../../src/hooks/useScreenHeader';
 import { useStartLiveWorkout } from '../../src/hooks/useStartLiveWorkout';
+import { useWorkoutPlanCandidates } from '../../src/hooks/useActiveWorkoutPlan';
+import type { WorkoutPlanTemplate } from '../../src/types/workoutPlans';
+import type { TrainingProgram } from '@workspace/shared';
 import {
   buildPresetLiveExerciseConfigs,
   buildPresetStartExercisesPayload,
@@ -25,6 +28,10 @@ import type { WorkoutPreset } from '../../src/types/workoutPresets';
 jest.mock('../../src/hooks', () => ({
   useWorkoutPresets: jest.fn(),
   useWorkoutPresetSearch: jest.fn(),
+  useDailySummary: jest.fn(() => ({
+    summary: { exerciseEntries: [] },
+    isLoading: false,
+  })),
   useRefetchOnFocus: jest.fn(),
   useProfile: jest.fn(() => ({ profile: undefined, isLoading: false })),
 }));
@@ -56,7 +63,11 @@ jest.mock('../../src/services/nativeTabBarPreference', () => ({
 }));
 
 jest.mock('../../src/hooks/useActiveWorkoutPlan', () => ({
-  useActiveWorkoutPlan: jest.fn(() => ({ plan: null, isLoading: false })),
+  useWorkoutPlanCandidates: jest.fn(() => ({
+    plans: [],
+    programs: [],
+    isLoading: false,
+  })),
 }));
 
 const mockUseWorkoutPresets = useWorkoutPresets as jest.MockedFunction<
@@ -160,6 +171,13 @@ describe('PresetSearchScreen', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.mocked(useWorkoutPlanCandidates).mockReturnValue({
+      plans: [],
+      programs: [],
+      isLoading: false,
+      isError: false,
+      refetch: jest.fn(),
+    });
     __resetAppPreferencesStoreForTests();
     mockUseProfile.mockReturnValue({
       profile: { id: 'user-1' },
@@ -255,6 +273,106 @@ describe('PresetSearchScreen', () => {
       timeCapSeconds: null,
     });
     expect(navigation.navigate).not.toHaveBeenCalled();
+  });
+
+  it('starts only the fixed earliest Program session from its snapshot', () => {
+    const ids = [
+      '11111111-1111-4111-8111-111111111111',
+      '22222222-2222-4222-8222-222222222222',
+    ];
+    const sessions = ids.map((id, index) => ({
+      id,
+      name: 'A',
+      day_of_week: 1,
+      is_optional: false,
+      sort_order: index,
+      assignments: [
+        {
+          id: index + 11,
+          workout_session_id: id,
+          workout_preset_id: 7,
+          sort_order: 0,
+          sets: [],
+          preset_snapshot: {
+            ...buildPreset(),
+            exercises: [
+              {
+                ...buildPreset().exercises[0],
+                sets: Array.from({ length: index + 2 }, (_, setIndex) => ({
+                  set_number: setIndex + 1,
+                  set_type: 'normal',
+                  reps: 8,
+                  weight: null,
+                  rest_time: 90,
+                  notes: '8 each side; RPE 7–8',
+                })),
+              },
+            ],
+          },
+        },
+      ],
+    }));
+    // Partial API fixture excludes audit fields not read by this screen.
+    const plan = {
+      id: 1,
+      plan_name: 'Training',
+      is_active: false,
+      schedule_type: 'weekly',
+      sessions,
+      next_session: sessions[0],
+      next_assignments: sessions.flatMap((session) => session.assignments),
+    } as unknown as WorkoutPlanTemplate;
+    const programs = [
+      {
+        phases: [
+          {
+            weeks: [
+              {
+                sessions: ids.map((workout_session_id, index) => ({
+                  workout_plan_id: 1,
+                  workout_session_id,
+                  effective_date: '2026-10-12',
+                  status: 'planned',
+                  is_optional: false,
+                  sort_order: index,
+                })),
+              },
+            ],
+          },
+        ],
+      },
+    ] as unknown as TrainingProgram[];
+    jest.mocked(useWorkoutPlanCandidates).mockReturnValue({
+      plans: [plan],
+      programs,
+      isLoading: false,
+      isError: false,
+      refetch: jest.fn(),
+    });
+    const screen = renderScreen();
+    fireEvent.press(screen.getByTestId(`scheduled-session-${ids[0]}`));
+    expect(startLiveWorkout).toHaveBeenCalledTimes(1);
+    const call = startLiveWorkout.mock.calls[0]![0];
+    expect(call.exercises[0].sets).toHaveLength(2);
+    expect(call.exercises[0].workout_plan_assignment_id).toBe(11);
+    expect(call.exercises[0].sets[0]).toEqual(
+      expect.objectContaining({
+        reps: 8,
+        weight: null,
+        rest_time: 90,
+        notes: '8 each side; RPE 7–8',
+      })
+    );
+    expect(call.sourcePresetId).toBeUndefined();
+    expect(screen.queryByText('Suggested')).toBeNull();
+    expect(screen.queryByTestId(`scheduled-session-${ids[1]}`)).toBeNull();
+    fireEvent.press(screen.getByText('Push Day'));
+    expect(startLiveWorkout).toHaveBeenLastCalledWith(
+      expect.objectContaining({ sourcePresetId: 7 })
+    );
+    expect(
+      startLiveWorkout.mock.calls[1]![0].workoutPlanAssignmentId
+    ).toBeUndefined();
   });
 
   it('opens the preset preview from the thumbnail without starting', () => {

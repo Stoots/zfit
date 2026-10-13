@@ -602,7 +602,7 @@ async function getExerciseEntries(
       paramIndex++;
     }
     if (exercise) {
-      query += ` AND ee.exercise_name = $${paramIndex}`;
+      query += ` AND ee.exercise_name = public.normalize_exercise_name_initial($${paramIndex})`;
       params.push(exercise);
       paramIndex++;
     }

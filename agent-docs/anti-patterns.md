@@ -74,28 +74,47 @@ async function deleteExercise(exerciseId: string, userId: string) {
 
 **Result:** Historical workouts and meals vanish from the user's calendar.
 
-### ✅ RIGHT: Entries are snapshots with nullable FKs; cascade templates only
+### ✅ RIGHT: Diary snapshots survive; linked plan history blocks deletion
+
+`exercise_entries` and `food_entries` keep their stored snapshots after a
+library row is removed. Standard exercise deletion preserves diary entries,
+including future Workout Plan rows; linked history on that assignment blocks
+deletion, so hide the exercise instead. Other-user references still force the
+existing quick-item hide fallback (`is_quick_exercise` / `is_quick_food`).
 
 ```typescript
-// exercise_entries and food_entries are self-contained snapshots (ON DELETE SET NULL).
-// Standard delete preserves past logs, cascades templates, and cleans up future plans:
-async function deleteExerciseAndDependencies(exerciseId: string, userId: string, today?: string) {
-  // 1. Clean up future scheduled workout plan entries (entry_date >= today)
-  if (today) {
-    await client.query(
-      'DELETE FROM exercise_entries WHERE exercise_id = $1 AND user_id = $2 AND entry_date >= $3 AND workout_plan_assignment_id IS NOT NULL',
-      [exerciseId, userId, today]
-    );
-  }
-  // 2. Cascade workout plan templates and presets
-  await client.query('DELETE FROM workout_plan_template_assignments WHERE exercise_id = $1', [exerciseId]);
-  await client.query('DELETE FROM workout_preset_exercises WHERE exercise_id = $1', [exerciseId]);
-  // 3. Delete library row (past diary entries retain snapshot data with exercise_id = NULL)
-  await client.query('DELETE FROM exercises WHERE id = $1 AND user_id = $2', [exerciseId, userId]);
+async function deleteExerciseAndDependencies(exerciseId: string, userId: string) {
+  const linked = await client.query(
+    `SELECT 1 FROM workout_plan_template_assignments a
+     WHERE a.exercise_id = $1 AND a.user_id = $2
+       AND EXISTS (
+         SELECT 1 FROM exercise_entries e
+         WHERE e.workout_plan_assignment_id = a.id
+       )
+     LIMIT 1`,
+    [exerciseId, userId]
+  );
+  if (linked.rowCount) throw new Error('Hide exercises with linked history.');
+
+  await client.query(
+    'DELETE FROM workout_plan_template_assignments WHERE exercise_id = $1 AND user_id = $2',
+    [exerciseId, userId]
+  );
+  await client.query(
+    'DELETE FROM workout_preset_exercises WHERE exercise_id = $1',
+    [exerciseId]
+  );
+  await client.query(
+    'DELETE FROM exercises WHERE id = $1 AND user_id = $2',
+    [exerciseId, userId]
+  );
 }
 ```
 
-**Pattern:** Historical logs survive; templates cascade; future scheduled plan items are cleaned up; force delete (`delete_with_history`) is an explicit separate user choice.
+**Pattern:** Standard deletion preserves diary snapshots and removes template
+uses; explicit `delete_with_history` deletes every diary entry for this exercise
+owned by the user, even if an entry links to a different exercise's assignment.
+It also removes empty parent preset entries.
 
 ---
 

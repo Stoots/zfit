@@ -1,5 +1,6 @@
 import { useCallback, useRef } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
+import { AppState } from 'react-native';
 
 type RefetchFn = () => void;
 
@@ -13,11 +14,13 @@ const DEFAULT_STALE_TIME = 30_000;
  * @param refetch - The refetch function from useQuery (stable reference per React Query)
  * @param enabled - Whether refetching is enabled (defaults to true)
  * @param staleTime - Minimum ms between refetches (defaults to 30 000)
+ * @param refetchOnResume - Also refresh the focused screen on foreground resume.
  */
 export function useRefetchOnFocus(
   refetch: RefetchFn,
   enabled: boolean = true,
-  staleTime: number = DEFAULT_STALE_TIME
+  staleTime: number = DEFAULT_STALE_TIME,
+  refetchOnResume: boolean = false
 ): void {
   const lastRefetchedAt = useRef(-Infinity);
 
@@ -27,6 +30,14 @@ export function useRefetchOnFocus(
         lastRefetchedAt.current = Date.now();
         refetch();
       }
-    }, [refetch, enabled, staleTime])
+      if (!enabled || !refetchOnResume) return;
+      const subscription = AppState.addEventListener('change', (state) => {
+        if (state === 'active') {
+          lastRefetchedAt.current = Date.now();
+          refetch();
+        }
+      });
+      return () => subscription.remove();
+    }, [refetch, enabled, staleTime, refetchOnResume])
   );
 }

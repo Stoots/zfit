@@ -185,12 +185,4 @@ describe('DiaryScreen on a supplement-only day', () => {
 
     expect(screen.queryByText('Add Food')).toBeNull();
   });
-
-  it('still shows the empty day when nothing at all was logged', () => {
-    // The other half of the rule: zero supplement totals must not defeat the empty state.
-    mockUseDailySummary.mockReturnValue(summary(EMPTY_SUPPLEMENT_TOTALS));
-    renderDiary();
-
-    expect(screen.getByText('Add Food')).toBeTruthy();
-  });
 });

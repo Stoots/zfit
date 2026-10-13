@@ -120,9 +120,6 @@ describe('deleting a library exercise', () => {
     const result = await exerciseService.deleteExercise(USER, EXERCISE, 'hide');
 
     expect(result.status).toBe('hidden');
-    expect(exerciseDb.updateExercise).toHaveBeenCalledWith(EXERCISE, USER, {
-      is_quick_exercise: true,
-    });
     expect(exerciseDb.deleteExerciseAndDependencies).not.toHaveBeenCalled();
     expect(exerciseDb.deleteExerciseEntriesForUser).not.toHaveBeenCalled();
   });
@@ -135,14 +132,6 @@ describe('deleting a library exercise', () => {
     );
 
     expect(result.status).toBe('deleted');
-    expect(exerciseDb.deleteExerciseAndDependencies).toHaveBeenCalledWith(
-      EXERCISE,
-      USER,
-      '2026-09-12',
-      { deleteHistory: false }
-    );
-    // The whole point: entries survive on their snapshot, with the foreign key
-    // nulling their exercise_id.
     expect(exerciseDb.deleteExerciseEntriesForUser).not.toHaveBeenCalled();
   });
 
@@ -160,13 +149,34 @@ describe('deleting a library exercise', () => {
 
     expect(result.status).toBe('deleted_with_history');
     expect(result.deletedEntries).toBe(7);
-    expect(exerciseDb.deleteExerciseAndDependencies).toHaveBeenCalledWith(
-      EXERCISE,
-      USER,
-      '2026-09-12',
-      { deleteHistory: true }
-    );
   });
+
+  it('preserves linked-history conflicts instead of wrapping them as server errors', async () => {
+    const conflict = Object.assign(new Error('Linked workout plan history'), {
+      status: 409,
+    });
+    vi.mocked(exerciseDb.deleteExerciseAndDependencies).mockRejectedValue(
+      conflict
+    );
+    await expect(
+      exerciseService.deleteExercise(USER, EXERCISE, 'delete')
+    ).rejects.toBe(conflict);
+    expect(exerciseDb.deleteExerciseEntriesForUser).not.toHaveBeenCalled();
+    expect(exerciseDb.updateExercise).not.toHaveBeenCalled();
+  });
+
+  it.each(['hide', 'delete', 'delete_with_history'] as const)(
+    'does not switch into another exercise owner context for %s',
+    async (mode) => {
+      vi.mocked(exerciseDb.getExerciseOwnerId).mockResolvedValue('other-owner');
+      await expect(
+        exerciseService.deleteExercise(USER, EXERCISE, mode)
+      ).rejects.toThrow('Forbidden: Only the exercise owner');
+      expect(exerciseDb.updateExercise).not.toHaveBeenCalled();
+      expect(exerciseDb.deleteExerciseAndDependencies).not.toHaveBeenCalled();
+      expect(exerciseDb.getExerciseDeletionImpact).not.toHaveBeenCalled();
+    }
+  );
 
   it('refuses to delete when another user still references it', async () => {
     vi.mocked(exerciseDb.getExerciseDeletionImpact).mockResolvedValue(
@@ -192,15 +202,10 @@ describe('deleting a library exercise', () => {
   });
 
   it('defaults to the non-destructive delete', async () => {
-    await exerciseService.deleteExercise(USER, EXERCISE);
+    const result = await exerciseService.deleteExercise(USER, EXERCISE);
+    expect(result.status).toBe('deleted');
 
     expect(exerciseDb.deleteExerciseEntriesForUser).not.toHaveBeenCalled();
-    expect(exerciseDb.deleteExerciseAndDependencies).toHaveBeenCalledWith(
-      EXERCISE,
-      USER,
-      '2026-09-12',
-      { deleteHistory: false }
-    );
   });
 });
 

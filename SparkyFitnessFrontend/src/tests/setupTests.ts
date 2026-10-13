@@ -1,4 +1,10 @@
 import { TextEncoder, TextDecoder } from 'util';
+import { serialize, deserialize } from 'v8';
+
+// jsdom does not expose Node's structuredClone browser API.
+if (typeof globalThis.structuredClone === 'undefined') {
+  globalThis.structuredClone = (value) => deserialize(serialize(value));
+}
 
 // Polyfill for TextEncoder/TextDecoder in jsdom
 if (typeof globalThis.TextEncoder === 'undefined') {

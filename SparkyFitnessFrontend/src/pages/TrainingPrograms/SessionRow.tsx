@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import type { WorkoutPlanTemplate } from '@/types/workout';
@@ -75,31 +76,55 @@ export default function SessionRow({
           />
         </div>
         <div>
-          <Label htmlFor={`${prefix}-plan`}>
-            {t('trainingPrograms.workoutPlan', 'Workout Plan')}
+          <Label htmlFor={`${prefix}-session`}>
+            {t('trainingPrograms.workoutSession', 'Workout Session')}
           </Label>
           <select
-            id={`${prefix}-plan`}
+            id={`${prefix}-session`}
             disabled={locked}
             className="flex h-11 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            value={session.workout_plan_id ?? ''}
-            onChange={(e) =>
+            value={session.workout_session_id ?? ''}
+            onChange={(event) => {
+              const workout_session_id = event.target.value || null;
+              const selectedSession = plans
+                .flatMap((plan) => plan.sessions)
+                .find((item) => item.id === workout_session_id);
               onChange({
-                workout_plan_id:
-                  e.target.value === '' ? null : Number(e.target.value),
-              })
-            }
+                workout_session_id,
+                ...(session.workout_session_id === null && selectedSession
+                  ? { is_optional: selectedSession.is_optional }
+                  : {}),
+              });
+            }}
           >
             <option value="">
-              {t('trainingPrograms.choosePlan', 'Choose a Workout Plan')}
+              {t(
+                'trainingPrograms.chooseSession',
+                'Choose an exact Workout Session'
+              )}
             </option>
-            {plans.map((plan) => (
-              <option key={plan.id} value={plan.id}>
-                {plan.plan_name}
-              </option>
-            ))}
+            {plans.flatMap((plan) =>
+              plan.sessions.map((workoutSession) => (
+                <option key={workoutSession.id} value={workoutSession.id}>
+                  {plan.plan_name} — {workoutSession.name}
+                </option>
+              ))
+            )}
           </select>
         </div>
+      </div>
+      <div className="flex min-h-11 items-center gap-2">
+        <Checkbox
+          id={`${prefix}-optional`}
+          disabled={locked}
+          checked={session.is_optional}
+          onCheckedChange={(checked) =>
+            onChange({ is_optional: checked === true })
+          }
+        />
+        <Label htmlFor={`${prefix}-optional`}>
+          {t('trainingPrograms.optional', 'Optional')}
+        </Label>
       </div>
     </fieldset>
   );

@@ -122,7 +122,7 @@ export default function WeekEditor({
         type="button"
         variant="outline"
         className="min-h-11"
-        disabled={!plans.length}
+        disabled={!plans.some((plan) => plan.sessions.length > 0)}
         onClick={() =>
           onChangeWeek((current) => ({
             ...current,
@@ -131,7 +131,8 @@ export default function WeekEditor({
               {
                 name: '',
                 scheduled_date: current.start_date,
-                workout_plan_id: null,
+                is_optional: false,
+                workout_session_id: null,
               },
             ],
           }))

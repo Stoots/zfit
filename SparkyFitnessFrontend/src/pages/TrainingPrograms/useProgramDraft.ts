@@ -6,9 +6,9 @@ type InputPhase = TrainingProgramInput['phases'][number];
 type InputWeek = InputPhase['weeks'][number];
 type InputSession = InputWeek['sessions'][number];
 
-/** An unselected Workout Plan is `null` in the draft, never a placeholder id. */
-export type SessionDraft = Omit<InputSession, 'workout_plan_id'> & {
-  workout_plan_id: number | null;
+/** Draft sessions require an exact Workout Session selection before saving. */
+export type SessionDraft = Omit<InputSession, 'workout_session_id'> & {
+  workout_session_id: string | null;
 };
 export type WeekDraft = Omit<InputWeek, 'sessions'> & {
   sessions: SessionDraft[];
@@ -48,7 +48,8 @@ function initialDraft(initial?: TrainingProgram): ProgramDraft {
               id: session.id,
               name: session.name,
               scheduled_date: session.scheduled_date,
-              workout_plan_id: session.workout_plan_id,
+              is_optional: session.is_optional,
+              workout_session_id: session.workout_session_id,
             })),
           })),
         })),
@@ -81,11 +82,16 @@ export function toProgramInput(
       weeks: phase.weeks.map((week, w) => ({
         ...week,
         sessions: week.sessions.flatMap((session, s) => {
-          if (session.workout_plan_id === null) {
+          if (session.workout_session_id === null) {
             unselected.push({ phase: p + 1, week: w + 1, session: s + 1 });
             return [];
           }
-          return [{ ...session, workout_plan_id: session.workout_plan_id }];
+          return [
+            {
+              ...session,
+              workout_session_id: session.workout_session_id,
+            },
+          ];
         }),
       })),
     })

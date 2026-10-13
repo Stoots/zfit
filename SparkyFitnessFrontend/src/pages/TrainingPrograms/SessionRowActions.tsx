@@ -17,7 +17,8 @@ export default function SessionRowActions({
   const { t } = useTranslation();
   return (
     <>
-      {session.status === 'planned' && (
+      {(session.status === 'planned' ||
+        (session.status === 'omitted' && session.is_optional)) && (
         <div className="flex flex-wrap gap-3">
           <Button
             className="min-h-11"
@@ -32,19 +33,21 @@ export default function SessionRowActions({
           >
             {t('trainingPrograms.linkCompleted', 'Link completed workout')}
           </Button>
-          <Button
-            className="min-h-11"
-            variant="outline"
-            disabled={disabled}
-            onClick={() =>
-              onRecord({
-                session,
-                status: 'missed',
-              })
-            }
-          >
-            {t('trainingPrograms.markMissed', 'Mark missed')}
-          </Button>
+          {session.status === 'planned' && !session.is_optional && (
+            <Button
+              className="min-h-11"
+              variant="outline"
+              disabled={disabled}
+              onClick={() =>
+                onRecord({
+                  session,
+                  status: 'missed',
+                })
+              }
+            >
+              {t('trainingPrograms.markMissed', 'Mark missed')}
+            </Button>
+          )}
         </div>
       )}
     </>

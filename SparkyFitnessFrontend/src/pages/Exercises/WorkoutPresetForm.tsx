@@ -5,6 +5,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -29,6 +30,7 @@ interface WorkoutPresetFormProps {
     preset: Omit<WorkoutPreset, 'id' | 'user_id' | 'created_at' | 'updated_at'>
   ) => void;
   initialPreset?: WorkoutPreset | null;
+  sessionName?: string;
 }
 
 const WorkoutPresetForm: React.FC<WorkoutPresetFormProps> = ({
@@ -36,9 +38,11 @@ const WorkoutPresetForm: React.FC<WorkoutPresetFormProps> = ({
   onClose,
   onSave,
   initialPreset,
+  sessionName,
 }) => {
   const { t } = useTranslation();
   const { weightUnit } = usePreferences();
+  const fieldPrefix = sessionName ? 'session-prescription-' : '';
 
   const {
     name,
@@ -91,48 +95,70 @@ const WorkoutPresetForm: React.FC<WorkoutPresetFormProps> = ({
       >
         <DialogHeader>
           <DialogTitle>
-            {initialPreset
-              ? t('workoutPresetForm.editTitle', 'Edit Workout Preset')
-              : t('workoutPresetForm.createTitle', 'Create Workout Preset')}
+            {sessionName
+              ? t(
+                  'workoutPresetForm.sessionTitle',
+                  'Edit Session Prescription: {{name}}',
+                  { name: sessionName }
+                )
+              : initialPreset
+                ? t('workoutPresetForm.editTitle', 'Edit Workout Preset')
+                : t('workoutPresetForm.createTitle', 'Create Workout Preset')}
           </DialogTitle>
+          {sessionName && (
+            <DialogDescription>
+              {t(
+                'workoutPresetForm.sessionHelp',
+                'Changes apply only to this session. The library preset, other sessions and completed workouts stay unchanged.'
+              )}
+            </DialogDescription>
+          )}
         </DialogHeader>
 
         <div className="grid gap-6 py-2 px-2">
           <div className="grid gap-4">
             <div className="flex flex-col md:flex-row md:items-center gap-4">
               <div className="flex-1 space-y-1">
-                <Label htmlFor="name" className="text-xs font-semibold">
+                <Label
+                  htmlFor={`${fieldPrefix}name`}
+                  className="text-xs font-semibold"
+                >
                   {t('workoutPresetForm.nameLabel', 'Preset Name')}
                 </Label>
                 <Input
-                  id="name"
+                  id={`${fieldPrefix}name`}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
                 />
               </div>
-              <div className="flex items-center gap-2 pt-0 md:pt-5">
-                <Switch
-                  id="isPublic"
-                  checked={isPublic}
-                  onCheckedChange={setIsPublic}
-                />
-                <Label htmlFor="isPublic" className="text-sm font-medium">
-                  {t('workoutPresetForm.shareWithPublicLabel', 'Public Preset')}
-                </Label>
-              </div>
+              {!sessionName && (
+                <div className="flex items-center gap-2 pt-0 md:pt-5">
+                  <Switch
+                    id="isPublic"
+                    checked={isPublic}
+                    onCheckedChange={setIsPublic}
+                  />
+                  <Label htmlFor="isPublic" className="text-sm font-medium">
+                    {t(
+                      'workoutPresetForm.shareWithPublicLabel',
+                      'Public Preset'
+                    )}
+                  </Label>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1">
                 <Label
-                  htmlFor="workoutFormat"
+                  htmlFor={`${fieldPrefix}workoutFormat`}
                   className="text-xs font-semibold"
                 >
                   {t('workoutPresetForm.formatLabel', 'Workout Format')}
                 </Label>
                 <select
-                  id="workoutFormat"
+                  id={`${fieldPrefix}workoutFormat`}
                   value={workoutFormat}
                   onChange={(e) =>
                     setWorkoutFormat(e.target.value as typeof workoutFormat)
@@ -164,11 +190,14 @@ const WorkoutPresetForm: React.FC<WorkoutPresetFormProps> = ({
                 workoutFormat === 'for_time' ||
                 workoutFormat === 'emom') && (
                 <div className="space-y-1">
-                  <Label htmlFor="timeCap" className="text-xs font-semibold">
+                  <Label
+                    htmlFor={`${fieldPrefix}timeCap`}
+                    className="text-xs font-semibold"
+                  >
                     {t('workoutPresetForm.timeCapLabel', 'Time Cap (minutes)')}
                   </Label>
                   <Input
-                    id="timeCap"
+                    id={`${fieldPrefix}timeCap`}
                     type="number"
                     min="1"
                     placeholder="e.g. 20"
@@ -189,11 +218,14 @@ const WorkoutPresetForm: React.FC<WorkoutPresetFormProps> = ({
             </div>
 
             <div className="space-y-1">
-              <Label htmlFor="description" className="text-xs font-semibold">
+              <Label
+                htmlFor={`${fieldPrefix}description`}
+                className="text-xs font-semibold"
+              >
                 {t('workoutPresetForm.descriptionLabel', 'Description')}
               </Label>
               <Textarea
-                id="description"
+                id={`${fieldPrefix}description`}
                 className="resize-none h-16"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
@@ -274,9 +306,14 @@ const WorkoutPresetForm: React.FC<WorkoutPresetFormProps> = ({
             {t('common.cancel', 'Cancel')}
           </Button>
           <Button onClick={handleSubmit}>
-            {initialPreset
-              ? t('common.saveChanges', 'Save Changes')
-              : t('workoutPresetForm.createPresetButton', 'Create Preset')}
+            {sessionName
+              ? t(
+                  'workoutPresetForm.saveSessionPrescription',
+                  'Save Session Prescription'
+                )
+              : initialPreset
+                ? t('common.saveChanges', 'Save Changes')
+                : t('workoutPresetForm.createPresetButton', 'Create Preset')}
           </Button>
         </DialogFooter>
       </DialogContent>

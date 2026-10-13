@@ -975,8 +975,7 @@ async function deleteExerciseEntriesForUser(
     );
     const presetEntryIds = presetEntriesResult.rows
       .map(
-        (r: { exercise_preset_entry_id: number | string }) =>
-          r.exercise_preset_entry_id
+        (r: { exercise_preset_entry_id: string }) => r.exercise_preset_entry_id
       )
       .filter(Boolean);
 
@@ -989,7 +988,7 @@ async function deleteExerciseEntriesForUser(
       await client.query(
         `
         DELETE FROM exercise_preset_entries
-        WHERE id = ANY($1::int[])
+        WHERE id = ANY($1::uuid[])
           AND user_id = $2
           AND NOT EXISTS (
             SELECT 1 FROM exercise_entries WHERE exercise_preset_entry_id = exercise_preset_entries.id
@@ -1012,22 +1011,52 @@ async function deleteExerciseEntriesForUser(
  * Removes an exercise from the library along with the *template* rows that
  * point at it (workout plans and presets).
  *
- * Deliberately does NOT touch exercise_entries. Since
- * 20260912150000_preserve_data_on_user_and_library_deletes.sql the entry's
- * exercise_id is ON DELETE SET NULL, and an entry carries its own snapshot
- * (name, category, muscles, equipment, instructions, images), so diary history
- * survives the library row and stays readable. Deleting entries here would
- * pre-empt that rule and destroy history -- including other users' history.
+ * Ordinary removal preserves every diary snapshot, including future entries.
+ * Linked plan assignments cannot be removed in either deletion mode. Check
+ * and remove assignments before explicit history deletion; RESTRICT remains
+ * authoritative for references hidden by RLS and concurrent diary writes.
  */
 async function deleteExerciseAndDependencies(
   exerciseId: string,
   userId: string,
-  today?: string,
   options: { deleteHistory?: boolean } = {}
 ): Promise<{ success: boolean; deletedEntries: number }> {
   const client = await getClient(userId);
   try {
     await client.query('BEGIN');
+
+    const exercise = await client.query(
+      'SELECT id FROM exercises WHERE id = $1 AND user_id = $2 FOR UPDATE',
+      [exerciseId, userId]
+    );
+    if (!exercise.rowCount) {
+      await client.query('ROLLBACK');
+      return { success: false, deletedEntries: 0 };
+    }
+    const linkedAssignments = await client.query(
+      `SELECT 1 FROM workout_plan_template_assignments a
+       WHERE a.exercise_id = $1 AND a.user_id = $2
+         AND EXISTS (
+           SELECT 1 FROM exercise_entries e WHERE e.workout_plan_assignment_id = a.id
+         )
+       LIMIT 1`,
+      [exerciseId, userId]
+    );
+    if (linkedAssignments.rowCount) {
+      throw Object.assign(
+        new Error(
+          'This exercise has linked workout plan history. Hide it instead; no changes were saved.'
+        ),
+        { status: 409 }
+      );
+    }
+    // Removing first makes RESTRICT guard even RLS-hidden links before history
+    // is touched. A concurrent link cannot slip past this deletion's FK locks.
+    await client.query(
+      `DELETE FROM workout_plan_template_assignments
+       WHERE exercise_id = $1 AND user_id = $2`,
+      [exerciseId, userId]
+    );
 
     let deletedEntries = 0;
 
@@ -1045,7 +1074,7 @@ async function deleteExerciseAndDependencies(
       );
       const presetEntryIds = presetEntriesResult.rows
         .map(
-          (r: { exercise_preset_entry_id: number | string }) =>
+          (r: { exercise_preset_entry_id: string }) =>
             r.exercise_preset_entry_id
         )
         .filter(Boolean);
@@ -1060,7 +1089,7 @@ async function deleteExerciseAndDependencies(
         await client.query(
           `
           DELETE FROM exercise_preset_entries
-          WHERE id = ANY($1::int[])
+          WHERE id = ANY($1::uuid[])
             AND user_id = $2
             AND NOT EXISTS (
               SELECT 1 FROM exercise_entries WHERE exercise_preset_entry_id = exercise_preset_entries.id
@@ -1073,67 +1102,8 @@ async function deleteExerciseAndDependencies(
         'info',
         `Deleted ${deletedEntries} exercise entries for exercise ${exerciseId} by user ${userId}`
       );
-    } else if (today) {
-      // 0. Delete future exercise entries generated from workout plans for this exercise
-      const presetEntriesResult = await client.query(
-        `
-        SELECT DISTINCT exercise_preset_entry_id
-        FROM exercise_entries
-        WHERE exercise_id = $1
-          AND user_id = $2
-          AND entry_date >= $3
-          AND workout_plan_assignment_id IS NOT NULL
-          AND exercise_preset_entry_id IS NOT NULL
-      `,
-        [exerciseId, userId, today]
-      );
-      const presetEntryIds = presetEntriesResult.rows
-        .map(
-          (r: { exercise_preset_entry_id: number | string }) =>
-            r.exercise_preset_entry_id
-        )
-        .filter(Boolean);
-
-      await client.query(
-        `
-        DELETE FROM exercise_entries
-        WHERE exercise_id = $1
-          AND user_id = $2
-          AND entry_date >= $3
-          AND workout_plan_assignment_id IS NOT NULL
-      `,
-        [exerciseId, userId, today]
-      );
-
-      if (presetEntryIds.length > 0) {
-        await client.query(
-          `
-          DELETE FROM exercise_preset_entries
-          WHERE id = ANY($1::int[])
-            AND user_id = $2
-            AND NOT EXISTS (
-              SELECT 1 FROM exercise_entries WHERE exercise_preset_entry_id = exercise_preset_entries.id
-            )
-        `,
-          [presetEntryIds, userId]
-        );
-      }
     }
 
-    await client.query(
-      `
-      DELETE FROM workout_plan_template_assignments wpta
-      USING workout_plan_templates wpt
-      WHERE wpta.template_id = wpt.id
-        AND wpta.exercise_id = $1
-        AND wpt.user_id = $2
-    `,
-      [exerciseId, userId]
-    );
-    log(
-      'info',
-      `Deleted workout plan exercises for exercise ${exerciseId} in plans by user ${userId}`
-    );
     await client.query(
       `
       DELETE FROM workout_preset_exercises wpe
@@ -1162,13 +1132,29 @@ async function deleteExerciseAndDependencies(
       `Error deleting exercise and dependencies for exercise ${exerciseId} by user ${userId}:`,
       error
     );
+    if (
+      error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      (error.code === '23503' || error.code === '23001')
+    ) {
+      throw Object.assign(
+        new Error(
+          'This exercise is still referenced. Hide it instead; no changes were saved.'
+        ),
+        { status: 409 }
+      );
+    }
     throw error;
   } finally {
     client.release();
   }
 }
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function findExerciseByNameAndUserId(name: any, userId: any) {
+async function findExerciseByNameAndUserId(
+  name: unknown,
+  userId: unknown,
+  options?: { visibleOnly?: boolean }
+) {
   const client = await getClient(userId);
   try {
     const result = await client.query(
@@ -1176,7 +1162,9 @@ async function findExerciseByNameAndUserId(name: any, userId: any) {
               primary_muscles, secondary_muscles, instructions, category, images,
               calories_per_hour, description, user_id, is_custom, shared_with_public,
               modality, created_at, updated_at
-       FROM exercises WHERE name = $1 AND (user_id = $2 OR shared_with_public = TRUE)`,
+       FROM exercises WHERE name = public.normalize_exercise_name_initial($1) AND (user_id = $2 OR shared_with_public = TRUE)
+       ${options?.visibleOnly ? 'AND is_quick_exercise = FALSE' : ''}
+       ORDER BY (user_id = $2) DESC, created_at ASC, id ASC`,
       [name, userId]
     );
     const exercise = result.rows[0];

@@ -1,6 +1,6 @@
 # AGENTS.md
 
-_Last updated: 2026-10-12_
+_Last updated: 2026-10-13_
 
 SparkyFitness Frontend is the React web app for the SparkyFitness monorepo. Use this file as the primary guide for work inside `SparkyFitnessFrontend/`.
 
@@ -57,6 +57,7 @@ Features are organized by domain, and the same domain folder name appears in `sr
 - `src/api/<Domain>/` - per-domain API clients built on `apiCall`.
 - `src/hooks/<Domain>/` and `src/hooks/use*.ts(x)` - TanStack Query hooks and shared UI hooks (`use-toast`, `useDebounce`, `useAuth`, ...).
 - `src/components/` - shared components; `ui/` holds the shadcn-style primitives (~37 files); domain component folders include `Foods/`, `FoodSearch/`, `FoodUnitSelector/`, `Onboarding/`, `ExerciseCharts/`, `ai/` (assistant-ui chat pieces).
+- `src/pages/Exercises/WorkoutPlanBulkDialog.tsx`, `src/hooks/Exercises/useWorkoutPlanBulk.ts`, and `src/api/Exercises/workoutPlanTemplates.ts` - owner-only bulk prescription candidate, preview, and apply flow for Workout Plan sessions.
 - `src/contexts/` - `ActiveUserContext` (family-access acting-user switching), `PreferencesContext`, `ThemeContext`, `WaterContainerContext`, `ChatbotVisibilityContext`, `ChatToolCategoriesContext` (runtime chat tool-category selection, localStorage-backed).
 - `src/layouts/` - `MainLayout.tsx` and `AddComp.tsx`.
 - `src/lib/` - `auth-client.ts` (Better Auth React client), `utils.ts` (`cn`), scanner engines, sleep helpers.
@@ -84,7 +85,7 @@ When searching, ignore `node_modules/`, `dist/`, and every locale except `public
 - Auth flows go through `src/lib/auth-client.ts` and `useAuth`; acting-user (family access) state lives in `ActiveUserContext` and affects most data hooks.
 - New UI should reuse `src/components/ui/` primitives and existing shared components before adding new ones.
 - **Cache Invalidation on Library Mutations:** When mutating foods, exercises, presets, or plans, use the domain invalidation hooks from `src/hooks/useInvalidateKeys.ts` (`useExerciseInvalidation`, `useFoodInvalidation`, `useMealInvalidation`, `useDiaryInvalidation`) to invalidate the entire family of dependent query keys including search, presets, templates, and diary daily progress.
-- **Library Deletes & Snapshots:** Deleting foods or exercises uses `mode: 'delete'` which preserves logged diary history (via snapshots) and drops items from presets/plans; only explicit `delete_with_history` deletes diary entries. Empty presets are guarded against starting/logging.
+- **Library Deletes vs Diary Snapshots:** `exercise_entries` and `food_entries` are self-contained snapshots, not pointers (`exercise_id` and `food_id` are `ON DELETE SET NULL`). Deleting an exercise or food from the library (`mode: 'delete'`) preserves past and current diary history and cascades from presets and plan templates. Exercise deletion preserves future scheduled Workout Plan rows and their assignment links; linked diary history on an assignment blocks exercise deletion, so hide it instead. Explicit `delete_with_history` deletes every diary entry for that exercise owned by the user, including entries linked to another exercise's assignment, and cleans up empty parent preset entries. If an item is referenced by other users (`otherUserReferences > 0`), the backend falls back to hiding (`is_quick_exercise` / `is_quick_food`). Empty presets are guarded against starting/logging.
 
 ## Testing and Validation
 
@@ -109,6 +110,7 @@ When searching, ignore `node_modules/`, `dist/`, and every locale except `public
 - Training consistency (#59): `pages/Reports/TrainingConsistencyCard.tsx` in the Exercise report's left column, fed by `useTrainingConsistency` (`hooks/Reports/useReports.ts`) from `GET /reports/training-consistency`. A fixed 26-week window computed on the server by the shared `buildTrainingConsistency`, so it ignores the report's date filter; the existing `WorkoutHeatmap` stays the calendar.
 - Chart issue: Recharts usage in the domain page plus `src/components/ExerciseCharts/` or `ZoomableChart.tsx`.
 - Training Program CRUD and hierarchy: `pages/TrainingPrograms/TrainingPrograms.tsx` (workspace shell; `ProgramList`, `ProgramDetail`, `SessionRowActions`), `TrainingProgramEditor.tsx` (form shell; `ProgramHeaderFields`, `PhaseEditor`, `WeekEditor`, `SessionRow`, draft state in `useProgramDraft.ts` where an unchosen Workout Plan is `null` and blocks save), and `hooks/TrainingPrograms/useTrainingPrograms.ts` (keys from `trainingProgramKeys` in `api/keys/exercises.ts`; Program mutations also invalidate workout plans and diary exercise/progress keys, and workout-plan/diary-exercise mutations invalidate `trainingProgramKeys.all`). Validate with shared `trainingProgramInputSchema`; preserve retained child IDs. Behavioral flow tests: `tests/components/TrainingPrograms.test.tsx`.
+- Bulk Workout Plan prescriptions (#13): follow the dialog/hook/API chain above and server `routes/workoutPlanTemplateRoutes.ts` (`/bulk-prescriptions/candidates`, `/preview`, `/apply`); persisted coverage: server `tests/workoutPlanBulk.integration.test.ts`.
 - Diary dashboard plan banners: `pages/Diary/ExerciseCard.tsx` splits eligible plans with shared `selectDashboardWorkoutPlans` into one next Training Program workout (preview, no session picker) and standalone plans (`DashboardPlanCard` with the session picker). While Programs load nothing is shown; on query error or when acting on behalf of another user every eligible plan is standalone. Tests: `tests/components/ExerciseCardDashboard.test.tsx`.
 
 ## Priority Rule

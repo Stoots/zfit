@@ -23,6 +23,12 @@ function _dateToString(value: unknown): string | null {
   return String(value);
 }
 
+/** Preserve snapshot creation timestamps in the supported diary DTO. */
+function _timestampToString(value: unknown): string | null {
+  if (value instanceof Date) return value.toISOString();
+  return typeof value === 'string' ? value : null;
+}
+
 /** Parse a JSON string field into a string array, returning null on failure or missing input.
  *  Handles double-stringified values (e.g. '"[\\"a\\"]"') by parsing recursively. */
 function _parseJsonArray(value: unknown): string[] | null {
@@ -144,6 +150,10 @@ function _buildExerciseEntryWithSnapshot(
     calories_burned: (entryData.calories_burned as number) ?? 0,
     entry_date: _dateToString(entryData.entry_date),
     entry_time: (entryData.entry_time as string) ?? null,
+    record_timezone: (entryData.record_timezone as string | null) ?? null,
+    exercise_preset_entry_id:
+      (entryData.exercise_preset_entry_id as string | null) ?? null,
+    created_at: _timestampToString(row.created_at),
     notes: (entryData.notes as string) ?? null,
     distance: (entryData.distance as number) ?? null,
     avg_heart_rate: (entryData.avg_heart_rate as number) ?? null,
@@ -277,7 +287,7 @@ async function getExerciseEntryHistorySessions(
     batchQueries.push(
       client
         .query(
-          `SELECT id, workout_preset_id, name, description, notes, source, location
+          `SELECT id, workout_preset_id, name, description, notes, source, location, workout_format, time_cap_seconds, created_at
            FROM exercise_preset_entries WHERE id = ANY($1::uuid[])`,
           [presetIds]
         )
@@ -425,9 +435,14 @@ async function getExerciseEntryHistorySessions(
         workout_preset_id: (meta.workout_preset_id as number) ?? null,
         name: (meta.name as string) ?? 'Workout',
         description: (meta.description as string) ?? null,
+        workout_format:
+          (meta.workout_format as PresetSessionResponse['workout_format']) ??
+          'standard',
+        time_cap_seconds: (meta.time_cap_seconds as number | null) ?? null,
         notes: (meta.notes as string) ?? null,
         location: (meta.location as string) ?? null,
         source: meta.source as string,
+        created_at: _timestampToString(meta.created_at),
         total_duration_minutes: totalDuration,
         exercises: children,
         activity_details: presetDetails,
@@ -520,7 +535,7 @@ async function _getExerciseEntriesByDateWithClient(
   // Fetch preset entries and all exercise entries for the date in parallel
   const [presetResult, entriesResult] = await Promise.all([
     client.query(
-      `SELECT id, workout_preset_id, name, description, notes, source, location, created_at
+      `SELECT id, workout_preset_id, name, description, notes, source, location, workout_format, time_cap_seconds, created_at
        FROM exercise_preset_entries
        WHERE user_id = $1 AND entry_date = $2
        ORDER BY created_at ASC`,
@@ -715,9 +730,14 @@ async function _getExerciseEntriesByDateWithClient(
         workout_plan_assignment_id: childAssignmentId,
         name: (presetRow.name as string) ?? 'Workout',
         description: (presetRow.description as string) ?? null,
+        workout_format:
+          (presetRow.workout_format as PresetSessionResponse['workout_format']) ??
+          'standard',
+        time_cap_seconds: (presetRow.time_cap_seconds as number | null) ?? null,
         notes: (presetRow.notes as string) ?? null,
         location: (presetRow.location as string) ?? null,
         source: presetRow.source as string,
+        created_at: _timestampToString(presetRow.created_at),
         total_duration_minutes: totalDuration,
         exercises: children,
         activity_details: presetDetails,
@@ -762,7 +782,7 @@ export async function getGroupedExerciseSessionByIdWithClient(
   lockExerciseEntries = false
 ): Promise<PresetSessionResponse | null> {
   const metaResult = await client.query(
-    `SELECT id, workout_preset_id, name, description, notes, source, entry_date, location
+    `SELECT id, workout_preset_id, name, description, notes, source, entry_date, location, workout_format, time_cap_seconds, created_at
      FROM exercise_preset_entries
      WHERE user_id = $1 AND id = $2`,
     [targetUserId, presetEntryId]
@@ -838,9 +858,14 @@ export async function getGroupedExerciseSessionByIdWithClient(
     workout_preset_id: (meta.workout_preset_id as number) ?? null,
     name: meta.name as string,
     description: (meta.description as string) ?? null,
+    workout_format:
+      (meta.workout_format as PresetSessionResponse['workout_format']) ??
+      'standard',
+    time_cap_seconds: (meta.time_cap_seconds as number | null) ?? null,
     notes: (meta.notes as string) ?? null,
     location: (meta.location as string) ?? null,
     source: meta.source as string,
+    created_at: _timestampToString(meta.created_at),
     total_duration_minutes: exercises.reduce(
       (sum, exercise) => sum + (exercise.duration_minutes ?? 0),
       0

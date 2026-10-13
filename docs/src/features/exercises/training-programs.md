@@ -1,32 +1,69 @@
 # Training Programs
 
-A **Training Program** organizes multiple weeks around a goal. It contains ordered **Program Phases**, each with its own goal, dated weeks, and **Planned Sessions**. A **Workout Plan** remains a separate reusable collection of workouts: use it independently or select it for a Planned Session. Creating a Program does not activate, change or replace a Workout Plan.
+A **Training Program** organizes multiple weeks around a goal. It contains ordered **Program Phases**, each with its own goal, dated weeks, and **Planned Sessions**. A **Workout Plan** is a separate reusable collection of independently prescribed **Workout Sessions**. Use a plan independently or bind a Planned Session to one exact Workout Session. Creating a Program does not activate, change or replace a Workout Plan.
 
 ## Author and schedule on web
 
 1. Open **Exercises → Open Training Programs** (or `/training-programs`). Use **Manage Workout Plans** to create the Workout Plans you want to reuse.
 2. Select **Create Training Program**. Enter a name, goal, and inclusive start/end dates.
 3. Add phases and enter each phase's name and goal. Add weeks within the Program dates. Each week spans one to seven days; weeks must be chronological and cannot overlap.
-4. Add Planned Sessions. Give each session a name, choose an authored calendar date within its week, and select one of your Workout Plans. Multiple sessions can share a date or reuse the same plan.
+4. Add Planned Sessions. Give each a name and authored calendar date within its week, then choose the exact **Workout Session** inside one of your plans. The selector shows the session ordinal and prescription, so two sessions named A with 2 × 8 and 3 × 8 remain distinguishable. Multiple Planned Sessions can share a date or reuse the same session. **Optional** initially inherits the selected Workout Session; explicitly change it to override optionality for this Program binding.
 5. Leave **Auto-shift after a miss** off for fixed dates, or explicitly enable it. Save to view your schedule and history. Empty structures can be saved for later authoring.
 
 Use the move buttons to change structure order; maintain chronological week dates when moving weeks or phases. Cancel discards unsaved edits. Delete requires confirmation and removes the Program and its history, never reusable Workout Plans or diary workouts. Removing a phase/week during aggregate editing removes only unrecorded sessions; ancestors containing recorded sessions cannot be removed.
 
+### Author independent Workout Sessions
+
+At **Exercises → Workout Plans**, add, name and order sessions inside a plan. Each session has its own ordered exercise/preset assignments and sets. Selecting a library preset freezes a local prescription; **Edit this session’s preset prescription** changes only that assignment, not the library preset or another session. Local copies are independent. Saving retains existing session UUIDs and assignment/set IDs; newly added sessions omit persisted IDs until the server creates them.
+
+Weekly plans retain explicit weekdays, including unscheduled sessions without a weekday. Sequential plans advance in authored session order only after every assignment has a diary link; expanded preset children count once for their assignment. Starting or saving a weekly prefill never rewrites an existing diary snapshot. Workout Sessions do not need a Program.
+
+**Optional** is an explicit session checkbox, not a name convention. Existing sessions default to required. Copying and saving a Workout Session retain its flag and full prescription; names such as “C” or “accessory” never make it optional. Later library edits do not change an existing Program binding's stored optionality. Mark only the intended sessions optional; absent deload sessions remain absent rather than being generated.
+
+**Start Workout** in the Program view opens the exact bound session, not the plan's standalone next session. Diary previews include every pending exact session on the earliest Program date in authored order, even when its plan is inactive, plus unrelated active standalone plans. Completed assignment coverage hides only the corresponding session; partial coverage does not hide the remainder.
+
+Frozen execution retains all prescribed exercise/set data, effort, rest, distance, ranges and notes. A single-preset session uses its frozen format and time cap. Multi-assignment sessions retain each prescription but use the existing one-format combined playback: mixed formats become standard, and a shared time cap is used only when all caps agree. There are no independent per-block timers. Logging keeps performed results separate from the server-frozen prescription; later local or library edits do not refresh that history.
+
+Unlike a live library-preset start, a frozen Workout Session is not expanded to a generic EMOM/Tabata round count on load. Its authored sets stay exact; the single-format timer and frozen cap still run. For example, one authored EMOM set with a 120-second cap opens and saves one set, not two cloned sets.
+
+### Apply selected prescription changes to future sessions
+
+Ordinary **Save Plan** remains session-local; matching A/B names never expand an edit. For an intentional batch, edit an existing Workout Plan and choose **Apply prescription to future sessions…**:
+
+1. Choose one saved source assignment from the current draft. Unsaved source prescription edits can supply the copied values; this action does not save the source or other draft edits.
+2. Explicitly choose one Training Program or **Standalone sessions only**. Targets stay inside the open plan; no other plan or Program is silently included.
+3. Select the fields to copy. For each target, choose its exact assignment and separately check **Include this target**. Session UUIDs, Program identities and all dated bindings distinguish same-name sessions.
+4. Choose **Preview selected changes** and inspect every target's exercise UUID and selected before/after values. **Cancel preview** returns to selection without saving anything.
+5. Confirm the exact batch. Success refreshes the saved plan and closes the editor, discarding the other unsaved draft edits. A conflict requires a new preview; no part of an invalid batch is saved.
+
+Granular set edits require identical set numbers. Individual assignments require the same exercise UUID; frozen presets require the same ordered exercise UUIDs. Incompatible mappings are reported, never inferred from names. **Whole set collection** explicitly replaces all authored set data, including effort, notes and additional prescription fields. Preset format, time cap and description can be selected independently; unselected preset metadata remains unchanged.
+
+For effort-only changes, select **RPE** and/or **Repetitions in reserve (RIR)** instead of the whole set collection. These granular fields work on individual assignments and every mapped frozen-preset exercise. Numeric values copy exactly; an unspecified/null source clears only the selected effort field. Unselected effort, repetitions, load, rest, notes and additional JSON keys (including absent keys) remain unchanged. RPE/RIR are authored JSON prescription fields, not new Workout Plan set columns.
+
+A target must be strictly future-dated in the athlete's configured timezone (UTC fallback). Every binding of a reused Workout Session must be still Planned, future-dated, in the selected Program and explicitly accounted for. A session also referenced by another Program is unavailable. Standalone targets must have no Program binding and the saved plan must have an explicit future start date and valid date range. Any diary link, including an incomplete prefill, protects the entire session from bulk editing.
+
+Bulk candidates use the same authoritative omission projection as Program history: an expired optional binding is **Omitted** and unavailable, even while its stored status remains `planned`. Both preview and apply recheck athlete-local effective dates. Bulk prescription changes never copy library optionality onto an independently overridden Program binding.
+
+Preview and cancellation write nothing. Apply retains session/assignment identities, preserves unselected fields and other exercises, and never changes recorded outcomes, completion links, diary prescriptions or performed results. It rechecks the source, targets and bindings transactionally against the preview revision, rejecting stale or completed targets atomically. Diary start and Program outcomes participate in the same locking boundary.
+
+Web plan/Program queries refresh on browser visibility/focus; mobile plan/Program queries refresh on screen focus and foreground resume. Existing in-progress workout drafts and recorded workouts retain their frozen prescription rather than being overwritten.
+
 ## Completion and missed history
 
-Every session starts **Planned**. In the Program detail view:
+Every session starts **Planned**. Optional sessions become **Omitted** after their effective scheduled day ends in the athlete's saved preference timezone (UTC when absent or invalid). The API derives this status and the next-local-midnight boundary when reading history; it does not require opening the app, a background job or a persisted miss. Spring/fall DST days use their real 23/25-hour local boundaries. In the Program detail view:
 
 - **Link completed workout**: choose a diary date, select an owner-owned grouped workout or standalone exercise workout, and confirm completion. This is an explicit declaration that you completed that workout, not automatic detection from diary rows (which may contain planned sets). It does not log another workout. The diary date need not equal the session date, and the workout need not have originated from the selected Workout Plan.
-- **Mark missed**: confirm a permanent missed record. There is no implicit clock-driven miss detection. A miss can only be recorded once the session's resulting (effective) date is on or before your current day, evaluated in your own timezone; marking a later session missed returns 409. Outcomes are permanent, so this prevents an accidental early click from being unrecoverable (and from triggering auto-shift). Completions are not date-restricted.
-- **Completed** and **Missed** sessions show their recorded schedule date and outcome timestamp. Completion also shows the linked workout's name/date with a diary link. Workout and Workout Plan names are snapshotted when recording an outcome. Later diary or plan renames, diary date edits, and diary deletion do not rewrite the Program history. Diary deletion clears the live foreign-key link, not the completion snapshot.
+- **Mark missed**: confirm a permanent missed record for a required session. There is no implicit clock-driven miss detection. A required miss can only be recorded once the session's effective date is on or before the athlete's today in their timezone; a later session returns 409. Optional sessions cannot be marked missed and incur no missed penalty. Outcomes are permanent, preventing accidental early clicks from being unrecoverable or triggering auto-shift. Completions are not date-restricted; an omitted optional session can be explicitly completed later.
+- **Completed** and **Missed** sessions show their recorded schedule date and outcome timestamp. Completion also shows the linked workout's name/date with a diary link. Workout, Workout Plan and Workout Session names are snapshotted when recording an outcome. Later diary or plan/session renames, diary date edits, and diary deletion do not rewrite the Program history. Diary deletion clears the live foreign-key link, not the completion snapshot.
+- **Omitted** optional sessions remain visible in history but leave pending/up-next/start selection. Web history and mobile diary history offer **Link completed workout** for an explicit late completion. Linking retains the original effective date, records the real selected workout snapshot and does not shift other sessions or create another diary entry.
 
-Outcomes are final: a missed session cannot be changed to completed, a completed session cannot be changed to missed or linked to a different workout, and recorded sessions cannot be removed or rewritten through aggregate edits. One diary workout can fulfill at most one Planned Session across all of your Programs. A grouped workout's child exercise is not a separate standalone workout; link the grouped parent instead. Retrying the same outcome is idempotent, including after diary deletion.
+Recorded **Completed** and **Missed** outcomes are final: a required missed session cannot be changed to completed, a completed session cannot be changed to missed or linked to a different workout, and recorded sessions cannot be removed or rewritten through aggregate edits. Omitted optional sessions may transition only through explicit completion linking; aggregate edits cannot reset them into planned sessions or change their optionality, date or binding. One diary workout can fulfill at most one Planned Session across all of your Programs. A grouped workout's child exercise is not a separate standalone workout; link the grouped parent instead. Retrying the same outcome is idempotent, including after diary deletion.
 
 ## Fixed dates and deterministic auto-shift
 
 **Fixed dates are the default** (`auto_shift: false`). Recording a miss changes only that session's state. Existing standalone Workout Plan schedules are unaffected.
 
-When enabled, **each newly recorded miss advances all still-Planned Sessions in that Program whose current effective date is strictly later than the missed session's effective date by exactly one Gregorian calendar day**. Selection uses dates, not structure order, server time, elapsed time since the miss, or the diary workout date. All eligible dates move together, preserving intervals between them. Same-day sessions do not move: a Planned Session sharing the missed session's effective date stays put even if it comes later in the structure order. Missed and completed sessions never move, disappear, or change state through shifting. Repeated misses on different sessions apply cumulatively; retrying a miss on the same session does not shift again. Enabling/disabling the option affects only subsequent new misses and is not retroactive.
+When enabled, **each newly recorded required miss advances all still-Planned Sessions in that Program whose current effective date is strictly later than the missed session's effective date by exactly one Gregorian calendar day**. Selection uses dates, not structure order, server time, elapsed time since the miss, or the diary workout date. All eligible dates move together, preserving intervals between them. Same-day sessions do not move: a Planned Session sharing the missed session's effective date stays put even if it comes later in the structure order. Missed, completed and omitted sessions never move, disappear, or change state through shifting. Optional omission and late completion never trigger a shift. Repeated required misses on different sessions apply cumulatively; retrying a miss on the same session does not shift again. Enabling/disabling the option affects only subsequent new misses and is not retroactive.
 
 For example, sessions authored October 25, October 30 and November 7 become: **October 25 Missed**, **October 31 Planned**, **November 8 Planned**. Missing the October 31 session next retains both missed records and moves the last session to **November 9 Planned**. A completed session is skipped regardless of where it falls on the calendar.
 
@@ -37,14 +74,59 @@ For example, sessions authored October 25, October 30 and November 7 become: **O
 - `schedule_end_date` is the later of the authored Program end and all effective session dates, including recorded history. Authored Program/week dates do not expand automatically.
 - All days are `YYYY-MM-DD` calendar strings from `0001-01-01` through `9999-12-31`. Adding one day respects month/year rollover and leap days, independent of DST and timezone. A miss that would push an eligible session past `9999-12-31` returns 409 and rolls back **both** the outcome and every shift. Disable auto-shift or edit the future authored date before retrying.
 - Aggregate saves retain effective dates when authored dates are unchanged. Deliberately editing a still-Planned Session's authored date resets its effective date to the new authored date, discarding any shift it had accumulated. Other edits, including Program/week range edits and auto-shift toggles, never recalculate dates.
-- Recorded sessions must retain their IDs, parents, names, authored dates and Workout Plans; their effective dates, timestamps and completion snapshots are read-only. Their containing phases/weeks must remain. Order may change; goals and valid containing date ranges may be edited. An invalid or history-rewriting aggregate save is rejected atomically.
+- Recorded sessions must retain their IDs, parents, names, authored dates and exact Workout Session bindings; their effective dates, timestamps and completion snapshots are read-only. Their containing phases/weeks must remain. Order may change; goals and valid containing date ranges may be edited. An invalid or history-rewriting aggregate save is rejected atomically.
 - Outcome recording and aggregate editing lock the Program in one transaction. Concurrent duplicate misses yield one shift; duplicate completion links yield one winner and 409 for the competing link.
+
+## Consolidate a fragmented Program
+
+An operator can explicitly consolidate one existing Program's workouts into a
+single Workout Plan containing independent Workout Sessions. This is not a
+**Save Program** action or a new scheduling system. Same-label sessions retain
+their distinct sets, loads (including unspecified loads), effort, rest, notes,
+per-side instructions, frozen presets and conditioning formats. Program,
+phase, week and Planned Session identities, dates, same-day order, optional
+overrides and recorded outcomes stay intact. No workouts or absent deload
+sessions are created.
+
+The operator first reviews a read-only inventory and exact identity mapping.
+Unshared, unprotected sessions move with their Session/assignment/set IDs
+retained. Sessions still needed by another Program, standalone plan, family
+library/report reader or outside diary history are explicitly cloned; their
+original container and historical links remain. Only selected live Program
+bindings change to the clone, never recorded prescription/result snapshots.
+Old plans are removed only when individually approved and proven safely empty.
+
+The new plan is inactive, sequential and has no start/end dates: the Program
+remains the private calendar, and **Start Workout** still opens its exact bound
+session. The ordinary plan editor still refuses moves/deletes that would break
+Program or diary references; the guarded operator transaction is a separate
+reviewed exception. Its private owner-only journal also protects the target
+plan from ordinary deletion. Explicit Program deletion removes that Program's
+journal but leaves reusable plans and diary workouts intact.
+
+Each current new-apply operator mapping requires `target_day_of_week: null`;
+moves and clones clear destination weekdays for the sequential plan, while
+protected weekly sources keep their weekdays and the Program keeps its
+dates/order. An exact unchanged **recorded** manifest, including an old format,
+recovers its stored acknowledgment through owner-scoped locked journal replay
+before current write-schema validation, without reapplying data or rewriting
+the receipt. Changed recorded manifests are rejected. Only **unrecorded** old
+manifests missing the required field need fresh preflight and review; they cannot
+write through a historical-format compatibility path. See the runbook for exact
+recovery guards and local verification limits.
+
+See the [database operator runbook](../../developer/database.md#selected-program-consolidation-operator-runbook)
+for CLI guards, legacy ambiguity mapping, backup/restore, interruption recovery
+and repeat safety. Local rehearsal is not live approval. A live cutover requires
+separate authorization, public-origin cache-enabled frontend verification,
+actual supported mobile workout checks and a refreshed private Program export.
+Unavailable native runtime checks block a fully verified cutover claim.
 
 ## Privacy and deletion safety
 
 Training Programs are owner-only. Family delegates cannot view or edit them, including with diary, report or exercise-library access. Switch to your own profile first. Only your own Workout Plans and diary workouts can be referenced. Explicit owner predicates, RLS and composite foreign keys enforce isolation. Existing standalone Workout Plan sharing is unchanged.
 
-A Workout Plan used by a Planned Session cannot be deleted until its Program references are removed. The server returns HTTP 409 and leaves both the plan and diary history untouched. Recorded sessions cannot be individually removed to release that reference; explicit Program deletion remains available.
+A Workout Session used by a Planned Session cannot be removed or moved to another plan, and its parent plan cannot be deleted until Program references are removed. Assignments with any diary link, including incomplete prefill, also cannot be removed; deleting their session or plan returns HTTP 409 without deleting or unlinking diary history. Recorded Planned Sessions cannot be individually removed to release their reference; explicit Program deletion remains available. Hiding a library exercise remains an alternative to deleting linked identities.
 
 This feature does not automatically log workouts, create cardio tests, or expose AI queries.
 
@@ -82,7 +164,7 @@ Example create body:
             {
               "name": "Easy run",
               "scheduled_date": "2026-10-30",
-              "workout_plan_id": 17
+              "workout_session_id": "22222222-2222-4222-8222-222222222222"
             }
           ]
         }
@@ -92,7 +174,7 @@ Example create body:
 }
 ```
 
-`workout_plan_id` must identify an existing plan you own; `17` is illustrative. Omitted `schedule_type` defaults to `"fixed"` (authored-date policy); omitted `auto_shift` defaults to `false`. Responses include Program UUID, owner, audit timestamps, `schedule_end_date`, and stable UUIDs and zero-based `sort_order` for every child. Sessions also include `workout_plan_name`, `effective_date`, `status`, nullable `outcome_at`, and nullable `completed_workout: { type, id, name, entry_date }`.
+`workout_session_id` must identify an existing Workout Session inside a plan you own; the UUID is illustrative. Whole-plan selection is not accepted. Omitted `schedule_type` defaults to `"fixed"` (authored-date policy); omitted `auto_shift` defaults to `false`. New Planned Sessions inherit `is_optional` from their library session unless explicitly overridden; omitting it when updating an existing binding preserves that binding's stored flag. Responses include Program UUID, owner, audit timestamps, `schedule_end_date`, and stable UUIDs and zero-based `sort_order` for every child. Planned Sessions also include their exact `workout_session_id`, display-only `workout_plan_id`, plan/session names, `is_optional`, `effective_date`, `status` (`planned`, `completed`, `missed`, or `omitted`), nullable `outcome_at`, and nullable `completed_workout: { type, id, name, entry_date }`. For an omitted response, `outcome_at` is the derived local end-of-day boundary, not a stored outcome mutation.
 
 Outcome bodies:
 
@@ -113,6 +195,24 @@ For PUT, send only editable fields and existing child IDs you retain. New childr
 
 Errors use `{ "error": "message" }`: invalid input/reference → 400; unauthenticated → 401; delegated context → 403; missing or foreign Program/session/workout → 404; final-outcome conflicts, duplicate workout links, history rewrites, calendar overflow and referenced plan deletion → 409. Shared contracts live in `shared/src/schemas/api/TrainingPrograms.api.zod.ts`; interactive API documentation is at `/api/api-docs/swagger`.
 
+Nested plan requests use `sessions: [{ id?, name, day_of_week, sort_order, is_optional, assignments }]`; `is_optional` defaults to `false`, and assignments contain an exercise or frozen preset prescription. New session IDs are server-generated. The exact standalone execution endpoint is `POST /api/workout-plan-templates/sessions/:workoutSessionId/start` with `{ "entry_date": "YYYY-MM-DD" }`. Shared plan contracts live in `shared/src/schemas/api/WorkoutPlans.api.zod.ts`. The generic legacy upgrade refuses ambiguous whole-plan Program references until an operator provides an explicit per-Planned-Session mapping; see [database migration guidance](../../developer/database.md#workout-session-cutover-preflight-and-explicit-mapping). This is not selected-Program consolidation or permission to deploy the cutover.
+
+### Bulk prescription HTTP interface
+
+These endpoints are owner-only, including when an existing Workout Plan has sharing permissions. Authentication uses the same session-cookie/API-key layer; delegated acting-user contexts are rejected.
+
+| Method | Path                                                                            | Result                                                                                                                     |
+| ------ | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/api/workout-plan-templates/:id/bulk-prescriptions/candidates?program_id=UUID` | Exact sessions, assignments, all dated bindings, eligibility and rejection reasons; omit `program_id` for standalone scope |
+| POST   | `/api/workout-plan-templates/bulk-prescriptions/preview`                        | Read-only canonical request, revision and per-target before/after prescriptions                                            |
+| POST   | `/api/workout-plan-templates/bulk-prescriptions/apply`                          | Atomic confirmed apply; returns `{ plan }` with the canonical saved plan                                                   |
+
+Preview accepts `{ plan_id, program_id, source_session_id, source_assignment_id, prescription, fields, targets }`. `program_id` is the explicit Program UUID or `null` for standalone. `prescription` uses the ordinary assignment input contract (including `sort_order`). Each target is `{ workout_session_id, assignment_id, planned_session_ids }`; supply every binding UUID for that session, or an empty array for an unbound standalone session. Select at most 100 distinct target sessions.
+
+Selectable fields are `sets` (the entire set collection), `set_type`, `reps`, `weight`, `rpe`, `rir`, `duration`, `distance`, `rest_time`, `notes`, and, for frozen presets, `workout_format`, `time_cap_seconds`, `description`. Send the preview's exact `{ request, revision }` back to apply. Changing the request or any saved source/target/binding state invalidates confirmation; revisions conservatively include the enclosing plan, so another plan edit may also require a fresh preview.
+
+Invalid requests return 400; unauthenticated access 401; delegated context 403; missing or foreign scope 404; stale, incompatible, nonfuture, recorded or wrong-scope targets 409. Database failures roll back every target. Contracts are exported from `shared/src/schemas/api/WorkoutPlanBulk.api.zod.ts`; no database migration is required.
+
 ## Focused verification
 
 Start the server against an isolated PostgreSQL database first so migrations and RLS are applied. Integration tests use real Better Auth sessions, HTTP routes, repositories and the non-superuser application role. They skip explicitly if the database probe fails. Run backend fixtures **serially**, including the full suite, to avoid concurrent migration/RLS setup deadlocks.
@@ -123,4 +223,11 @@ pnpm exec vitest run tests/trainingPrograms.integration.test.ts tests/workoutPla
 
 # From SparkyFitnessFrontend
 pnpm exec jest src/tests/components/TrainingPrograms.test.tsx --runInBand
+```
+
+The bulk suite uses real Better Auth sessions and a non-superuser PostgreSQL application role. Enable it only against a disposable database named `zfit_bulk13_disposable` or `zfit_bulk13_disposable_SUFFIX`, where `SUFFIX` contains lowercase letters or digits. The rollback scenario temporarily installs a failing trigger in that disposable database; never point it at an owner or production database.
+
+```bash
+# From SparkyFitnessServer, with that isolated database configured
+RUN_BULK_PRESCRIPTION_DB=1 pnpm exec vitest run tests/workoutPlanBulk.integration.test.ts --no-file-parallelism
 ```

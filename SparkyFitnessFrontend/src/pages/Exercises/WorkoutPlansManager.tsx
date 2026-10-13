@@ -25,7 +25,7 @@ import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { usePreferences } from '@/contexts/PreferencesContext';
 import { error } from '@/utils/logging';
-import type { WorkoutPlanTemplate } from '@/types/workout';
+import type { WorkoutPlanDraft, WorkoutPlanTemplate } from '@/types/workout';
 import AddWorkoutPlanDialog from './AddWorkoutPlanDialog';
 import { formatDateToYYYYMMDD } from '@/lib/utils';
 import {
@@ -111,24 +111,20 @@ const WorkoutPlansManager = () => {
     }
   };
 
-  const handleCreatePlan = async (
-    newPlanData: Omit<
-      WorkoutPlanTemplate,
-      'id' | 'user_id' | 'created_at' | 'updated_at'
-    >
-  ) => {
+  const handleCreatePlan = async (newPlanData: WorkoutPlanDraft) => {
     if (!user?.id) return;
     try {
-      await createWorkoutPlanTemplate({ userId: user.id, data: newPlanData });
+      await createWorkoutPlanTemplate({ data: newPlanData });
       setIsAddPlanDialogOpen(false);
     } catch (err) {
       error(loggingLevel, 'Error creating workout plan:', err);
+      throw err;
     }
   };
 
   const handleUpdatePlan = async (
     planId: string,
-    updatedPlanData: Partial<WorkoutPlanTemplate>
+    updatedPlanData: Partial<WorkoutPlanDraft>
   ) => {
     if (!user?.id) return;
     try {
@@ -137,6 +133,7 @@ const WorkoutPlansManager = () => {
       setSelectedPlan(null);
     } catch (err) {
       error(loggingLevel, 'Error updating workout plan:', err);
+      throw err;
     }
   };
 
@@ -360,7 +357,7 @@ const WorkoutPlansManager = () => {
 
   return (
     <div className="space-y-6">
-      {activePlan && activePlan.next_assignment && (
+      {activePlan && activePlan.next_session && (
         <div className="p-4 rounded-xl border border-primary/30 bg-primary/5 flex items-center justify-between shadow-xs">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -384,12 +381,13 @@ const WorkoutPlansManager = () => {
                 )}
               </Badge>
               <span className="font-semibold text-sm">
-                {activePlan.sequence_position?.session_name ||
-                  activePlan.next_assignment.session_name ||
-                  activePlan.next_assignment.workout_preset_name ||
-                  activePlan.next_assignment.exercise_name ||
-                  t('workoutPlansManager.scheduledWorkout', 'Workout Session')}
+                {activePlan.next_session.name}
               </span>
+              {activePlan.next_session.is_optional && (
+                <Badge variant="outline">
+                  {t('trainingPrograms.optional', 'Optional')}
+                </Badge>
+              )}
               {activePlan.sequence_position && (
                 <span className="text-xs text-muted-foreground font-medium">
                   ({activePlan.sequence_position.current} of{' '}

@@ -25,6 +25,7 @@ export const exercisePresetEntriesSchema = z.object({
   location: z.string().nullable().optional(),
   source: z.string(),
   workout_format: z.string(),
+  time_cap_seconds: z.number().int().nullable(),
 });
 
 export const exercisePresetEntriesInitializerSchema = z.object({
@@ -41,6 +42,7 @@ export const exercisePresetEntriesInitializerSchema = z.object({
   location: z.string().optional().nullable(),
   source: z.string().optional(),
   workout_format: z.string().optional(),
+  time_cap_seconds: z.number().int().optional().nullable(),
 });
 
 export const exercisePresetEntriesMutatorSchema = z.object({
@@ -57,6 +59,7 @@ export const exercisePresetEntriesMutatorSchema = z.object({
   location: z.string().optional().nullable(),
   source: z.string().optional(),
   workout_format: z.string().optional(),
+  time_cap_seconds: z.number().int().optional().nullable(),
 });
 
 export type ExercisePresetEntries = z.infer<typeof exercisePresetEntriesSchema>;

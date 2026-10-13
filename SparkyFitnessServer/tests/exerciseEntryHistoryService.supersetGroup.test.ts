@@ -1,5 +1,12 @@
 import { vi, beforeEach, describe, expect, it } from 'vitest';
-import { getGroupedExerciseSessionByIdWithClient } from '../services/exerciseEntryHistoryService.js';
+import {
+  getGroupedExerciseSessionByIdWithClient,
+  getExerciseEntriesByDateV2,
+  getExerciseEntryHistory,
+} from '../services/exerciseEntryHistoryService.js';
+import { getClient } from '../db/poolManager.js';
+import type { PoolClient } from 'pg';
+import { presetSessionResponseSchema } from '@workspace/shared';
 
 vi.mock('../db/poolManager', () => ({
   getClient: vi.fn(),
@@ -53,9 +60,30 @@ function makeChildRow(
   return row;
 }
 
-function makeClient(childRows: Record<string, unknown>[]) {
+function makeClient(
+  childRows: Record<string, unknown>[],
+  timing = {
+    workout_format: 'standard',
+    time_cap_seconds: null as number | null,
+  }
+) {
   return {
+    release: vi.fn(),
     query: vi.fn((sql: string) => {
+      if (sql.includes('SELECT COUNT'))
+        return Promise.resolve({ rows: [{ count: 1 }] });
+      if (sql.includes('WITH sessions')) {
+        return Promise.resolve({
+          rows: [
+            {
+              id: PRESET_ENTRY_ID,
+              entry_date: '2026-03-12',
+              created_at: '2026-03-12T10:00:00Z',
+              session_type: 'preset',
+            },
+          ],
+        });
+      }
       if (/FROM exercise_preset_entries/.test(sql)) {
         return Promise.resolve({
           rows: [
@@ -67,6 +95,8 @@ function makeClient(childRows: Record<string, unknown>[]) {
               notes: null,
               source: 'manual',
               entry_date: '2026-03-12',
+              created_at: '2026-03-12T10:00:00Z',
+              ...timing,
             },
           ],
         });
@@ -228,4 +258,41 @@ describe('getGroupedExerciseSessionByIdWithClient telemetry columns', () => {
     expect(exercise.max_heart_rate).toBeNull();
     expect(exercise.weather_condition).toBeNull();
   });
+});
+
+describe('persisted grouped timing read surfaces', () => {
+  it.each([600, null])(
+    'retains stored format and explicit cap %s across detail, V2 date and history',
+    async (cap) => {
+      const client = makeClient(
+        [makeChildRow('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 0, null)],
+        { workout_format: 'emom', time_cap_seconds: cap }
+      );
+      // This fake intentionally implements only the query/release methods used by history.
+      vi.mocked(getClient).mockResolvedValue(client as unknown as PoolClient);
+      const detail = await getGroupedExerciseSessionByIdWithClient(
+        client,
+        USER_ID,
+        PRESET_ENTRY_ID
+      );
+      const byDate = await getExerciseEntriesByDateV2(USER_ID, '2026-03-12');
+      const history = await getExerciseEntryHistory(USER_ID, 1, 10);
+      for (const session of [detail, byDate[0], history.sessions[0]]) {
+        const dto = presetSessionResponseSchema.parse(session);
+        expect(dto).toMatchObject({
+          id: PRESET_ENTRY_ID,
+          workout_format: 'emom',
+          time_cap_seconds: cap,
+          entry_date: '2026-03-12',
+          source: 'manual',
+        });
+        expect(dto.created_at).toBe('2026-03-12T10:00:00Z');
+        expect(dto.exercises[0]).toMatchObject({
+          exercise_preset_entry_id: PRESET_ENTRY_ID,
+          created_at: '2026-03-12T10:00:00Z',
+          record_timezone: null,
+        });
+      }
+    }
+  );
 });

@@ -8,12 +8,16 @@ import {
 } from '@workspace/shared';
 import Icon from './Icon';
 import WorkoutPlanBanner from './WorkoutPlanBanner';
+import ProgramSessionHistory from './ProgramSessionHistory';
 import SwipeableExerciseRow from './SwipeableExerciseRow';
 import type { GetImageSource } from '../hooks/useExerciseImageSource';
-import { useActiveWorkoutPlans } from '../hooks/useActiveWorkoutPlan';
+import {
+  useActiveWorkoutPlans,
+  useWorkoutPlanCandidates,
+} from '../hooks/useActiveWorkoutPlan';
 import { useTrainingPrograms } from '../hooks/useTrainingPrograms';
 import type {
-  WorkoutPlanAssignment,
+  WorkoutPlanSession,
   WorkoutPlanTemplate,
 } from '../types/workoutPlans';
 import {
@@ -26,9 +30,9 @@ interface ExerciseSummaryProps {
   entryDate: string;
   onPressWorkout?: (session: ExerciseSessionResponse) => void;
   onAddExercise?: () => void;
-  onPressPlanAssignment?: (
+  onPressPlanSession?: (
     plan: WorkoutPlanTemplate,
-    assignment: WorkoutPlanAssignment
+    session: WorkoutPlanSession
   ) => void;
   getImageSource?: GetImageSource;
   weightUnit?: 'kg' | 'lbs';
@@ -40,7 +44,7 @@ const ExerciseSummary: React.FC<ExerciseSummaryProps> = ({
   entryDate,
   onPressWorkout,
   onAddExercise,
-  onPressPlanAssignment,
+  onPressPlanSession,
   getImageSource,
   weightUnit = 'kg',
   distanceUnit = 'km',
@@ -48,23 +52,27 @@ const ExerciseSummary: React.FC<ExerciseSummaryProps> = ({
   const { t } = useTranslation();
   const accentPrimary = useCSSVariable('--color-accent-primary') as string;
   const { plans: activePlans } = useActiveWorkoutPlans(entryDate);
+  const { plans: candidates } = useWorkoutPlanCandidates(entryDate);
   const { data: trainingPrograms, isError: programsFailed } =
     useTrainingPrograms();
   const { programPlan, standalonePlans } = useMemo(() => {
-    const eligible = getUncompletedActivePlans(
-      activePlans,
-      getLoggedAssignmentIds(exerciseEntries)
-    );
-    // A failed Programs read falls back to the pre-Programs behaviour; while
-    // it loads, show nothing rather than flash plans a Program may own.
+    const loggedIds = getLoggedAssignmentIds(exerciseEntries);
+    const activeEligible = getUncompletedActivePlans(activePlans, loggedIds);
     if (programsFailed) {
-      return { programPlan: undefined, standalonePlans: eligible };
+      return { programPlan: undefined, standalonePlans: activeEligible };
     }
     if (!trainingPrograms) {
       return { programPlan: undefined, standalonePlans: [] };
     }
-    return selectDashboardWorkoutPlans(eligible, trainingPrograms);
-  }, [activePlans, exerciseEntries, trainingPrograms, programsFailed]);
+    const eligibleCandidates = getUncompletedActivePlans(candidates, loggedIds);
+    return selectDashboardWorkoutPlans(eligibleCandidates, trainingPrograms);
+  }, [
+    activePlans,
+    candidates,
+    exerciseEntries,
+    trainingPrograms,
+    programsFailed,
+  ]);
 
   const planBanners =
     programPlan || standalonePlans.length > 0 ? (
@@ -74,7 +82,7 @@ const ExerciseSummary: React.FC<ExerciseSummaryProps> = ({
             key={programPlan.id}
             plan={programPlan}
             allowSessionPicker={false}
-            onPressPlanAssignment={onPressPlanAssignment}
+            onPressPlanSession={onPressPlanSession}
           />
         )}
         {standalonePlans.map((plan) => (
@@ -82,11 +90,14 @@ const ExerciseSummary: React.FC<ExerciseSummaryProps> = ({
             key={plan.id}
             plan={plan}
             allowSessionPicker
-            onPressPlanAssignment={onPressPlanAssignment}
+            onPressPlanSession={onPressPlanSession}
           />
         ))}
       </View>
     ) : null;
+  const programHistory = trainingPrograms && (
+    <ProgramSessionHistory programs={trainingPrograms} entryDate={entryDate} />
+  );
 
   if (exerciseEntries.length === 0) {
     const emptyContent = (
@@ -97,6 +108,7 @@ const ExerciseSummary: React.FC<ExerciseSummaryProps> = ({
     return (
       <View>
         {planBanners}
+        {programHistory}
         {onAddExercise ? (
           <Pressable
             onPress={onAddExercise}
@@ -120,6 +132,7 @@ const ExerciseSummary: React.FC<ExerciseSummaryProps> = ({
   return (
     <View>
       {planBanners}
+      {programHistory}
       <View className="bg-surface rounded-xl p-4 mb-2 shadow-sm overflow-hidden">
         <View className="flex-row items-center gap-2 mb-2">
           <Icon name="exercise" size={18} color={accentPrimary} />
