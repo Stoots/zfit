@@ -1,6 +1,6 @@
 # AGENTS.md
 
-_Last updated: 2026-10-13_
+_Last updated: 2026-10-14_
 
 SparkyFitness Mobile is a React Native 0.86 + Expo SDK 57 app for syncing Apple Health / Health Connect data with the SparkyFitness backend, tracking nutrition, hydration, fasting, measurements, exercise, saved foods, meal templates, custom exercises, workout presets, iOS / Android widgets, the active workout HUD, and the Sparky AI chat.
 
@@ -92,7 +92,7 @@ npx expo prebuild --clean
 - `src/navigation/` - navigation-level modules such as `safeScreens.tsx`, the error-boundary-wrapped screen components registered in `App.tsx`. (`FoodPhotoFlow` lives in `src/components/`.)
 - `src/hooks/` - TanStack Query hooks, auth/connection hooks, library/search/mutation hooks, measurement/water/check-in hooks, fasting hooks, workout form hooks, widget sync, query client, query keys, and cache helpers.
 - `src/services/api/` - backend clients. `apiClient.ts` handles normal API auth/proxy headers; `healthDataApi.ts`, `aiSettingsApi.ts`, food-photo estimate, and other raw fetch paths must keep auth, proxy, timeout, and session-expiry behavior aligned.
-- Cooper run Test Attempts: `src/screens/CooperRunTestsScreen.tsx` is registered as `CooperRunTests` in `App.tsx`; it uses `src/hooks/useCooperRunAttempts.ts`, the `cooperRunAttemptsQueryKey` in `src/hooks/queryKeys.ts`, and `src/services/api/cardioTestsApi.ts`.
+- Cardio Test Attempts: `src/screens/CooperRunTestsScreen.tsx` is registered as `CooperRunTests` in `App.tsx` and includes `src/screens/PowerTests.tsx`; API access is in `src/services/api/cardioTestsApi.ts`.
 - `src/services/healthconnect/` - Android Health Connect reads, native aggregation, transformation, enrichment, preferences, and writeback.
 - `src/services/healthkit/` - iOS HealthKit reads, statistics aggregation, transformation, background delivery, preferences, and writeback.
 - `src/services/shared/` - platform-agnostic health helpers: the `collectHealthData` / `runForegroundSync` engine both orchestrators share, the per-run workout-telemetry budget and its reuse cache, Health Connect error classification, sample downsampling, day aggregation/transformation, preference factories, and permission migration/sets.
@@ -328,7 +328,7 @@ All endpoints require auth headers, and proxy headers are injected before auth h
 - `foodEntriesApi.ts`, `foodEntryMealsApi.ts`, `foodsApi.ts`, `mealsApi.ts`, `mealTypesApi.ts`, `mealPlansApi.ts` - diary food entries, grouped logged meals, saved foods/variants/barcodes, saved meals, meal types, and recurring meal plans.
 - `externalFoodSearchApi.ts`, `aiSettingsApi.ts`, `aiConversionApi.ts` - provider-agnostic food search/details/barcode, label/photo estimate, AI availability, unit conversion.
 - `exerciseApi.ts`, `externalExerciseSearchApi.ts`, `workoutPresetsApi.ts` - exercise history, suggested/search/import flows, preset/individual exercise sessions, workout presets.
-- `src/services/api/cardioTestsApi.ts` - Cooper run Test Attempt list/create/edit.
+- `src/services/api/cardioTestsApi.ts` - Cooper, sprint, and 30-second power Test Attempt list/create/edit.
 - `fastingApi.ts` - `POST /api/fasting/start`, `POST /api/fasting/end`, and current/stats/history reads.
 - `authService.ts`, `profileApi.ts`, `externalProvidersApi.ts`, `customNutrientsApi.ts` - auth/session/MFA, profile, configured providers, custom nutrient definitions.
 - `ChatScreen.tsx` (transport) + `chatApi.ts` - streaming chat via `POST /api/chat/stream`, history load/clear.
@@ -375,7 +375,7 @@ const androidService = require('../../src/services/healthConnectService.ts');
 - Meal bug: inspect meals library/detail/add/edit screens, meal plan list/form screens, `MealTypeDetailScreen`, food picker routes, meal and meal-plan hooks/APIs, selection service, logged-meal API, and meal nutrition/form utils.
 - Family diary bug: inspect `FamilyMembersScreen`, `FamilyDiaryScreen`, `FamilyMealDetailScreen`, `FamilyCopyReviewScreen`, family hooks/API, navigation params, and the server family/food-entry routes and models.
 - Exercise/preset bug: inspect library/detail/form/search screens, related hooks/API, selected-exercise handoff, rest-period controls, and workout session helpers.
-- Cooper run Test Attempts bug: inspect `src/screens/CooperRunTestsScreen.tsx`, `src/hooks/useCooperRunAttempts.ts`, `src/hooks/queryKeys.ts`, `src/services/api/cardioTestsApi.ts`, and the corresponding server route/service/repository.
+- Cardio Test Attempts bug: inspect `src/screens/CooperRunTestsScreen.tsx`, `src/screens/PowerTests.tsx`, `src/hooks/useCooperRunAttempts.ts`, `src/hooks/queryKeys.ts`, `src/services/api/cardioTestsApi.ts`, and the corresponding server route/service/repository.
 - Workout/activity/HUD bug: inspect `AddSheet`, workout/activity screens, workout form hooks, `workoutDraftService`, `activeWorkoutStore`, `ActiveWorkoutBar`, rest notifications, and detail screen set interactions.
 - Dashboard plan banner / Training Program preview and history bug: inspect `ExerciseSummary`, `ProgramSessionHistory`, `WorkoutPlanBanner`, `useTrainingPrograms`, `trainingProgramsApi`, `useActiveWorkoutPlan`, `utils/workoutPlanSchedule.ts`, and shared `selectDashboardWorkoutPlans`.
 - Fasting bug: inspect `FastingDetailScreen`, `FastingCard`, `FastingGoalReconciler`, `useFasting`, `useFastingTimer`, `fastingApi`, `notifications`, and card visibility preferences.

@@ -37,6 +37,8 @@ SparkyFitness uses 7 granular permissions to determine exactly what a connected 
 
 Cooper run Test Attempt entry/edit drafts are scoped to the active web profile. Switching profiles clears the form; an earlier save completion cannot clear the new profile's draft. Switching does not cancel an already submitted save. On web and mobile, date, distance, edit selection and cancellation are locked while saving to prevent overlapping saves or loss of a newer draft.
 
+Sprint and 30-second power Test Attempts use the same diary sharing permission and user-scoped history as Cooper runs. Delegates with diary write access can record and edit; diary or reports read access can review them. Each protocol has its own dated history, and edits cannot change an attempt into another protocol.
+
 ---
 
 ## Security & Boundary Isolation

@@ -627,6 +627,7 @@ SELECT create_owner_policy('training_program_sessions');
 SELECT create_owner_policy('workout_program_consolidations');
 
 -- Cardio Test Attempts are diary records and follow diary delegation.
+-- All Cardio Test protocols share the same attempt table and diary access.
 SELECT create_diary_policy('cardio_test_attempts');
 
 -- Profiles: delegates can read (with any meaningful permission) but only owner can write.

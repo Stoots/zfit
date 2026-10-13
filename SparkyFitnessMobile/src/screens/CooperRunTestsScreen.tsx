@@ -23,6 +23,7 @@ import {
   makeChartFont,
 } from '../components/charts/chartFormatting';
 import LineSeriesMark from '../components/charts/LineSeriesMark';
+import PowerTests from './PowerTests';
 const chartFont = makeChartFont(CHART_LABEL_FONT_SIZE);
 
 const CooperRunTestsScreen: React.FC = () => {
@@ -289,6 +290,7 @@ const CooperRunTestsScreen: React.FC = () => {
             </>
           )}
         </View>
+        <PowerTests />
       </ScrollView>
       <CalendarSheet
         ref={calendarRef}

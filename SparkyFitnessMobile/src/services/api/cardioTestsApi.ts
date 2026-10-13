@@ -3,6 +3,9 @@ import {
   cooperRunAttemptInputSchema,
   cooperRunAttemptSchema,
   type CooperRunAttemptInput,
+  cardioTestAttemptInputSchema,
+  cardioTestAttemptSchema,
+  type CardioTestAttemptInput,
 } from '@workspace/shared';
 import { apiFetch } from './apiClient';
 
@@ -16,6 +19,31 @@ export async function fetchCooperRunAttempts() {
     operation: 'fetch Cooper run Test Attempts',
   });
   return z.array(cooperRunAttemptSchema).parse(response);
+}
+
+export async function fetchProtocolAttempts(
+  protocol: CardioTestAttemptInput['test_type']
+) {
+  const response = await apiFetch<unknown>({
+    endpoint: `/api/cardio-tests/${protocol}/attempts`,
+    serviceName,
+    operation: 'fetch Test Attempts',
+  });
+  return z.array(cardioTestAttemptSchema).parse(response);
+}
+export async function saveProtocolAttempt(
+  input: CardioTestAttemptInput,
+  id?: string
+) {
+  const validated = cardioTestAttemptInputSchema.parse(input);
+  const response = await apiFetch<unknown>({
+    endpoint: `/api/cardio-tests/${validated.test_type}/attempts${id ? `/${id}` : ''}`,
+    method: id ? 'PUT' : 'POST',
+    body: validated,
+    serviceName,
+    operation: 'save Test Attempt',
+  });
+  return cardioTestAttemptSchema.parse(response);
 }
 
 export async function createCooperRunAttempt(input: CooperRunAttemptInput) {

@@ -1,6 +1,6 @@
 # AGENTS.md
 
-_Last updated: 2026-10-13_
+_Last updated: 2026-10-14_
 
 SparkyFitness Server is the backend API package for the SparkyFitness monorepo. Use this file as the primary guide for work inside `SparkyFitnessServer/`.
 
@@ -28,7 +28,7 @@ If a task also touches `shared/`, the frontend, or the mobile app, read the rele
 - Stack: Express 5, PostgreSQL via `pg`, Better Auth, Zod, TypeScript 5, Vitest 4, ESLint 10
 - Module system: ESM with `type: "module"` and `moduleResolution: "NodeNext"`
 - The package is now effectively TypeScript-first; almost all source files are `.ts`
-- Main domains: food and meal tracking, exercise logging, Cooper run Test Attempts, health and sleep data, sleep science, fasting, medications, symptom and episode tracking, mood, menstrual cycle and pregnancy, reporting, AI chat, onboarding, identity, admin tooling, and external provider integrations
+- Main domains: food and meal tracking, exercise logging, Cardio Test Attempts, health and sleep data, sleep science, fasting, medications, symptom and episode tracking, mood, menstrual cycle and pregnancy, reporting, AI chat, onboarding, identity, admin tooling, and external provider integrations
 
 ## Verified Commands
 
@@ -64,7 +64,7 @@ pnpm exec eslint routes/v2/foodRoutes.ts services/foodCoreService.ts
 - `routes/trainingProgramRoutes.ts` - owner-only `/api/training-programs` CRUD for the full phase/week/Planned Session structure; each Planned Session binds an exact reusable `workout_plan_sessions` row through `workout_session_id` (schema: `../shared/src/schemas/database/WorkoutPlanSessions.zod.ts`). The service resolves athlete-local today and rejects a `missed` outcome whose effective date is later with HTTP 409, then passes the day to the repository. Persisted real-auth coverage: `tests/trainingPrograms.integration.test.ts` needs Postgres via `SPARKY_FITNESS_DB_*` / `SPARKY_FITNESS_APP_DB_*`; it skips locally when unreachable but fails in CI unless `SKIP_TRAINING_PROGRAM_DB` is set.
 - `routes/workoutPlanTemplateRoutes.ts` - owner-only bulk-prescription candidates (`GET /api/workout-plan-templates/:id/bulk-prescriptions/candidates`), preview (`POST /api/workout-plan-templates/bulk-prescriptions/preview`), and apply (`POST /api/workout-plan-templates/bulk-prescriptions/apply`); orchestration in `services/workoutPlanTemplateService.ts`, persistence in `models/workoutPlanTemplateRepository.ts`, DB coverage in `tests/workoutPlanBulk.integration.test.ts`
 - `models/workoutProgramConsolidationRepository.ts`, `db/migrations/20261011140000_workout_program_consolidation.sql`, and `../shared/src/schemas/database/WorkoutProgramConsolidations.zod.ts` - durable owner-only consolidation journal; the operator entry point is `scripts/consolidateWorkoutProgram.script.ts`; persisted coverage: `tests/workoutProgramConsolidation.integration.test.ts`
-- `routes/cardioTestRoutes.ts` - authenticated Cooper run Test Attempt list/create/edit at `/api/cardio-tests/cooper-run/attempts`, implemented by `services/cardioTestAttemptService.ts` and `models/cardioTestAttemptRepository.ts`; persisted coverage is in `tests/cardioTestAttempts.integration.test.ts`
+- `routes/cardioTestRoutes.ts` - authenticated Cooper run Test Attempts at `/api/cardio-tests/cooper-run/attempts` and protocol attempts at `/api/cardio-tests/:protocol/attempts`, implemented by `services/cardioTestAttemptService.ts` and `models/cardioTestAttemptRepository.ts`; persisted coverage is in `tests/cardioTestAttempts.integration.test.ts`
 - `routes/v2/` - newer typed route surface; pair these changes with `schemas/`
 - `routes/v2/openFoodFactsContributionRoutes.ts` - owner-only single-food preview and explicit photo-backed publication; background contributions are disabled for this release
 - `routes/v2/symptomRoutes.ts` - generic symptom tracking (`symptoms` permission): definitions (`/custom`), the pick-list library (`/options`), entries and episodes (`/entries`, `/entries/ongoing`, `/entries/:id/end`, `/entries/:id/severity`), photos, and symptom-free days. Logic lives in `services/symptomService.ts` over `models/symptomRepository.ts` and `models/symptomOptionRepository.ts`; the request/response contract is `../shared/src/schemas/api/Symptoms.api.zod.ts`
@@ -260,7 +260,7 @@ When searching, ignore noisy/generated directories unless you explicitly need th
 - Training Program authoring/scheduling (#2/#11): `routes/trainingProgramRoutes.ts`, `services/trainingProgramService.ts`, `models/trainingProgramRepository.ts`, shared `TrainingPrograms.api.zod.ts` and `WorkoutPlanSessions.zod.ts`. `training_program_sessions` binds exact `workout_plan_sessions` rows; the four `training_program_*` tables remain owner-only. Standalone Workout Plans remain independent.
 - Bulk Workout Plan prescriptions (#13): follow the route/service/repository chain in `routes/workoutPlanTemplateRoutes.ts`, `services/workoutPlanTemplateService.ts`, and `models/workoutPlanTemplateRepository.ts`; exercise candidates, preview, apply, and ownership in `tests/workoutPlanBulk.integration.test.ts`.
 - Workout Program consolidation (#14): journal schema/migration and repository are `../shared/src/schemas/database/WorkoutProgramConsolidations.zod.ts`, `db/migrations/20261011140000_workout_program_consolidation.sql`, and `models/workoutProgramConsolidationRepository.ts`; run the operator-only `scripts/consolidateWorkoutProgram.script.ts`; test with `tests/workoutProgramConsolidation.integration.test.ts`.
-- Cooper run Test Attempts: `routes/cardioTestRoutes.ts`, `services/cardioTestAttemptService.ts`, `models/cardioTestAttemptRepository.ts`, and shared `CardioTests.api.zod.ts` / `CardioTestAttempts.zod.ts`.
+- Cardio Test Attempts: `routes/cardioTestRoutes.ts`, `services/cardioTestAttemptService.ts`, `models/cardioTestAttemptRepository.ts`, and shared `CardioTests.api.zod.ts` / `CardioTestAttempts.zod.ts`.
 - Food, barcode, or external provider issue:
   inspect the relevant `integrations/*` code, then the matching service and repository files
 - Open Food Facts publication:

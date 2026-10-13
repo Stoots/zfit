@@ -158,4 +158,114 @@ describe.runIf(run)('persisted authenticated Cooper Test Attempts', () => {
       .send({ attempt_date: '2026-10-01', distance_meters: 0 });
     expect(invalidDistance.status).toBe(400);
   });
+
+  it.each([
+    ['sprint_6s', { peak_watts: [900, 800, 700, 600, 500] }],
+    [
+      'power_30s',
+      {
+        efforts: [
+          { peak_watts: 700, average_watts: 450 },
+          { peak_watts: 650, average_watts: 425 },
+        ],
+      },
+    ],
+    [
+      'ramp',
+      { maximum_watts: 340, peak_heart_rate: 180, one_minute_heart_rate: 145 },
+    ],
+  ])('persists and isolates %s attempts', async (protocol, results) => {
+    const path = `/api/cardio-tests/${protocol}/attempts`;
+    const input = { test_type: protocol, attempt_date: '2026-10-01', results };
+    const saved = await request(app)
+      .post(path)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send(input);
+    expect(saved.status).toBe(201);
+    expect(saved.body).toMatchObject(input);
+    const otherList = await request(app)
+      .get(path)
+      .set('Authorization', `Bearer ${otherToken}`);
+    expect(otherList.body).toEqual([]);
+    const otherEdit = await request(app)
+      .put(`${path}/${saved.body.id}`)
+      .set('Authorization', `Bearer ${otherToken}`)
+      .send(input);
+    expect(otherEdit.status).toBe(404);
+    const ownerList = await request(app)
+      .get(path)
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(ownerList.body).toHaveLength(1);
+    expect(ownerList.body[0]).toMatchObject(input);
+    const edited = await request(app)
+      .put(`${path}/${saved.body.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ ...input, attempt_date: '2026-10-02' });
+    expect(edited.status).toBe(200);
+    expect(edited.body.attempt_date).toBe('2026-10-02');
+  });
+
+  it('rejects incomplete power efforts and mismatched protocols', async () => {
+    const path = '/api/cardio-tests/sprint_6s/attempts';
+    const bad = await request(app)
+      .post(path)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        test_type: 'sprint_6s',
+        attempt_date: '2026-10-01',
+        results: { peak_watts: [100, 200] },
+      });
+    expect(bad.status).toBe(400);
+    const mismatched = await request(app)
+      .post(path)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        test_type: 'ramp',
+        attempt_date: '2026-10-01',
+        results: {
+          maximum_watts: 300,
+          peak_heart_rate: 180,
+          one_minute_heart_rate: 145,
+        },
+      });
+    expect(mismatched.status).toBe(400);
+  });
+
+  it('keeps the database protocol constraint aligned with the public contract', async () => {
+    const db = await getSystemClient();
+    try {
+      await expect(
+        db.query(
+          `INSERT INTO cardio_test_attempts (user_id, test_type, attempt_date, results)
+         VALUES ($1, 'sprint_6s', '2026-10-01', '{}'::jsonb)`,
+          [ownerId]
+        )
+      ).rejects.toThrow();
+      await expect(
+        db.query(
+          `INSERT INTO cardio_test_attempts (user_id, test_type, attempt_date, results)
+         VALUES ($1, 'power_30s', '2026-10-01', '{"efforts":[]}'::jsonb)`,
+          [ownerId]
+        )
+      ).rejects.toThrow();
+      await expect(
+        db.query(
+          `INSERT INTO cardio_test_attempts (user_id, test_type, attempt_date, results)
+         VALUES ($1, 'ramp', '2026-10-01',
+           '{"maximum_watts":300,"peak_heart_rate":180.5,"one_minute_heart_rate":145}'::jsonb)`,
+          [ownerId]
+        )
+      ).rejects.toThrow();
+      await expect(
+        db.query(
+          `INSERT INTO cardio_test_attempts (user_id, test_type, attempt_date, results)
+         VALUES ($1, 'ramp', '2026-10-01',
+           '{"maximum_watts":300,"peak_heart_rate":180,"one_minute_heart_rate":145.5}'::jsonb)`,
+          [ownerId]
+        )
+      ).rejects.toThrow();
+    } finally {
+      db.release();
+    }
+  });
 });

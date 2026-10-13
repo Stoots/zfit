@@ -1,14 +1,46 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import type { CooperRunAttemptInput } from '@workspace/shared';
+import type {
+  CooperRunAttemptInput,
+  CardioTestAttemptInput,
+} from '@workspace/shared';
 import {
   createCooperRunAttempt,
   getCooperRunAttempts,
   updateCooperRunAttempt,
+  getProtocolAttempts,
+  saveProtocolAttempt,
 } from '@/api/CardioTests/cardioTests';
 
 export function cooperRunAttemptsQueryKey(userId: string) {
   return ['cardioTestAttempts', userId, 'cooperRun'] as const;
+}
+
+export function usePowerTestAttempts(
+  userId: string,
+  protocol: 'sprint_6s' | 'power_30s'
+) {
+  const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const queryKey = ['cardioTestAttempts', userId, protocol];
+  const attempts = useQuery({
+    queryKey,
+    queryFn: () => getProtocolAttempts(protocol),
+  });
+  const save = useMutation({
+    mutationFn: ({
+      input,
+      id,
+    }: {
+      input: CardioTestAttemptInput;
+      id?: string;
+    }) => saveProtocolAttempt(input, id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey }),
+    meta: {
+      successMessage: t('cardioTests.saved', 'Test Attempt saved.'),
+    },
+  });
+  return { attempts, save };
 }
 
 export function useCooperRunAttempts(userId: string, enabled: boolean) {

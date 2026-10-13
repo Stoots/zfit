@@ -7008,6 +7008,7 @@
   },
   "cardioTests": {
     "title": "Cardio Tests",
+    "intro": "Record Cooper and power Test Attempts and compare results over time.",
     "saved": "Test Attempt saved.",
     "noAccess": "You do not have access to these attempts.",
     "readOnly": "You can view this history but do not have permission to edit it.",
@@ -7016,7 +7017,34 @@
     "add": "Record Test Attempt",
     "edit": "Edit Test Attempt",
     "record": "Record Test",
+    "sprintResult": "Maximum",
+    "dropOff": "Drop-off",
+    "invalidPower": "Enter nonnegative watts, with each average no greater than its peak.",
+    "sprint_6s": {
+      "title": "5 × 6-second sprint (54-second rests)",
+      "field0": "Effort 1 peak (W)",
+      "field1": "Effort 2 peak (W)",
+      "field2": "Effort 3 peak (W)",
+      "field3": "Effort 4 peak (W)",
+      "field4": "Effort 5 peak (W)",
+      "record": "Record Sprint",
+      "empty": "No Test Attempts recorded yet.",
+      "chart": "5 × 6-second sprint (54-second rests) trend by date",
+      "editA11y": "Edit sprint attempt on {{date}}"
+    },
+    "power_30s": {
+      "title": "2 × 30-second power (60-second rest)",
+      "field0": "Effort 1 peak (W)",
+      "field1": "Effort 1 average (W)",
+      "field2": "Effort 2 peak (W)",
+      "field3": "Effort 2 average (W)",
+      "record": "Record 30-second Power",
+      "empty": "No Test Attempts recorded yet.",
+      "chart": "2 × 30-second power (60-second rest) trend by date",
+      "editA11y": "Edit 30-second power attempt on {{date}}"
+    },
     "cooper": {
+      "title": "Cooper Run Test",
       "intro": "Record the distance you cover in a 12-minute Cooper run and compare attempts over time.",
       "distance": "12-minute distance (m)",
       "distanceLabel": "Distance",
