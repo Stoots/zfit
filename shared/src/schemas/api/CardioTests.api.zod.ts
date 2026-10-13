@@ -10,6 +10,7 @@ export const cardioTestProtocols = {
 export const cooperRunAttemptInputSchema = z.strictObject({
   attempt_date: attemptDateSchema,
   distance_meters: z.number().positive(),
+  planned_session_id: z.uuid().nullable().optional(),
 });
 export type CooperRunAttemptInput = z.infer<typeof cooperRunAttemptInputSchema>;
 
@@ -19,6 +20,7 @@ export const cooperRunAttemptSchema = z.strictObject({
   test_type: z.literal("cooper_run"),
   attempt_date: attemptDateSchema,
   distance_meters: z.number().positive(),
+  planned_session_id: z.uuid().nullable(),
   created_at: z.iso.datetime(),
   updated_at: z.iso.datetime(),
 });
@@ -51,16 +53,19 @@ export const cardioTestAttemptInputSchema = z.discriminatedUnion("test_type", [
     test_type: z.literal("sprint_6s"),
     attempt_date: attemptDateSchema,
     results: sprintResultsSchema,
+    planned_session_id: z.uuid().nullable().optional(),
   }),
   z.strictObject({
     test_type: z.literal("power_30s"),
     attempt_date: attemptDateSchema,
     results: thirtySecondResultsSchema,
+    planned_session_id: z.uuid().nullable().optional(),
   }),
   z.strictObject({
     test_type: z.literal("ramp"),
     attempt_date: attemptDateSchema,
     results: rampResultsSchema,
+    planned_session_id: z.uuid().nullable().optional(),
   }),
 ]);
 export type CardioTestAttemptInput = z.infer<
@@ -69,6 +74,7 @@ export type CardioTestAttemptInput = z.infer<
 const responseFields = {
   id: z.uuid(),
   user_id: z.uuid(),
+  planned_session_id: z.uuid().nullable(),
   created_at: z.iso.datetime(),
   updated_at: z.iso.datetime(),
 };

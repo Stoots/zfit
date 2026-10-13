@@ -93,6 +93,7 @@ function program(
               scheduled_date: session.effective_date,
               effective_date: session.effective_date,
               workout_session_id: session.workout_session_id,
+              cardio_test_type: null,
               workout_session_name: 'A',
               workout_plan_id: 10,
               workout_plan_name: 'Plan',
@@ -104,6 +105,7 @@ function program(
                   ? '2026-10-11T12:00:00Z'
                   : null,
               completed_workout: null,
+              completed_test_attempt: null,
             })),
           },
         ],

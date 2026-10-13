@@ -1,6 +1,6 @@
 # AGENTS.md
 
-_Last updated: 2026-10-13_
+_Last updated: 2026-10-14_
 
 `@workspace/shared` is a source-first TypeScript workspace library package for schemas, constants, and timezone/day helpers consumed by SparkyFitnessServer, SparkyFitnessFrontend, and SparkyFitnessMobile.
 
@@ -18,7 +18,7 @@ _Last updated: 2026-10-13_
 - `src/utils/` - timezone helpers (`todayInZone`, `instantToDay`, `dayToUtcRange`, `compareDays`, `addDays`, `isDayString`), cycle/menstruation helpers, and unit/calculation utilities.
 - `src/ai/`, `src/cycle/`, `src/medications/`, `src/mood/` - domain-specific helpers.
 - `src/symptoms/` - generic symptom tracking: constants and enums (scales, templates, sections, option kinds), template section resolution (`resolveSections`), built-in symptoms and pick-lists, head/body region ids for the location maps, and custom-field validation. The API contract is `src/schemas/api/Symptoms.api.zod.ts`.
-- Training Programs: `src/schemas/api/TrainingPrograms.api.zod.ts` defines aggregate inputs and responses (ordered phases/weeks/Planned Sessions, fixed calendar dates, stable UUIDs and integer Workout Plan references). Database schemas are `TrainingPrograms.zod.ts`, `TrainingProgramPhases.zod.ts`, `TrainingProgramWeeks.zod.ts`, `TrainingProgramSessions.zod.ts`, `WorkoutPlanSessions.zod.ts`, and `WorkoutProgramConsolidations.zod.ts` (durable owner-only consolidation journal). Owner-only; independent of standalone Workout Plans. `TrainingProgramSessions` binds the exact reusable Workout Plan Session by `workout_session_id`; `src/utils/dashboardWorkoutPlans.ts` (`selectDashboardWorkoutPlans`) selects the next pending Program workout before standalone plans for the web and mobile dashboards.
+- Training Programs: `src/schemas/api/TrainingPrograms.api.zod.ts` defines aggregate inputs and responses (ordered phases/weeks/Planned Sessions, fixed calendar dates, stable UUIDs and integer Workout Plan references). Database schemas are `TrainingPrograms.zod.ts`, `TrainingProgramPhases.zod.ts`, `TrainingProgramWeeks.zod.ts`, `TrainingProgramSessions.zod.ts`, `WorkoutPlanSessions.zod.ts`, and `WorkoutProgramConsolidations.zod.ts` (durable owner-only consolidation journal). Owner-only; independent of standalone Workout Plans. A Planned Session binds either an exact reusable Workout Plan Session by `workout_session_id` or a Cardio Test protocol by `cardio_test_type`; `CardioTestAttempts.zod.ts` holds the optional `planned_session_id` link. `src/utils/dashboardWorkoutPlans.ts` selects the next pending Program workout before standalone plans; `src/utils/programCardioAssessments.ts` selects scheduled protocol attempts for web and mobile.
 
 ## Naming Convention
 

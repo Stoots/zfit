@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { cardioTestTypeSchema } from '@workspace/shared';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -76,41 +77,97 @@ export default function SessionRow({
           />
         </div>
         <div className="min-w-0 grid gap-2 border-b py-3 sm:grid-cols-[10rem_minmax(0,1fr)] sm:items-start sm:gap-4">
-          <Label htmlFor={`${prefix}-session`}>
-            {t('trainingPrograms.workoutSession', 'Workout Session')}
+          <Label htmlFor={`${prefix}-kind`}>
+            {t('trainingPrograms.sessionKind', 'Session type')}
           </Label>
           <select
-            id={`${prefix}-session`}
+            id={`${prefix}-kind`}
             disabled={locked}
             className="flex h-11 w-full min-w-0 rounded-md border border-input bg-background px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            value={session.workout_session_id ?? ''}
-            onChange={(event) => {
-              const workout_session_id = event.target.value || null;
-              const selectedSession = plans
-                .flatMap((plan) => plan.sessions)
-                .find((item) => item.id === workout_session_id);
+            value={session.cardio_test_type ? 'cardio' : 'workout'}
+            onChange={(event) =>
               onChange({
-                workout_session_id,
-                ...(session.workout_session_id === null && selectedSession
-                  ? { is_optional: selectedSession.is_optional }
-                  : {}),
-              });
-            }}
+                workout_session_id: null,
+                cardio_test_type:
+                  event.target.value === 'cardio'
+                    ? cardioTestTypeSchema.options[0]!
+                    : null,
+                is_optional: false,
+              })
+            }
           >
-            <option value="">
-              {t(
-                'trainingPrograms.chooseSession',
-                'Choose an exact Workout Session'
-              )}
+            <option value="workout">
+              {t('trainingPrograms.workout', 'Workout')}
             </option>
-            {plans.flatMap((plan) =>
-              plan.sessions.map((workoutSession) => (
-                <option key={workoutSession.id} value={workoutSession.id}>
-                  {plan.plan_name} — {workoutSession.name}
-                </option>
-              ))
-            )}
+            <option value="cardio">
+              {t('trainingPrograms.cardioTest', 'Cardio Test')}
+            </option>
           </select>
+        </div>
+        <div className="min-w-0 grid gap-2 border-b py-3 sm:grid-cols-[10rem_minmax(0,1fr)] sm:items-start sm:gap-4">
+          {session.cardio_test_type ? (
+            <>
+              <Label htmlFor={`${prefix}-protocol`}>
+                {t('trainingPrograms.protocol', 'Cardio Test protocol')}
+              </Label>
+              <select
+                id={`${prefix}-protocol`}
+                disabled={locked}
+                value={session.cardio_test_type}
+                onChange={(event) =>
+                  onChange({ cardio_test_type: event.target.value })
+                }
+                className="flex h-11 w-full min-w-0 rounded-md border border-input bg-background px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {cardioTestTypeSchema.options.map((protocol) => (
+                  <option key={protocol} value={protocol}>
+                    {protocol === 'cooper_run'
+                      ? t('cardioTests.cooper.title', 'Cooper Run Test')
+                      : String(protocol).replaceAll('_', ' ')}
+                  </option>
+                ))}
+              </select>
+            </>
+          ) : (
+            <>
+              <Label htmlFor={`${prefix}-session`}>
+                {t('trainingPrograms.workoutSession', 'Workout Session')}
+              </Label>
+              <select
+                id={`${prefix}-session`}
+                disabled={locked}
+                className="flex h-11 w-full min-w-0 rounded-md border border-input bg-background px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                value={session.workout_session_id ?? ''}
+                onChange={(event) => {
+                  const workout_session_id = event.target.value || null;
+                  const selectedSession = plans
+                    .flatMap((plan) => plan.sessions)
+                    .find((item) => item.id === workout_session_id);
+                  onChange({
+                    workout_session_id,
+                    cardio_test_type: null,
+                    ...(session.workout_session_id === null && selectedSession
+                      ? { is_optional: selectedSession.is_optional }
+                      : {}),
+                  });
+                }}
+              >
+                <option value="">
+                  {t(
+                    'trainingPrograms.chooseSession',
+                    'Choose an exact Workout Session'
+                  )}
+                </option>
+                {plans.flatMap((plan) =>
+                  plan.sessions.map((workoutSession) => (
+                    <option key={workoutSession.id} value={workoutSession.id}>
+                      {plan.plan_name} — {workoutSession.name}
+                    </option>
+                  ))
+                )}
+              </select>
+            </>
+          )}
         </div>
       </div>
       <div className="flex min-h-11 items-center gap-2">

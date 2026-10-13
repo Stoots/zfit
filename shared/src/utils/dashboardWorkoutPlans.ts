@@ -10,8 +10,8 @@ type CandidatePlan = {
 };
 type ProgramPreview<T extends CandidatePlan> = T & {
   training_program_session_id: string;
-  next_session: T['sessions'][number];
-  next_assignments: T['sessions'][number]['assignments'];
+  next_session: T["sessions"][number];
+  next_assignments: T["sessions"][number]["assignments"];
   sequence_position: null;
 };
 
@@ -28,7 +28,7 @@ export interface DashboardWorkoutPlans<T extends CandidatePlan> {
  * sessions are finished. */
 export function selectDashboardWorkoutPlans<T extends CandidatePlan>(
   eligiblePlans: readonly T[],
-  programs: readonly TrainingProgram[]
+  programs: readonly TrainingProgram[],
 ): DashboardWorkoutPlans<T> {
   const byId = new Map(eligiblePlans.map((plan) => [String(plan.id), plan]));
   const linkedIds = new Set<string>();
@@ -38,13 +38,15 @@ export function selectDashboardWorkoutPlans<T extends CandidatePlan>(
     for (const phase of program.phases) {
       for (const week of phase.weeks) {
         for (const planned of week.sessions) {
+          if (!planned.workout_session_id || planned.workout_plan_id === null)
+            continue;
           const planId = String(planned.workout_plan_id);
           linkedIds.add(planId);
           const plan = byId.get(planId);
           const session = plan?.sessions.find(
-            (item) => item.id === planned.workout_session_id
+            (item) => item.id === planned.workout_session_id,
           );
-          if (planned.status !== 'planned') continue;
+          if (planned.status !== "planned") continue;
           if (nextDate !== undefined && planned.effective_date >= nextDate)
             continue;
           nextDate = planned.effective_date;
@@ -64,7 +66,7 @@ export function selectDashboardWorkoutPlans<T extends CandidatePlan>(
   return {
     programPlan,
     standalonePlans: eligiblePlans.filter(
-      (plan) => !linkedIds.has(String(plan.id))
+      (plan) => !linkedIds.has(String(plan.id)),
     ),
   };
 }

@@ -50,9 +50,22 @@ describe.runIf(run)('persisted authenticated Cooper Test Attempts', () => {
     ownerToken = accounts[0]!.token!;
     otherId = accounts[1]!.user.id;
     otherToken = accounts[1]!.token!;
+    const db = await getSystemClient();
+    try {
+      await db.query(
+        `INSERT INTO family_access(owner_user_id, family_user_id, family_email, access_permissions, is_active, status)
+         VALUES ($1,$2,$3,'{"can_manage_diary":true}',true,'active')`,
+        [ownerId, otherId, accounts[1]!.user.email]
+      );
+    } finally {
+      db.release();
+    }
     const { default: routes } = await import('../routes/cardioTestRoutes.js');
+    const { default: programRoutes } =
+      await import('../routes/trainingProgramRoutes.js');
     app.use(express.json(), cookieParser());
     app.use('/api/cardio-tests', routes);
+    app.use('/api/training-programs', programRoutes);
     app.use(errorHandler);
   }, 30000);
 
@@ -61,6 +74,10 @@ describe.runIf(run)('persisted authenticated Cooper Test Attempts', () => {
     try {
       await db.query(
         'DELETE FROM cardio_test_attempts WHERE user_id = ANY($1::uuid[])',
+        [[ownerId, otherId]]
+      );
+      await db.query(
+        'DELETE FROM training_programs WHERE user_id = ANY($1::uuid[])',
         [[ownerId, otherId]]
       );
     } finally {
@@ -268,4 +285,216 @@ describe.runIf(run)('persisted authenticated Cooper Test Attempts', () => {
       db.release();
     }
   });
+
+  it('schedules an assessment without a Workout Session and links only its owner’s attempt', async () => {
+    const program = await request(app)
+      .post('/api/training-programs')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        name: 'Autumn base',
+        goal: 'Measure progress',
+        start_date: '2026-10-01',
+        end_date: '2026-10-31',
+        phases: [
+          {
+            name: 'Build',
+            goal: 'Aerobic base',
+            weeks: [
+              {
+                start_date: '2026-10-12',
+                end_date: '2026-10-18',
+                sessions: [
+                  {
+                    name: 'Baseline',
+                    scheduled_date: '2026-10-14',
+                    cardio_test_type: 'cooper_run',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+    expect(program.status).toBe(201);
+    const planned = program.body.phases[0].weeks[0].sessions[0];
+    expect(planned).toMatchObject({
+      workout_session_id: null,
+      cardio_test_type: 'cooper_run',
+      status: 'planned',
+    });
+
+    const foreign = await attempt(
+      {
+        attempt_date: '2026-10-14',
+        distance_meters: 2500,
+        planned_session_id: planned.id,
+      },
+      otherToken
+    );
+    expect(foreign.status).toBe(404);
+    const delegatedLink = await request(app)
+      .post('/api/cardio-tests/cooper-run/attempts')
+      .set('Authorization', `Bearer ${otherToken}`)
+      .set('Cookie', `sparky_active_user_id=${ownerId}`)
+      .send({
+        attempt_date: '2026-10-14',
+        distance_meters: 2500,
+        planned_session_id: planned.id,
+      });
+    expect(delegatedLink.status).toBe(403);
+    const linked = await attempt({
+      attempt_date: '2026-10-14',
+      distance_meters: 2510,
+      planned_session_id: planned.id,
+    });
+    expect(linked.status).toBe(201);
+    expect(linked.body.planned_session_id).toBe(planned.id);
+    const delegatedEdit = await request(app)
+      .put(`/api/cardio-tests/cooper-run/attempts/${linked.body.id}`)
+      .set('Authorization', `Bearer ${otherToken}`)
+      .set('Cookie', `sparky_active_user_id=${ownerId}`)
+      .send({ attempt_date: '2026-10-14', distance_meters: 2550 });
+    expect(delegatedEdit.status).toBe(404);
+    const history = await request(app)
+      .get(`/api/training-programs/${program.body.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(history.status).toBe(200);
+    expect(history.body.phases[0].weeks[0].sessions[0]).toMatchObject({
+      status: 'completed',
+      completed_test_attempt: {
+        id: linked.body.id,
+        test_type: 'cooper_run',
+        attempt_date: '2026-10-14',
+        results: { distance_meters: 2510 },
+      },
+    });
+    const duplicate = await attempt({
+      attempt_date: '2026-10-14',
+      distance_meters: 2530,
+      planned_session_id: planned.id,
+    });
+    expect(duplicate.status).toBe(409);
+
+    const standalone = await attempt({
+      attempt_date: '2026-10-15',
+      distance_meters: 2600,
+    });
+    expect(standalone.status).toBe(201);
+    expect(standalone.body.planned_session_id).toBeNull();
+    const listed = await request(app)
+      .get('/api/cardio-tests/cooper-run/attempts')
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(
+      listed.body.map(
+        (row: { planned_session_id: string | null }) => row.planned_session_id
+      )
+    ).toEqual([planned.id, null]);
+    const removed = await request(app)
+      .delete(`/api/training-programs/${program.body.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(removed.status).toBe(204);
+    const retained = await request(app)
+      .get('/api/cardio-tests/cooper-run/attempts')
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(
+      retained.body.map(
+        (row: { planned_session_id: string | null }) => row.planned_session_id
+      )
+    ).toEqual([null, null]);
+  });
+
+  it.each([
+    ['sprint_6s', { peak_watts: [900, 800, 700, 600, 500] }],
+    [
+      'power_30s',
+      {
+        efforts: [
+          { peak_watts: 700, average_watts: 450 },
+          { peak_watts: 650, average_watts: 425 },
+        ],
+      },
+    ],
+  ])(
+    'links a scheduled %s attempt to its Program',
+    async (protocol, results) => {
+      const program = await request(app)
+        .post('/api/training-programs')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({
+          name: 'Power baseline',
+          goal: 'Measure power',
+          start_date: '2026-10-01',
+          end_date: '2026-10-31',
+          phases: [
+            {
+              name: 'Assess',
+              goal: 'Baseline',
+              weeks: [
+                {
+                  start_date: '2026-10-12',
+                  end_date: '2026-10-18',
+                  sessions: [
+                    {
+                      name: 'Power test',
+                      scheduled_date: '2026-10-14',
+                      cardio_test_type: protocol,
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        });
+      expect(program.status).toBe(201);
+      const planned = program.body.phases[0].weeks[0].sessions[0];
+      const path = `/api/cardio-tests/${protocol}/attempts`;
+      const input = {
+        test_type: protocol,
+        attempt_date: '2026-10-14',
+        results,
+        planned_session_id: planned.id,
+      };
+      const delegated = await request(app)
+        .post(path)
+        .set('Authorization', `Bearer ${otherToken}`)
+        .set('Cookie', `sparky_active_user_id=${ownerId}`)
+        .send(input);
+      expect(delegated.status).toBe(403);
+      const linked = await request(app)
+        .post(path)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send(input);
+      expect(linked.status).toBe(201);
+      expect(linked.body).toMatchObject(input);
+      const history = await request(app)
+        .get(`/api/training-programs/${program.body.id}`)
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(history.body.phases[0].weeks[0].sessions[0]).toMatchObject({
+        status: 'completed',
+        completed_test_attempt: {
+          id: linked.body.id,
+          test_type: protocol,
+          results,
+        },
+      });
+      const duplicate = await request(app)
+        .post(path)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send(input);
+      expect(duplicate.status).toBe(409);
+      const unlinked = await request(app)
+        .put(`${path}/${linked.body.id}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ ...input, planned_session_id: null });
+      expect(unlinked.status).toBe(200);
+      expect(unlinked.body.planned_session_id).toBeNull();
+      const restored = await request(app)
+        .get(`/api/training-programs/${program.body.id}`)
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(restored.body.phases[0].weeks[0].sessions[0]).toMatchObject({
+        status: 'planned',
+        completed_test_attempt: null,
+      });
+    }
+  );
 });

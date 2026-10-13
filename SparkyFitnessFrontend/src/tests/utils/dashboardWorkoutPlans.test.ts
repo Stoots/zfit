@@ -60,6 +60,7 @@ const session = (
   workout_plan_name: String(planId),
   workout_session_id: `workout-${planId}`,
   workout_session_name: 'A',
+  cardio_test_type: null,
   is_optional: false,
   scheduled_date: scheduledDate,
   effective_date: date,
@@ -67,6 +68,7 @@ const session = (
   sort_order: 0,
   outcome_at: null,
   completed_workout: null,
+  completed_test_attempt: null,
 });
 const ids = (
   result: ReturnType<typeof selectDashboardWorkoutPlans<WorkoutPlanTemplate>>

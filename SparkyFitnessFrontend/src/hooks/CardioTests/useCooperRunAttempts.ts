@@ -11,6 +11,7 @@ import {
   getProtocolAttempts,
   saveProtocolAttempt,
 } from '@/api/CardioTests/cardioTests';
+import { trainingProgramKeys } from '@/api/keys/exercises';
 
 export function cooperRunAttemptsQueryKey(userId: string) {
   return ['cardioTestAttempts', userId, 'cooperRun'] as const;
@@ -35,7 +36,11 @@ export function usePowerTestAttempts(
       input: CardioTestAttemptInput;
       id?: string;
     }) => saveProtocolAttempt(input, id),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey }),
+    onSuccess: async () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey }),
+        queryClient.invalidateQueries({ queryKey: trainingProgramKeys.all }),
+      ]),
     meta: {
       successMessage: t('cardioTests.saved', 'Test Attempt saved.'),
     },
@@ -54,7 +59,11 @@ export function useCooperRunAttempts(userId: string, enabled: boolean) {
   });
   const create = useMutation({
     mutationFn: (input: CooperRunAttemptInput) => createCooperRunAttempt(input),
-    onSuccess: async () => queryClient.invalidateQueries({ queryKey }),
+    onSuccess: async () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey }),
+        queryClient.invalidateQueries({ queryKey: trainingProgramKeys.all }),
+      ]),
     meta: {
       successMessage: t('cardioTests.saved', 'Test Attempt saved.'),
     },
@@ -62,7 +71,11 @@ export function useCooperRunAttempts(userId: string, enabled: boolean) {
   const update = useMutation({
     mutationFn: ({ id, input }: { id: string; input: CooperRunAttemptInput }) =>
       updateCooperRunAttempt(id, input),
-    onSuccess: async () => queryClient.invalidateQueries({ queryKey }),
+    onSuccess: async () =>
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey }),
+        queryClient.invalidateQueries({ queryKey: trainingProgramKeys.all }),
+      ]),
     meta: {
       successMessage: t('cardioTests.saved', 'Test Attempt saved.'),
     },

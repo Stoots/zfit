@@ -19,6 +19,7 @@ const fields = {
   id: z.uuid(),
   user_id: z.uuid(),
   attempt_date: z.iso.date(),
+  planned_session_id: z.uuid().nullable(),
   created_at: z.date(),
   updated_at: z.date(),
 };

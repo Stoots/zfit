@@ -67,6 +67,7 @@ function ProgramWorkspace({ userId }: { userId: string }) {
   const startWorkout = async (
     session: TrainingProgram['phases'][number]['weeks'][number]['sessions'][number]
   ) => {
+    if (!session.workout_session_id) return;
     setStartingSession(session.id);
     setStartError(null);
     try {
@@ -124,7 +125,7 @@ function ProgramWorkspace({ userId }: { userId: string }) {
           <p className="mt-2 max-w-prose text-muted-foreground">
             {t(
               'trainingPrograms.intro',
-              'Work toward a goal over multiple weeks. Organize phases and schedule sessions using your existing Workout Plans.'
+              'Work toward a goal over multiple weeks. Organize phases and schedule Workout Sessions or Cardio Tests.'
             )}
           </p>
         </div>

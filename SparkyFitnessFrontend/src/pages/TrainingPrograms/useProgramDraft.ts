@@ -6,9 +6,13 @@ type InputPhase = TrainingProgramInput['phases'][number];
 type InputWeek = InputPhase['weeks'][number];
 type InputSession = InputWeek['sessions'][number];
 
-/** Draft sessions require an exact Workout Session selection before saving. */
-export type SessionDraft = Omit<InputSession, 'workout_session_id'> & {
+/** Draft sessions choose an exact Workout Session or a supported test. */
+export type SessionDraft = Omit<
+  InputSession,
+  'workout_session_id' | 'cardio_test_type'
+> & {
   workout_session_id: string | null;
+  cardio_test_type: string | null;
 };
 export type WeekDraft = Omit<InputWeek, 'sessions'> & {
   sessions: SessionDraft[];
@@ -50,6 +54,7 @@ function initialDraft(initial?: TrainingProgram): ProgramDraft {
               scheduled_date: session.scheduled_date,
               is_optional: session.is_optional,
               workout_session_id: session.workout_session_id,
+              cardio_test_type: session.cardio_test_type,
             })),
           })),
         })),
@@ -82,7 +87,7 @@ export function toProgramInput(
       weeks: phase.weeks.map((week, w) => ({
         ...week,
         sessions: week.sessions.flatMap((session, s) => {
-          if (session.workout_session_id === null) {
+          if (!session.workout_session_id && !session.cardio_test_type) {
             unselected.push({ phase: p + 1, week: w + 1, session: s + 1 });
             return [];
           }
@@ -90,6 +95,7 @@ export function toProgramInput(
             {
               ...session,
               workout_session_id: session.workout_session_id,
+              cardio_test_type: session.cardio_test_type ?? undefined,
             },
           ];
         }),

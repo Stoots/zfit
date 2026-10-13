@@ -85,16 +85,19 @@ function serverResponse(
         sort_order: w,
         sessions: week.sessions.map((session, s) => ({
           ...session,
+          workout_session_id: session.workout_session_id ?? null,
           is_optional: session.is_optional ?? false,
           id: session.id ?? uuid(),
           sort_order: s,
-          workout_plan_id: 17,
-          workout_session_name: 'A',
-          workout_plan_name: 'Strength A',
+          workout_plan_id: session.cardio_test_type ? null : 17,
+          workout_session_name: session.cardio_test_type ? null : 'A',
+          workout_plan_name: session.cardio_test_type ? null : 'Strength A',
+          cardio_test_type: session.cardio_test_type ?? null,
           effective_date: session.scheduled_date,
           status: 'planned',
           outcome_at: null,
           completed_workout: null,
+          completed_test_attempt: null,
         })),
       })),
     })),
@@ -357,7 +360,7 @@ it('supports authoring structure without Workout Plans and explicit session orde
   fireEvent.click(screen.getByRole('button', { name: 'Add week' }));
   expect(
     screen.getByRole('button', { name: 'Add Planned Session' })
-  ).toBeDisabled();
+  ).toBeEnabled();
   fireEvent.click(
     screen.getByRole('button', { name: 'Save Training Program' })
   );
@@ -386,6 +389,82 @@ it('supports authoring structure without Workout Plans and explicit session orde
     stored!.phases[0]!.weeks[0]!.sessions.map((session) => session.name)
   ).toEqual(['Second session', 'Base workout']);
 });
+
+it('schedules a Cardio Test without a Workout Plan and shows its linked attempt in Program history', async () => {
+  jest.mocked(getWorkoutPlanTemplates).mockResolvedValueOnce([]);
+  mount();
+  await startProgram();
+  fireEvent.click(screen.getByRole('button', { name: 'Add phase' }));
+  fill('Phase name', 'Baseline');
+  fill('Phase goal', 'Measure aerobic progress');
+  fireEvent.click(screen.getByRole('button', { name: 'Add week' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Add Planned Session' }));
+  fill('Session name', 'Cooper baseline');
+  fill('Session type', 'cardio');
+  fireEvent.click(
+    screen.getByRole('button', { name: 'Save Training Program' })
+  );
+  await screen.findByRole('heading', { name: 'Autumn 10K' });
+  const session = stored!.phases[0]!.weeks[0]!.sessions[0]!;
+  expect(session).toMatchObject({
+    workout_session_id: null,
+    cardio_test_type: 'cooper_run',
+  });
+  expect(
+    screen.getByRole('link', { name: 'Record Test Attempt' })
+  ).toHaveAttribute('href', `/cardio-tests?planned_session_id=${session.id}`);
+  session.status = 'completed';
+  session.completed_test_attempt = {
+    id: uuid(),
+    test_type: 'cooper_run',
+    attempt_date: '2026-10-25',
+    results: { distance_meters: 2520 },
+  };
+  fireEvent.click(
+    screen.getByRole('button', { name: 'All Training Programs' })
+  );
+  fireEvent.click(await screen.findByRole('link', { name: 'View Autumn 10K' }));
+  expect(await screen.findByText(/Linked Test Attempt:/)).toBeInTheDocument();
+  expect(screen.getByText(/2520 m/)).toBeInTheDocument();
+});
+
+it.each([
+  ['sprint_6s', 'sprint_6s'],
+  ['power_30s', 'power_30s'],
+])(
+  'links a planned %s assessment to its matching web form',
+  async (protocol, routeProtocol) => {
+    jest.mocked(getWorkoutPlanTemplates).mockResolvedValueOnce([]);
+    mount();
+    await startProgram();
+    fireEvent.click(screen.getByRole('button', { name: 'Add phase' }));
+    fill('Phase name', 'Baseline');
+    fill('Phase goal', 'Measure power');
+    fireEvent.click(screen.getByRole('button', { name: 'Add week' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Add Planned Session' })
+    );
+    fill('Session name', 'Power baseline');
+    fill('Session type', 'cardio');
+    fill('Cardio Test protocol', protocol);
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Save Training Program' })
+    );
+    await screen.findByRole('heading', { name: 'Autumn 10K' });
+    const session = stored!.phases[0]!.weeks[0]!.sessions[0]!;
+    expect(session).toMatchObject({
+      cardio_test_type: protocol,
+      status: 'planned',
+      completed_test_attempt: null,
+    });
+    expect(
+      screen.getByRole('link', { name: 'Record Test Attempt' })
+    ).toHaveAttribute(
+      'href',
+      `/cardio-tests?planned_session_id=${session.id}&protocol=${routeProtocol}`
+    );
+  }
+);
 
 it('does not expose owner data or authoring while acting as a family delegate', () => {
   mockActor.delegated = true;
