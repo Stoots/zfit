@@ -29,6 +29,19 @@ module.exports = defineConfig([
     ignores: ['dist/*'],
   },
   {
+    files: ['**/*.{js,jsx,ts,tsx,mjs,cjs}'],
+    rules: {
+      'no-restricted-properties': [
+        'error',
+        {
+          object: 'Promise',
+          property: 'withResolvers',
+          message: 'Unavailable in jest-expo.',
+        },
+      ],
+    },
+  },
+  {
     // Expo SDK 56's eslint-config enables eslint-plugin-react-hooks' React
     // Compiler rules. The pre-existing backlog these surfaced has been worked
     // down to zero, so they are enforced as errors (and "lint" runs with
