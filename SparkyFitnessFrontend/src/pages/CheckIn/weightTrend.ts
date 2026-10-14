@@ -13,7 +13,7 @@ export function weightTrend(
       .map((row) => [row.entry_date, row.weight as number])
   );
   const average = (end: string) => {
-    const values = Array.from({ length: 7 }, (_, index) =>
+    const values = Array.from({ length: 30 }, (_, index) =>
       weights.get(addDays(end, -index))
     ).filter((value): value is number => value !== undefined);
     return values.length
@@ -21,7 +21,7 @@ export function weightTrend(
       : null;
   };
   const current = average(selectedDate);
-  const previous = average(addDays(selectedDate, -7));
+  const previous = average(addDays(selectedDate, -30));
   return {
     current,
     delta: current !== null && previous !== null ? current - previous : null,

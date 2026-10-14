@@ -28,7 +28,6 @@ function ProfileCooperRunTests() {
   const [attemptDate, setAttemptDate] = useState('');
   const [distance, setDistance] = useState('');
   const latest = attempts.data?.at(-1);
-  const first = attempts.data?.[0];
   const mutation = editing ? update : create;
   const pending = create.isPending || update.isPending;
   const savingRef = useRef(false);
@@ -213,17 +212,6 @@ function ProfileCooperRunTests() {
                     'Cooper run distance trend by date'
                   )}
                   valueLabel={t('cardioTests.cooper.distanceLabel', 'Distance')}
-                  target={
-                    first
-                      ? {
-                          value: first.distance_meters,
-                          label: t(
-                            'cardioTests.cooper.firstAttempt',
-                            'First attempt'
-                          ),
-                        }
-                      : undefined
-                  }
                   formatValue={(value) => `${value.toLocaleString()} m`}
                 />
                 <ol

@@ -3394,9 +3394,9 @@
     "title": "Check-In",
     "trendWeight": {
       "title": "Trend weight",
-      "weeklyDelta": "{{delta}} {{unit}} this week",
-      "noComparison": "Log weight in both weeks to see the change.",
-      "method": "Average of logged weights over 7 days, compared with the previous 7 days.",
+      "monthlyDelta": "{{delta}} {{unit}} this month",
+      "noComparison": "Log weight in both 30-day periods to see the change.",
+      "method": "Average of logged weights over 30 days, compared with the previous 30 days.",
       "chart": "Weight trend · 30 days",
       "goal": "Goal weight"
     },
@@ -6064,6 +6064,7 @@
     "durationSec": "Duration (s)",
     "durationSecShort": "Sec",
     "distanceUnit": "Distance ({{unit}})",
+    "distanceSet": "Distance set {{setNumber}} ({{unit}})",
     "durationSet": "Duration set {{setNumber}}",
     "notesPlaceholder": "Add a note for this set...",
     "reps": "Reps",
@@ -7021,8 +7022,7 @@
       "distanceLabel": "Distance",
       "empty": "No Cooper run Test Attempts recorded yet.",
       "chartA11y": "Cooper run distance trend by date",
-      "latestResult": "Latest Cooper run",
-      "firstAttempt": "First attempt"
+      "latestResult": "Latest Cooper run"
     }
   },
   "workoutPlanBulk": {

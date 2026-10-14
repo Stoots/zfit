@@ -112,6 +112,7 @@ export type WorkoutSetEditableField =
   | 'reps'
   | 'weight'
   | 'duration'
+  | 'distance'
   | 'rest_time'
   | 'set_type'
   | 'rpe'

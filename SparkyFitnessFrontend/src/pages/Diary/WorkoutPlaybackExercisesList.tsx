@@ -2,11 +2,12 @@ import { useState, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeftRight, ChevronDown } from 'lucide-react';
 import {
+  carryDistanceUnitLabel,
   DEFAULT_DROP_SET_COUNT,
   DEFAULT_DROP_SET_PERCENT,
   findDropSetBaseIndex,
 } from '@workspace/shared';
-import type { WeightUnit } from '@/contexts/PreferencesContext';
+import { usePreferences, type WeightUnit } from '@/contexts/PreferencesContext';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { SET_TABLE_LAYOUT, toSetTableModality } from '@/constants/exercises';
 import { Label } from '@/components/ui/label';
@@ -67,6 +68,7 @@ const WorkoutPlaybackExercisesList = ({
   weightUnit,
 }: WorkoutPlaybackExercisesListProps) => {
   const { t } = useTranslation();
+  const { distanceUnit } = usePreferences();
   const [expandedCompletedExercises, setExpandedCompletedExercises] = useState<
     Record<string, boolean>
   >({});
@@ -233,7 +235,9 @@ const WorkoutPlaybackExercisesList = ({
                       {layout.showReps
                         ? t('exercise.workoutPlaybackPage.columnReps', 'Reps')
                         : layout.showDistance
-                          ? t('workout.distance', 'Distance')
+                          ? t('workout.distanceUnit', 'Distance ({{unit}})', {
+                              unit: carryDistanceUnitLabel(distanceUnit),
+                            })
                           : t('workout.durationSec', 'Duration (s)')}
                     </span>
                     <span>{t('workout.rpe', 'RPE')}</span>

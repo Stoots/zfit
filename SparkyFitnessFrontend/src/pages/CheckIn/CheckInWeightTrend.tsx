@@ -26,7 +26,7 @@ export function CheckInWeightTrend({
     data = [],
     isPending,
     isError,
-  } = useRecentStandardMeasurements(addDays(selectedDate, -35), selectedDate);
+  } = useRecentStandardMeasurements(addDays(selectedDate, -59), selectedDate);
   const { data: profile } = useProfileQuery(activeUserId || user?.id);
   const unit = weightUnit === 'st_lbs' ? 'lbs' : weightUnit;
   const convert = (value: number) => convertWeight(value, 'kg', unit);
@@ -73,14 +73,14 @@ export function CheckInWeightTrend({
                       'Failed to load recent standard measurements.'
                     )
                   : trend.delta !== null
-                    ? t('checkIn.trendWeight.weeklyDelta', {
+                    ? t('checkIn.trendWeight.monthlyDelta', {
                         delta: format(convert(trend.delta), true),
                         unit,
-                        defaultValue: '{{delta}} {{unit}} this week',
+                        defaultValue: '{{delta}} {{unit}} this month',
                       })
                     : t(
                         'checkIn.trendWeight.noComparison',
-                        'Log weight in both weeks to see the change.'
+                        'Log weight in both 30-day periods to see the change.'
                       )
               }
             />
@@ -88,7 +88,7 @@ export function CheckInWeightTrend({
           <p className="text-sm text-muted-foreground">
             {t(
               'checkIn.trendWeight.method',
-              'Average of logged weights over 7 days, compared with the previous 7 days.'
+              'Average of logged weights over 30 days, compared with the previous 30 days.'
             )}
           </p>
         </div>
