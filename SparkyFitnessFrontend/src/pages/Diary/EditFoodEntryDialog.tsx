@@ -54,9 +54,9 @@ import { useEntryImageDraft } from '@/hooks/Diary/useEntryImageDraft';
 import { getAiEstimateLabel } from '@/utils/aiConfidenceLabels';
 
 const AI_PICKER_ICON_TONE_CLASSES: Record<ConfidenceTone, string> = {
-  success: 'text-emerald-600 dark:text-emerald-400',
-  warning: 'text-amber-600 dark:text-amber-400',
-  error: 'text-rose-600 dark:text-rose-400',
+  success: 'text-success text-success',
+  warning: 'text-warning text-warning',
+  error: 'text-destructive text-destructive',
 };
 
 interface EditFoodEntryDialogProps {
@@ -392,14 +392,14 @@ const EditFoodEntryDialog = ({
             )}
           </DialogDescription>
           {isFoodFound ? (
-            <p className="text-sm text-red-500 mt-2">
+            <p className="text-sm text-destructive mt-2">
               {t(
                 'editFoodEntry.latestVariantNote',
                 'Note: Updating this entry will use the latest available variant details for the food, not the original snapshot.'
               )}
             </p>
           ) : (
-            <p className="text-sm text-amber-600 dark:text-amber-400 mt-2">
+            <p className="text-sm text-warning mt-2">
               {t(
                 'editFoodEntry.deletedFoodNote',
                 'This food is no longer in your food database. Showing details saved in this diary entry.'
@@ -418,7 +418,7 @@ const EditFoodEntryDialog = ({
                   {entry.food_name}
                 </h3>
                 {entry.brand_name && (
-                  <p className="text-sm text-gray-600 mb-4">
+                  <p className="text-sm text-muted-foreground mb-4">
                     {entry.brand_name}
                   </p>
                 )}
@@ -495,7 +495,7 @@ const EditFoodEntryDialog = ({
                                   <span className="flex items-center gap-1.5">
                                     {u}
                                     {compatible && (
-                                      <Check className="h-3 w-3 text-green-500" />
+                                      <Check className="h-3 w-3 text-success" />
                                     )}
                                   </span>
                                 </SelectItem>

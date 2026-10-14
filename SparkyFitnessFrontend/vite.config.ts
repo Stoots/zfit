@@ -80,6 +80,7 @@ export default defineConfig(({ mode }) => {
             ],
           },
           workbox: {
+            globPatterns: ['**/*.{js,css,html,ico,png,svg,webp,woff2}'],
             maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5MB
             navigateFallback: '/index.html',
             navigateFallbackDenylist: [/^\/api/, /^\/uploads/], // Don't serve index.html for API or Uploads

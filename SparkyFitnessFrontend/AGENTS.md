@@ -1,6 +1,6 @@
 # AGENTS.md
 
-_Last updated: 2026-10-13_
+_Last updated: 2026-10-15_
 
 SparkyFitness Frontend is the React web app for the SparkyFitness monorepo. Use this file as the primary guide for work inside `SparkyFitnessFrontend/`.
 
@@ -49,6 +49,7 @@ Features are organized by domain, and the same domain folder name appears in `sr
 
 ## Source Map
 
+- `src/index.css` and `DESIGN.md` - shared visual tokens, self-hosted Figtree text and rounded numerals, light/dark themes. Metric building blocks live in `src/components/ui/{numeral,stat-rows,macro-chips,trend-chart,ambient-glow}.tsx`.
 - `src/main.tsx` - app bootstrap; creates the shared `QueryClient` with global `QueryCache`/`MutationCache` handlers that render toasts from query/mutation `meta` (`errorTitle`, `errorMessage`, `successMessage`).
 - `src/App.tsx` - route registry via `createBrowserRouter`, plus `PrivateRoute` and `PermissionRoute` wrappers (permission-gated areas include `reports` and `admin`).
 - `src/pages/CardioTests/CooperRunTests.tsx`, `src/api/CardioTests/cardioTests.ts`, and `src/hooks/CardioTests/useCooperRunAttempts.ts` - Cooper run Test Attempt entry/edit, dated history, and trend.
@@ -101,6 +102,7 @@ When searching, ignore `node_modules/`, `dist/`, and every locale except `public
 - Auth/session issue: `src/lib/auth-client.ts`, `src/hooks/useAuth.tsx`, `src/pages/Auth/`, and the server's `auth.ts` if it crosses packages.
 - Family-access/acting-user issue: `src/contexts/ActiveUserContext.tsx` and the hooks consuming it.
 - Chat (Sparky) issue: `src/pages/Chat/`, `src/components/ai/`, `src/api/Chatbot/`.
+- Visual redesign or shared UI: read `DESIGN.md` and the matching `.impeccable/surfaces/` brief; reuse the metric building blocks and semantic colors before adding local styles.
 - Theme/preferences issue: `src/contexts/ThemeContext.tsx`, `src/contexts/PreferencesContext.tsx`, `src/api/Settings/preferences.ts`, `src/utils/userPreferences.ts`.
 - Missing/wrong UI text: the i18n key in `public/locales/en/translation.json` and the `t('...')` call site.
 - Exercise alternatives / workout feedback / adaptive suggestions (#1560): `AddExerciseDialog`'s `replaceFor` prop adds the **Suggested** tab (`pages/Exercises/ExerciseAlternativesPanel.tsx`); the workout player's Replace (lazy-loaded dialog) and load pass (`WorkoutPlaybackPage.tsx`, helpers in `utils/workoutPlayback.ts`) apply the shared `decideAdaptiveAdjustment` rules and keep both the usual and adapted sets on the draft for "Use my usual"; feedback is `pages/Diary/WorkoutFeedbackPanel.tsx` (finish dialog + expanded diary workout) via `hooks/Exercises/useWorkoutCoaching.ts`.

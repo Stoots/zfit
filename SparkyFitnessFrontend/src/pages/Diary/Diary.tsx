@@ -4,6 +4,8 @@ import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useActiveUser } from '@/contexts/ActiveUserContext';
 import { usePreferences } from '@/contexts/PreferencesContext';
 import DayNavigator from '@/components/DayNavigator';
+import ThemeToggle from '@/components/ThemeToggle';
+import ProfileSwitcher from '@/components/ProfileSwitcher';
 import NutritionSummaryCard, { DayTotals } from './NutritionSummaryCard';
 import DailyProgress from './DailyProgress';
 import WaterIntake from './WaterIntake';
@@ -373,7 +375,9 @@ const Diary = () => {
         key: 'energy',
         title: t('diary.dailyEnergyGoal', 'Daily Energy Goal'),
         icon: Flame,
-        render: () => <DailyProgress selectedDate={selectedDate} />,
+        render: () => (
+          <DailyProgress selectedDate={selectedDate} dayTotals={dayTotals} />
+        ),
       },
       {
         key: 'nutrition',
@@ -497,22 +501,27 @@ const Diary = () => {
 
   if (loading) return <div>{t('common.loading', 'Loading...')}</div>;
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b">
-        <div />
-        <div className="flex min-w-0 flex-wrap items-center gap-2 sm:ml-auto">
+    <div className="space-y-4 md:space-y-6">
+      <div className="flex items-center gap-1 border-b py-2 pt-[max(0.5rem,env(safe-area-inset-top))] md:pt-0">
+        <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-1">
           <div
             ref={setToolbarContainer}
-            className="flex min-w-0 flex-wrap items-center gap-2"
+            className="order-2 flex min-w-0 flex-wrap items-center gap-2"
           />
           <DayNavigator
+            showTodayLabel
+            compactOnMobile
             selectedDate={selectedDate}
             onDateChange={(dateString) => {
               setSelectedDate(dateString);
               setSearchParams({ date: dateString });
             }}
-            className="grid-cols-none flex mb-0 items-center gap-2"
+            className="grid-cols-none flex mb-0 min-w-0 flex-1 md:flex-none items-center gap-1"
           />
+        </div>
+        <div className="flex shrink-0 items-center md:hidden">
+          <ProfileSwitcher />
+          <ThemeToggle />
         </div>
       </div>
 

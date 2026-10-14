@@ -60,13 +60,13 @@ const WorkoutPlaybackDialogs = ({
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="flex flex-wrap gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {REST_PRESETS.map((seconds) => (
                 <Button
                   key={seconds}
                   type="button"
                   variant="outline"
-                  className="tabular-nums"
+                  className="h-12 font-numeral text-lg tabular-nums"
                   onClick={() => onUpdateRestForPointer(seconds)}
                 >
                   {formatSecondsClock(seconds)}
@@ -95,7 +95,7 @@ const WorkoutPlaybackDialogs = ({
                 }
               />
             </div>
-            <div className="flex justify-end gap-2">
+            <div className="grid grid-cols-2 gap-2 border-t pt-4">
               <Button
                 type="button"
                 variant="outline"

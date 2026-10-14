@@ -7,6 +7,7 @@ import type {
 } from '@workspace/shared';
 import { useExerciseEntries } from '@/hooks/Exercises/useExerciseEntries';
 import { Button } from '@/components/ui/button';
+import { StatRows } from '@/components/ui/stat-rows';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -84,6 +85,25 @@ export default function ProgramSessionOutcome({
             {session.name} · {session.effective_date}
           </DialogDescription>
         </DialogHeader>
+        <StatRows
+          rows={[
+            {
+              id: 'session',
+              label: t('trainingPrograms.sessionName', 'Session name'),
+              value: session.name,
+            },
+            {
+              id: 'date',
+              label: t('trainingPrograms.sessionDate', 'Session date'),
+              value: session.effective_date,
+            },
+            {
+              id: 'workout',
+              label: t('trainingPrograms.workoutSession', 'Workout Session'),
+              value: session.workout_session_name,
+            },
+          ]}
+        />
         {status === 'missed' ? (
           <p className="text-sm">
             {autoShift
@@ -158,7 +178,7 @@ export default function ProgramSessionOutcome({
                 </Label>
                 <select
                   id="completed-workout"
-                  className="flex h-11 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="flex h-11 w-full rounded-md border border-input bg-background px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   value={selected}
                   disabled={pending}
                   onChange={(event) => setSelected(event.target.value)}
@@ -198,7 +218,7 @@ export default function ProgramSessionOutcome({
             {error}
           </p>
         )}
-        <DialogFooter>
+        <DialogFooter className="sticky bottom-0 border-t bg-background pt-3 [&>button]:whitespace-normal">
           <Button
             variant="outline"
             className="min-h-11"

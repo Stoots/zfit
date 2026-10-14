@@ -84,7 +84,7 @@ const AdaptiveSuggestionNotice = ({
 
   return (
     <div
-      className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border bg-muted/40 px-2.5 py-1.5 text-xs"
+      className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-primary/20 bg-accent px-3 py-3 text-sm text-accent-foreground"
       data-testid="adaptive-suggestion-notice"
       role="status"
     >
@@ -97,7 +97,7 @@ const AdaptiveSuggestionNotice = ({
           type="button"
           variant="link"
           size="sm"
-          className="h-auto p-0 text-xs"
+          className="min-h-11 h-auto whitespace-normal px-2 text-sm"
           onClick={() => onDeclinedChange(!declined)}
         >
           {declined
@@ -110,7 +110,7 @@ const AdaptiveSuggestionNotice = ({
           type="button"
           variant="link"
           size="sm"
-          className="h-auto p-0 text-xs"
+          className="min-h-11 h-auto whitespace-normal px-2 text-sm"
           onClick={onSeeAlternatives}
         >
           {t('adaptiveCoaching.seeAlternatives', 'See alternatives')}

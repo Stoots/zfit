@@ -1,3 +1,4 @@
+import { Progress } from '@/components/ui/progress';
 import { useState } from 'react';
 import { instantHourMinute, dayToUtcRange } from '@workspace/shared';
 import { useTranslation } from 'react-i18next';
@@ -241,15 +242,15 @@ const WaterIntake = ({ selectedDate }: WaterIntakeProps) => {
   return (
     <Card className="h-full flex flex-col">
       <CardHeader className="pb-2">
-        <CardTitle className="flex items-center text-base dark:text-slate-300">
+        <CardTitle className="flex items-center text-base text-muted-foreground">
           <Droplet className="w-4 h-4 mr-2" />
           {t('foodDiary.waterIntake.title', 'Water Intake')}
         </CardTitle>
       </CardHeader>
-      <CardContent className="flex-1 flex flex-col justify-between p-3 dark:text-slate-300">
+      <CardContent className="flex-1 flex flex-col px-5 pb-5">
         {/* Water count display */}
-        <div className="text-center mb-3">
-          <div className="text-xl font-bold">
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1 mb-3">
+          <div className="text-2xl font-numeral font-bold">
             {(() => {
               const activeUnit = currentContainer?.unit || water_display_unit;
               const val = convertMlToSelectedUnit(waterMl, activeUnit);
@@ -259,7 +260,7 @@ const WaterIntake = ({ selectedDate }: WaterIntakeProps) => {
               return `${parseFloat(val.toFixed(decimals))} / ${parseFloat(goalVal.toFixed(decimals))}`;
             })()}
           </div>
-          <div className="text-gray-500 text-xs">
+          <div className="text-muted-foreground text-xs">
             {currentContainer?.unit || water_display_unit}
           </div>
           {foodWaterMl > 0 && (
@@ -278,47 +279,14 @@ const WaterIntake = ({ selectedDate }: WaterIntakeProps) => {
           )}
         </div>
 
-        {/* Water Bottle Visualization - takes up most space */}
-        <div className="flex-1 flex flex-col items-center justify-center mb-3">
-          <div className="relative flex flex-col items-center">
-            {/* Bottle Cap */}
-            <div className="w-5 h-1.5 bg-blue-400 rounded-t-sm mb-0.5"></div>
-
-            {/* Bottle Neck */}
-            <div className="w-7 h-5 bg-gray-100 dark:bg-slate-200 border-2 border-blue-400 rounded-sm mb-0.5"></div>
-
-            {/* Main Bottle Body */}
-            <div className="relative w-16 h-32 border-3 dark:bg-slate-300 border-blue-400 rounded-xl bg-gray-50 overflow-hidden">
-              {/* Water Fill */}
-              <div
-                className="absolute bottom-0 w-full bg-gradient-to-t from-blue-500 via-blue-400 to-blue-300 transition-all duration-700 ease-out rounded-b-xl"
-                style={{ height: `${fillPercentage}%` }}
-              >
-                {/* Water Surface Ripple Effect */}
-                {fillPercentage > 0 && (
-                  <div className="absolute top-0 w-full h-0.5 bg-blue-200 opacity-60 animate-pulse"></div>
-                )}
-              </div>
-
-              {/* Bottle Highlight */}
-              <div className="absolute top-3 left-2 w-2.5 h-10 bg-white opacity-30 rounded-full"></div>
-
-              {/* Water Level Lines */}
-              <div className="absolute inset-0 flex flex-col justify-between p-0.5">
-                {[...Array(4)].map((_, i) => (
-                  <div
-                    key={i}
-                    className="w-full h-px bg-blue-200 opacity-40"
-                  ></div>
-                ))}
-              </div>
-            </div>
-
-            {/* Progress Percentage */}
-            <div className="text-xs text-gray-600 mt-1.5 font-medium">
-              {Math.round(fillPercentage)}%
-            </div>
-          </div>
+        <div className="mb-4 flex items-center gap-3">
+          <Progress
+            value={fillPercentage}
+            className="h-1.5 flex-1 [&>div]:bg-water"
+          />
+          <span className="text-xs tabular-nums text-muted-foreground">
+            {Math.round(fillPercentage)}%
+          </span>
         </div>
 
         {/* Intuitive Water Controls: [ - ] VOLUME [ + ] */}
@@ -328,7 +296,7 @@ const WaterIntake = ({ selectedDate }: WaterIntakeProps) => {
             onClick={() => adjustWater(-1)}
             disabled={manualWaterMl <= 0 || loading}
             size="icon"
-            className="h-8 w-8 rounded-full"
+            className="h-11 w-11 rounded-full"
             title={
               manualWaterMl <= 0 && waterMl > 0
                 ? t(
@@ -342,7 +310,7 @@ const WaterIntake = ({ selectedDate }: WaterIntakeProps) => {
           </Button>
 
           <div className="text-center min-w-[70px]">
-            <div className="text-sm font-bold text-blue-600 dark:text-blue-400">
+            <div className="text-sm font-bold text-primary">
               {getVolumeDisplay()}
             </div>
           </div>
@@ -351,26 +319,26 @@ const WaterIntake = ({ selectedDate }: WaterIntakeProps) => {
             onClick={() => adjustWater(1)}
             disabled={loading}
             size="icon"
-            className="h-8 w-8 rounded-full bg-blue-600 hover:bg-blue-700 text-white"
+            className="h-11 w-11 rounded-full"
           >
             <Plus className="h-4 w-4" />
           </Button>
         </div>
 
         {/* Container Toggle (Source) */}
-        <div className="flex items-center justify-center mt-3 pt-2 border-t border-gray-100 dark:border-slate-800 space-x-1">
+        <div className="flex items-center justify-center mt-3 pt-2 border-t border-border space-x-1">
           <Button
             variant="ghost"
             size="icon"
             onClick={() => cycleContainer('prev')}
             disabled={standardContainers.length <= 1}
-            className="h-6 w-6 text-gray-400 hover:text-gray-600"
+            className="h-11 w-11 text-muted-foreground hover:text-muted-foreground"
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
 
           <div className="flex items-center justify-center space-x-1 px-1">
-            <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest truncate max-w-[110px]">
+            <div className="text-xs font-bold text-muted-foreground uppercase tracking-widest truncate max-w-[110px]">
               {currentContainer?.name ||
                 t('foodDiary.waterIntake.defaultContainer', 'Container')}
             </div>
@@ -382,11 +350,11 @@ const WaterIntake = ({ selectedDate }: WaterIntakeProps) => {
                 )}
                 className="inline-flex items-center"
               >
-                <Utensils className="w-2.5 h-2.5 text-blue-500 shrink-0" />
+                <Utensils className="w-2.5 h-2.5 text-primary shrink-0" />
               </span>
             )}
             {currentContainer?.is_primary && (
-              <Star className="w-2.5 h-2.5 text-amber-500 fill-amber-500" />
+              <Star className="w-2.5 h-2.5 text-warning fill-warning" />
             )}
           </div>
 
@@ -395,7 +363,7 @@ const WaterIntake = ({ selectedDate }: WaterIntakeProps) => {
             size="icon"
             onClick={() => cycleContainer('next')}
             disabled={standardContainers.length <= 1}
-            className="h-6 w-6 text-gray-400 hover:text-gray-600"
+            className="h-11 w-11 text-muted-foreground hover:text-muted-foreground"
           >
             <ChevronRight className="h-4 w-4" />
           </Button>
@@ -403,8 +371,8 @@ const WaterIntake = ({ selectedDate }: WaterIntakeProps) => {
 
         {/* Quick-Add Drink Presets */}
         {quickAddPresets.length > 0 && (
-          <div className="mt-3 pt-2 border-t border-gray-100 dark:border-slate-800">
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-1.5">
+          <div className="mt-3 pt-2 border-t border-border">
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
               {t('drink_presets.quickAdd', 'Quick-Add Drinks')}
             </div>
             <div className="grid grid-cols-2 gap-1.5">
@@ -413,26 +381,26 @@ const WaterIntake = ({ selectedDate }: WaterIntakeProps) => {
                   key={preset.id}
                   onClick={() => saveWaterIntake(1, preset.id)}
                   disabled={loading}
-                  className="flex items-center justify-between p-1.5 rounded-lg border border-gray-200 dark:border-slate-800 bg-white dark:bg-slate-800/60 hover:bg-blue-50/50 dark:hover:bg-slate-700/50 text-left transition-colors cursor-pointer group"
+                  className="flex items-center justify-between min-h-11 p-2 rounded-lg border border-border bg-card hover:bg-muted text-left transition-colors cursor-pointer group"
                 >
                   <div className="min-w-0 pr-1">
-                    <div className="text-xs font-medium text-gray-800 dark:text-gray-200 truncate">
+                    <div className="text-xs font-medium text-foreground truncate">
                       {preset.name}
                     </div>
-                    <div className="text-[10px] text-muted-foreground flex items-center gap-1">
+                    <div className="text-xs text-muted-foreground flex items-center gap-1">
                       {/* A preset is linked to a food and carries volume 0,
                           so describe the press by what it logs. */}
                       <span>
                         {describeContainerPress(preset, { nonMlDecimals: 1 })}
                       </span>
                       {preset.hydration_factor === 0 && (
-                        <span className="text-[9px] text-amber-600 dark:text-amber-400 font-mono">
+                        <span className="text-xs text-warning font-mono">
                           0% water
                         </span>
                       )}
                     </div>
                   </div>
-                  <div className="shrink-0 h-5 w-5 rounded-full bg-blue-50 dark:bg-blue-950/60 group-hover:bg-blue-600 group-hover:text-white text-blue-600 dark:text-blue-400 flex items-center justify-center transition-colors">
+                  <div className="shrink-0 h-5 w-5 rounded-full bg-primary/10 group-hover:bg-primary/10 group-hover:text-foreground text-primary flex items-center justify-center transition-colors">
                     <Plus className="h-3 w-3" />
                   </div>
                 </button>
@@ -443,10 +411,10 @@ const WaterIntake = ({ selectedDate }: WaterIntakeProps) => {
 
         {/* Drink History Log */}
         {logEntries.length > 0 && (
-          <div className="mt-3 pt-2 border-t border-gray-100 dark:border-slate-800">
+          <div className="mt-3 pt-2 border-t border-border">
             <button
               onClick={() => setShowLog(!showLog)}
-              className="flex items-center justify-between w-full text-xs font-medium text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 transition-colors"
+              className="flex min-h-11 items-center justify-between w-full text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
             >
               <span>
                 {t('foodDiary.waterIntake.logTitle', "Today's drinks")} (
@@ -464,13 +432,13 @@ const WaterIntake = ({ selectedDate }: WaterIntakeProps) => {
                 {logEntries.map((entry) => (
                   <div
                     key={entry.id}
-                    className="flex items-center justify-between py-1 px-1.5 rounded text-xs bg-gray-50 dark:bg-slate-800/50 group"
+                    className="flex items-center justify-between py-1 px-1.5 rounded text-xs bg-muted group"
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       {editingTimeId === entry.id ? (
                         <input
                           type="time"
-                          className="text-xs tabular-nums bg-white dark:bg-slate-700 border border-blue-300 dark:border-blue-600 rounded px-1 py-0.5 text-gray-700 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-400 w-[72px]"
+                          className="text-xs tabular-nums bg-card border border-primary/30 rounded px-1 py-0.5 text-foreground focus:outline-none focus:ring-1 focus:ring-ring w-[72px]"
                           defaultValue={getTimeInputValue(
                             entry.logged_at || entry.created_at
                           )}
@@ -497,7 +465,7 @@ const WaterIntake = ({ selectedDate }: WaterIntakeProps) => {
                       ) : (
                         <button
                           onClick={() => setEditingTimeId(entry.id)}
-                          className="text-gray-400 dark:text-gray-500 tabular-nums shrink-0 hover:text-blue-500 dark:hover:text-blue-400 hover:underline cursor-pointer transition-colors"
+                          className="text-muted-foreground tabular-nums shrink-0 hover:text-primary hover:underline cursor-pointer transition-colors"
                           title={t(
                             'foodDiary.waterIntake.editTime',
                             'Click to change time'
@@ -506,7 +474,7 @@ const WaterIntake = ({ selectedDate }: WaterIntakeProps) => {
                           {formatLogTime(entry.logged_at || entry.created_at)}
                         </button>
                       )}
-                      <span className="text-gray-600 dark:text-gray-300 truncate">
+                      <span className="text-muted-foreground truncate">
                         {entry.container_name ||
                           t(
                             'foodDiary.waterIntake.defaultContainer',
@@ -521,14 +489,14 @@ const WaterIntake = ({ selectedDate }: WaterIntakeProps) => {
                           )}
                           className="inline-flex items-center"
                         >
-                          <Utensils className="w-3 h-3 text-blue-500 shrink-0" />
+                          <Utensils className="w-3 h-3 text-primary shrink-0" />
                         </span>
                       )}
                       {/* Synced entries are labelled so it's clear why the "-"
                           control can't remove them; manual rows stay unlabelled
                           to keep the common case uncluttered. */}
                       {!isManualSource(entry.source) && (
-                        <span className="shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium bg-gray-100 text-gray-600 dark:bg-slate-800 dark:text-gray-300">
+                        <span className="shrink-0 rounded px-1.5 py-0.5 text-xs font-medium bg-muted text-muted-foreground">
                           {prettifySource(entry.source)}
                         </span>
                       )}
@@ -549,7 +517,7 @@ const WaterIntake = ({ selectedDate }: WaterIntakeProps) => {
                           {t('foodDiary.waterIntake.noWaterCredit', 'no water')}
                         </span>
                       ) : (
-                        <span className="font-medium text-blue-600 dark:text-blue-400">
+                        <span className="font-medium text-primary">
                           {(() => {
                             const val = convertMlToSelectedUnit(
                               Number(entry.water_ml),
@@ -573,7 +541,7 @@ const WaterIntake = ({ selectedDate }: WaterIntakeProps) => {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+                          className="h-11 w-11 transition-opacity text-destructive hover:text-destructive hover:bg-destructive/10"
                           onClick={() => deleteLogEntry(entry.id)}
                           disabled={deleting}
                           title={t(

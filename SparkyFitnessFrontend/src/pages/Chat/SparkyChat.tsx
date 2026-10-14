@@ -89,7 +89,7 @@ const SparkyChat = () => {
             'fixed z-50 flex flex-col bg-background shadow-2xl border transition-all duration-300 ease-in-out',
             'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
             isMinimized
-              ? 'bottom-4 right-4 h-14 w-[calc(100%-2rem)] sm:w-80 rounded-lg overflow-hidden'
+              ? 'bottom-[calc(5rem+env(safe-area-inset-bottom))] sm:bottom-4 right-4 h-14 w-[calc(100%-2rem)] sm:w-80 rounded-lg overflow-hidden'
               : 'inset-y-0 right-0 w-full sm:w-[500px] sm:max-w-[500px] border-l p-0'
           )}
         >

@@ -32,7 +32,7 @@ const ThemeToggle = () => {
       variant="outline"
       size="sm"
       onClick={toggleTheme}
-      className="w-9 h-9 p-0"
+      className="w-11 h-11 p-0"
       title={getLabel()}
     >
       {getIcon()}

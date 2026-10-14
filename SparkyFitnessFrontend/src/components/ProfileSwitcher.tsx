@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useState } from 'react';
 import {
   Select,
@@ -10,6 +11,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { Users, User, Loader2 } from 'lucide-react';
 
 const ProfileSwitcher = () => {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const { activeUserId, isActingOnBehalf, accessibleUsers, switchToUser } =
     useActiveUser();
@@ -50,14 +52,17 @@ const ProfileSwitcher = () => {
       onValueChange={handleValueChange}
       disabled={isSwitching}
     >
-      <SelectTrigger className="w-auto h-9 p-2 border-none bg-transparent hover:bg-accent">
+      <SelectTrigger
+        aria-label={t('nav.switchProfile', 'Switch profile')}
+        className="w-auto h-11 min-w-11 p-2 rounded-full border-none bg-transparent hover:bg-accent"
+      >
         {isSwitching ? (
           <Loader2 className="h-4 w-4 animate-spin" />
         ) : (
           <Users className="h-4 w-4" />
         )}
         {isActingOnBehalf && (
-          <div className="w-2 h-2 bg-blue-500 rounded-full ml-1" />
+          <div className="w-2 h-2 bg-primary rounded-full ml-1" />
         )}
       </SelectTrigger>
       <SelectContent>
@@ -75,7 +80,7 @@ const ProfileSwitcher = () => {
             <div className="flex items-center gap-2">
               <User className="h-4 w-4" />
               <span>{accessibleUser.full_name || accessibleUser.email}</span>
-              <span className="text-xs text-gray-500">(Family)</span>
+              <span className="text-xs text-muted-foreground">(Family)</span>
             </div>
           </SelectItem>
         ))}

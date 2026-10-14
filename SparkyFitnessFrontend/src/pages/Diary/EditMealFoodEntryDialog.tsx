@@ -70,7 +70,7 @@ const EditMealFoodEntryDialog = ({
           <DialogDescription>
             Modify the foods and quantities for this specific logged meal entry.
           </DialogDescription>
-          <p className="text-sm text-blue-500 mt-2">
+          <p className="text-sm text-primary mt-2">
             Note: Changes made here will only affect this specific entry in your
             food diary, not the master meal template.
           </p>

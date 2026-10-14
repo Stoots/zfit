@@ -61,7 +61,7 @@ const WorkoutFeedbackPanel = ({
         <Button
           type="button"
           variant="link"
-          className="h-auto p-0"
+          className="min-h-11 h-auto px-0"
           onClick={() => void reload()}
         >
           {t('workoutFeedback.tryAgain', 'Try again')}
@@ -74,7 +74,7 @@ const WorkoutFeedbackPanel = ({
     current === value ? null : value;
 
   return (
-    <div className="space-y-3 rounded-lg border p-4 text-left">
+    <div className="space-y-4 border-t py-4 text-left">
       <div className="flex items-baseline justify-between gap-2">
         <h3 className="font-semibold">
           {t('workoutFeedback.title', 'How did it feel?')}
@@ -91,12 +91,13 @@ const WorkoutFeedbackPanel = ({
         {t('workoutFeedback.subtitle', 'Your next suggestions adjust to this.')}
       </p>
 
-      <div className="grid grid-cols-3 gap-2" role="group">
+      <div className="grid grid-cols-3 gap-1" role="group">
         {WORKOUT_FEEDBACK_DIFFICULTIES.map((difficulty) => (
           <Button
             key={difficulty}
             type="button"
             size="sm"
+            className="min-h-11 h-auto whitespace-normal px-2 py-2"
             variant={draft.difficulty === difficulty ? 'default' : 'outline'}
             aria-pressed={draft.difficulty === difficulty}
             onClick={() =>
@@ -144,6 +145,7 @@ const WorkoutFeedbackPanel = ({
                       key={exercise.id}
                       type="button"
                       size="sm"
+                      className="min-h-11 h-auto whitespace-normal px-2 py-2"
                       variant={selected ? 'default' : 'outline'}
                       aria-pressed={selected}
                       onClick={() =>
@@ -194,7 +196,7 @@ const WorkoutFeedbackPanel = ({
       {exercises.length > 0 && (
         <button
           type="button"
-          className="flex w-full items-center justify-between text-sm font-medium text-primary"
+          className="flex min-h-11 w-full items-center justify-between text-sm font-medium text-primary"
           aria-expanded={showPerExercise}
           onClick={() => setShowPerExercise((value) => !value)}
         >
@@ -208,18 +210,19 @@ const WorkoutFeedbackPanel = ({
       )}
 
       {showPerExercise && (
-        <div className="space-y-3">
+        <div className="divide-y divide-border">
           {exercises.map((exercise) => {
             const current = draft.exerciseDifficulty[exercise.id] ?? null;
             return (
-              <div key={exercise.id} className="space-y-1">
-                <div className="truncate text-sm">{exercise.name}</div>
+              <div key={exercise.id} className="space-y-2 py-3">
+                <div className="break-words text-sm">{exercise.name}</div>
                 <div className="flex flex-wrap gap-1" role="group">
                   {WORKOUT_FEEDBACK_DIFFICULTIES.map((difficulty) => (
                     <Button
                       key={difficulty}
                       type="button"
                       size="sm"
+                      className="min-h-11 h-auto whitespace-normal px-2 py-2"
                       variant={current === difficulty ? 'default' : 'outline'}
                       aria-pressed={current === difficulty}
                       aria-label={`${exercise.name}: ${difficultyLabel(t, difficulty)}`}
@@ -247,7 +250,7 @@ const WorkoutFeedbackPanel = ({
         <Button
           type="button"
           variant="link"
-          className="h-auto p-0 text-destructive"
+          className="min-h-11 h-auto whitespace-normal px-0 text-destructive"
           onClick={() => void retry()}
         >
           {t(

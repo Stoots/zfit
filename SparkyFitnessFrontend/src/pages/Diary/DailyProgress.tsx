@@ -1,8 +1,7 @@
 import { useTranslation } from 'react-i18next';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import {
-  Target,
   Zap,
   Utensils,
   Flame,
@@ -36,6 +35,8 @@ import {
 import { DailyProgressSkeleton } from './DailyProgressSkeleton';
 import { getEnergyUnitString } from '@/utils/nutritionCalculations';
 import { formatWeight } from '@/utils/numberFormatting';
+import { MacroChips } from '@/components/ui/macro-chips';
+import type { DayTotals } from './NutritionSummaryCard';
 import { EnergyCircle } from './EnergyProgressCircle';
 import { useAuth } from '@/hooks/useAuth';
 import { useProfileQuery } from '@/hooks/Settings/useProfile';
@@ -55,7 +56,13 @@ import {
 import { CalorieTargetBreakdown } from '@/components/CalorieTargetBreakdown';
 import { useNutrientGoalPreferences } from '@/hooks/Settings/useNutrientGoalPreferences';
 
-const DailyProgress = ({ selectedDate }: { selectedDate: string }) => {
+const DailyProgress = ({
+  selectedDate,
+  dayTotals,
+}: {
+  selectedDate: string;
+  dayTotals?: DayTotals;
+}) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const {
@@ -122,15 +129,18 @@ const DailyProgress = ({ selectedDate }: { selectedDate: string }) => {
     return (
       <Card className="h-full">
         <CardContent className="pt-6 pb-4">
-          <Alert variant="destructive" className="bg-red-50 border-red-200">
-            <AlertCircle className="h-4 w-4 text-red-600" />
-            <AlertTitle className="text-red-800 font-bold mb-1">
+          <Alert
+            variant="destructive"
+            className="bg-destructive/10 border-destructive/30"
+          >
+            <AlertCircle className="h-4 w-4 text-destructive" />
+            <AlertTitle className="text-destructive font-bold mb-1">
               {t(
                 'exercise.dailyProgress.summaryUnavailableTitle',
                 'Daily summary unavailable'
               )}
             </AlertTitle>
-            <AlertDescription className="text-red-700 text-xs leading-relaxed">
+            <AlertDescription className="text-destructive text-xs leading-relaxed">
               {t(
                 'exercise.dailyProgress.summaryUnavailableDesc',
                 'Could not load your daily energy summary. Try refreshing the page.'
@@ -342,23 +352,16 @@ const DailyProgress = ({ selectedDate }: { selectedDate: string }) => {
   };
 
   return (
-    <Card className="h-full">
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <CardTitle className="flex items-center space-x-2 text-base">
-            <Target className="w-4 h-4 text-green-500" />
-            <span className="dark:text-slate-300">
-              {t('exercise.dailyProgress.dailyEnergyGoal', 'Daily Energy Goal')}
-            </span>
-          </CardTitle>
-        </div>
-      </CardHeader>
-      <CardContent className="pb-4">
-        <div className="space-y-4">
-          {/* Energy Circle */}
+    <Card className="relative isolate h-full overflow-hidden rounded-3xl">
+      <CardContent className="relative p-4 sm:p-6">
+        <div className="space-y-3 md:space-y-4">
           <EnergyCircle
             remaining={effectiveRemaining}
             progress={effectiveProgress}
+            subline={t('diary.energyBudget', 'of {{goal}} · {{eaten}} eaten', {
+              goal: effectiveTargetGoal.toLocaleString(),
+              eaten: display.eaten.toLocaleString(),
+            })}
             unit={energyUnit}
             targetBand={
               goalTypePreferences?.['calories']?.goalType === 'target' &&
@@ -384,214 +387,28 @@ const DailyProgress = ({ selectedDate }: { selectedDate: string }) => {
                 : undefined
             }
           />
-          {/* Energy Breakdown */}
-          <div className="grid grid-cols-3 gap-2 text-center text-sm">
-            {/* Eaten */}
-            <div className="space-y-1 min-w-0">
-              <div className="flex items-center justify-center text-lg font-bold text-green-600 whitespace-nowrap">
-                <Utensils className="w-4 h-4 mr-1 shrink-0" />
-                <span>{display.eaten}</span>
-              </div>
-              <div className="text-xs text-gray-500 whitespace-nowrap">
-                {getEnergyUnitString(energyUnit)}{' '}
-                {t('exercise.dailyProgress.eaten', 'eaten')}
-              </div>
-            </div>
-
-            {/* Burned (with Tooltip) */}
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="space-y-1 cursor-help min-w-0">
-                    <div className="flex items-center justify-center text-lg font-bold text-orange-600 whitespace-nowrap">
-                      <Flame className="w-4 h-4 mr-1 shrink-0" />
-                      <span>{display.burnedTotal}</span>
-                    </div>
-                    <div className="text-xs text-gray-500 whitespace-nowrap">
-                      {getEnergyUnitString(energyUnit)}{' '}
-                      {t('exercise.dailyProgress.burned', 'burned')}
-                    </div>
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent className="bg-black text-white text-xs p-2 rounded-md">
-                  <p>
-                    {t(
-                      'exercise.dailyProgress.burnedEnergyBreakdown',
-                      'Burned Energy Breakdown:'
-                    )}
-                  </p>
-
-                  {exerciseSource === 'logged' && (
-                    <p>
-                      {t(
-                        'exercise.dailyProgress.otherExerciseCalories',
-                        'Other Exercise: {{exerciseCalories}} {{energyUnit}}',
-                        {
-                          exerciseCalories: display.exerciseOther,
-                          energyUnit: getEnergyUnitString(energyUnit),
-                        }
-                      )}
-                    </p>
-                  )}
-
-                  {exerciseSource === 'active' && (
-                    <p>
-                      {t(
-                        'exercise.dailyProgress.activeCalories',
-                        'Active Calories: {{activeCaloriesFromExercise}} {{energyUnit}}',
-                        {
-                          activeCaloriesFromExercise: display.exerciseActive,
-                          energyUnit: getEnergyUnitString(energyUnit),
-                        }
-                      )}
-                    </p>
-                  )}
-
-                  {exerciseSource === 'steps' && (
-                    <p>
-                      {t(
-                        'exercise.dailyProgress.stepsCalories',
-                        'Steps: {{dailySteps}} = {{stepsCalories}} {{energyUnit}}',
-                        {
-                          dailySteps: backgroundSteps.toLocaleString(),
-                          stepsCalories: display.steps,
-                          energyUnit: getEnergyUnitString(energyUnit),
-                        }
-                      )}
-                    </p>
-                  )}
-
-                  {bmr && (
-                    <p>
-                      {t(
-                        'exercise.dailyProgress.bmrCalories',
-                        'BMR: {{bmr}} {{energyUnit}}',
-                        {
-                          bmr: display.bmr,
-                          energyUnit: getEnergyUnitString(energyUnit),
-                        }
-                      )}
-                      {bmrSource === 'measured'
-                        ? ` (${t('exercise.dailyProgress.bmrSourceMeasured', 'Measured')})`
-                        : ` (${t('exercise.dailyProgress.bmrSourceAlgorithm', 'Algorithm')})`}
-                    </p>
-                  )}
-
-                  <p>
-                    {t(
-                      'exercise.dailyProgress.totalCaloriesBurned',
-                      'Total: {{totalCaloriesBurned}} {{energyUnit}}',
-                      {
-                        totalCaloriesBurned: display.burnedTotal,
-                        energyUnit: getEnergyUnitString(energyUnit),
-                      }
-                    )}
-                  </p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-
-            {/* Goal */}
-            <div className="space-y-1 min-w-0">
-              <div
-                className={`flex items-center justify-center font-bold dark:text-slate-400 text-gray-900 whitespace-nowrap ${
-                  isTargetBand ? 'text-[14px] sm:text-[15px]' : 'text-lg'
-                }`}
-              >
-                <Flag className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-0.5 sm:mr-1 shrink-0" />
-                <span>
-                  {isTargetBand
-                    ? `${targetMinConverted}–${targetMaxConverted}`
-                    : display.goal}
-                </span>
-              </div>
-              <div className="text-xs dark:text-slate-400 text-gray-500 whitespace-nowrap">
-                {getEnergyUnitString(energyUnit)}{' '}
-                {t('exercise.dailyProgress.goal', 'goal')}
-              </div>
-            </div>
-          </div>
-
-          {/* Detailed Burned Breakdown (Visible if data present) */}
-          {(exerciseSource !== 'none' || bmr) && (
-            <div className="text-center p-2 bg-blue-50 rounded-lg space-y-1">
-              <div className="text-sm font-medium text-blue-700">
-                {t(
-                  'exercise.dailyProgress.energyBurnedBreakdownTitle',
-                  'Energy Burned Breakdown'
-                )}
-              </div>
-
-              {exerciseSource === 'logged' && (
-                <div className="text-xs text-blue-600">
-                  {t(
-                    'exercise.dailyProgress.otherExerciseCalories',
-                    'Other Exercise: {{exerciseCalories}} {{energyUnit}}',
-                    {
-                      exerciseCalories: display.exerciseOther,
-                      energyUnit: getEnergyUnitString(energyUnit),
-                    }
-                  )}
-                </div>
-              )}
-
-              {exerciseSource === 'active' && (
-                <div className="text-xs text-blue-600">
-                  {t(
-                    'exercise.dailyProgress.activeCalories',
-                    'Active Calories: {{activeCaloriesFromExercise}} {{energyUnit}}',
-                    {
-                      activeCaloriesFromExercise: display.exerciseActive,
-                      energyUnit: getEnergyUnitString(energyUnit),
-                    }
-                  )}
-                </div>
-              )}
-
-              {exerciseSource === 'steps' && (
-                <div className="text-xs text-blue-600 flex items-center justify-center gap-1">
-                  <Zap className="w-3 h-3" />
-                  {t(
-                    'exercise.dailyProgress.stepsCalories',
-                    'Steps: {{dailySteps}} = {{stepsCalories}} {{energyUnit}}',
-                    {
-                      dailySteps: backgroundSteps.toLocaleString(),
-                      stepsCalories: display.steps,
-                      energyUnit: getEnergyUnitString(energyUnit),
-                    }
-                  )}
-                </div>
-              )}
-
-              {bmr && (
-                <div className="text-xs text-blue-600">
-                  {t(
-                    'exercise.dailyProgress.bmrCalories',
-                    'BMR: {{bmr}} {{energyUnit}}',
-                    {
-                      bmr: display.bmr,
-                      energyUnit: getEnergyUnitString(energyUnit),
-                    }
-                  )}
-                  {bmrSource === 'measured'
-                    ? ` (${t('exercise.dailyProgress.bmrSourceMeasured', 'Measured')})`
-                    : ` (${t('exercise.dailyProgress.bmrSourceAlgorithm', 'Algorithm')})`}
-                </div>
-              )}
-            </div>
+          {dayTotals && (
+            <MacroChips
+              className="max-md:gap-1 max-md:[&>li]:gap-1 max-md:[&>li]:px-1.5"
+              protein={dayTotals.protein}
+              carbs={dayTotals.carbs}
+              fat={dayTotals.fat}
+            />
           )}
-
           {/* Profile Setup Warning Alert (Visible if BMR is 0) */}
           {bmr === 0 && (
-            <Alert variant="destructive" className="bg-red-50 border-red-200">
-              <AlertCircle className="h-4 w-4 text-red-600" />
-              <AlertTitle className="text-red-800 font-bold mb-1">
+            <Alert
+              variant="destructive"
+              className="bg-destructive/10 border-destructive/30"
+            >
+              <AlertCircle className="h-4 w-4 text-destructive" />
+              <AlertTitle className="text-destructive font-bold mb-1">
                 {t(
                   'exercise.dailyProgress.profileIncompleteTitle',
                   'Profile Incomplete'
                 )}
               </AlertTitle>
-              <AlertDescription className="text-red-700 text-xs leading-relaxed flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-y-1 sm:gap-x-1">
+              <AlertDescription className="text-destructive text-xs leading-relaxed flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-y-1 sm:gap-x-1">
                 <span>
                   {isLeanMassBmr
                     ? t(
@@ -606,7 +423,7 @@ const DailyProgress = ({ selectedDate }: { selectedDate: string }) => {
                 <Button
                   variant="link"
                   size="sm"
-                  className="p-0 h-auto text-red-800 font-bold underline decoration-2 underline-offset-2 whitespace-normal text-left justify-start"
+                  className="p-0 h-auto text-destructive font-bold underline decoration-2 underline-offset-2 whitespace-normal text-left justify-start"
                   onClick={() =>
                     isLeanMassBmr
                       ? navigate('/checkin')
@@ -627,202 +444,426 @@ const DailyProgress = ({ selectedDate }: { selectedDate: string }) => {
             </Alert>
           )}
 
-          {/* Formula Bar */}
-          {calorieGoalAdjustmentMode === 'adaptive' && adaptiveTdeeData && (
-            <div className="p-3 bg-green-50 dark:bg-slate-700 rounded-lg space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1">
-                  <Activity className="w-3 h-3 text-green-500 shrink-0" />
-                  <span className="text-xs font-medium text-green-700 dark:text-green-400">
-                    {t('exercise.dailyProgress.adaptiveTdee', 'Adaptive TDEE')}
-                  </span>
+          <details className="border-t pt-2">
+            <summary className="min-h-11 cursor-pointer py-3 text-sm text-muted-foreground focus-visible:outline-ring">
+              {t('exercise.dailyProgress.dailyEnergyGoal', 'Daily Energy Goal')}
+            </summary>
+            <div className="space-y-4 pt-2">
+              {/* Energy Breakdown */}
+              <div className="grid grid-cols-3 gap-2 text-center text-sm">
+                {/* Eaten */}
+                <div className="space-y-1 min-w-0">
+                  <div className="flex items-center justify-center text-lg font-bold text-success whitespace-nowrap">
+                    <Utensils className="w-4 h-4 mr-1 shrink-0" />
+                    <span>{display.eaten}</span>
+                  </div>
+                  <div className="text-xs text-muted-foreground whitespace-nowrap">
+                    {getEnergyUnitString(energyUnit)}{' '}
+                    {t('exercise.dailyProgress.eaten', 'eaten')}
+                  </div>
                 </div>
-                <div
-                  className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-                    adaptiveTdeeData.confidence === 'HIGH'
-                      ? 'bg-green-200 text-green-800'
-                      : adaptiveTdeeData.confidence === 'MEDIUM'
-                        ? 'bg-yellow-200 text-yellow-800'
-                        : 'bg-red-200 text-red-800'
-                  }`}
-                >
-                  {t(
-                    `exercise.dailyProgress.confidence.${adaptiveTdeeData.confidence.toLowerCase()}`,
-                    adaptiveTdeeData.confidence
-                  )}
+
+                {/* Burned (with Tooltip) */}
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="space-y-1 cursor-help min-w-0">
+                        <div className="flex items-center justify-center text-lg font-bold text-warning whitespace-nowrap">
+                          <Flame className="w-4 h-4 mr-1 shrink-0" />
+                          <span>{display.burnedTotal}</span>
+                        </div>
+                        <div className="text-xs text-muted-foreground whitespace-nowrap">
+                          {getEnergyUnitString(energyUnit)}{' '}
+                          {t('exercise.dailyProgress.burned', 'burned')}
+                        </div>
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent className="bg-card text-foreground text-xs p-2 rounded-md">
+                      <p>
+                        {t(
+                          'exercise.dailyProgress.burnedEnergyBreakdown',
+                          'Burned Energy Breakdown:'
+                        )}
+                      </p>
+
+                      {exerciseSource === 'logged' && (
+                        <p>
+                          {t(
+                            'exercise.dailyProgress.otherExerciseCalories',
+                            'Other Exercise: {{exerciseCalories}} {{energyUnit}}',
+                            {
+                              exerciseCalories: display.exerciseOther,
+                              energyUnit: getEnergyUnitString(energyUnit),
+                            }
+                          )}
+                        </p>
+                      )}
+
+                      {exerciseSource === 'active' && (
+                        <p>
+                          {t(
+                            'exercise.dailyProgress.activeCalories',
+                            'Active Calories: {{activeCaloriesFromExercise}} {{energyUnit}}',
+                            {
+                              activeCaloriesFromExercise:
+                                display.exerciseActive,
+                              energyUnit: getEnergyUnitString(energyUnit),
+                            }
+                          )}
+                        </p>
+                      )}
+
+                      {exerciseSource === 'steps' && (
+                        <p>
+                          {t(
+                            'exercise.dailyProgress.stepsCalories',
+                            'Steps: {{dailySteps}} = {{stepsCalories}} {{energyUnit}}',
+                            {
+                              dailySteps: backgroundSteps.toLocaleString(),
+                              stepsCalories: display.steps,
+                              energyUnit: getEnergyUnitString(energyUnit),
+                            }
+                          )}
+                        </p>
+                      )}
+
+                      {bmr && (
+                        <p>
+                          {t(
+                            'exercise.dailyProgress.bmrCalories',
+                            'BMR: {{bmr}} {{energyUnit}}',
+                            {
+                              bmr: display.bmr,
+                              energyUnit: getEnergyUnitString(energyUnit),
+                            }
+                          )}
+                          {bmrSource === 'measured'
+                            ? ` (${t('exercise.dailyProgress.bmrSourceMeasured', 'Measured')})`
+                            : ` (${t('exercise.dailyProgress.bmrSourceAlgorithm', 'Algorithm')})`}
+                        </p>
+                      )}
+
+                      <p>
+                        {t(
+                          'exercise.dailyProgress.totalCaloriesBurned',
+                          'Total: {{totalCaloriesBurned}} {{energyUnit}}',
+                          {
+                            totalCaloriesBurned: display.burnedTotal,
+                            energyUnit: getEnergyUnitString(energyUnit),
+                          }
+                        )}
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+
+                {/* Goal */}
+                <div className="space-y-1 min-w-0">
+                  <div
+                    className={`flex items-center justify-center font-bold text-muted-foreground text-foreground whitespace-nowrap ${
+                      isTargetBand ? 'text-sm sm:text-base' : 'text-lg'
+                    }`}
+                  >
+                    <Flag className="w-3.5 h-3.5 sm:w-4 sm:h-4 mr-0.5 sm:mr-1 shrink-0" />
+                    <span>
+                      {isTargetBand
+                        ? `${targetMinConverted}–${targetMaxConverted}`
+                        : display.goal}
+                    </span>
+                  </div>
+                  <div className="text-xs text-muted-foreground whitespace-nowrap">
+                    {getEnergyUnitString(energyUnit)}{' '}
+                    {t('exercise.dailyProgress.goal', 'goal')}
+                  </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 text-[11px]">
-                <div className="flex flex-col">
-                  <span className="text-gray-500 dark:text-slate-400">
-                    {t('exercise.dailyProgress.weightTrend', 'Weight Trend')}
-                  </span>
-                  <span className="font-semibold text-gray-800 dark:text-slate-200">
-                    {adaptiveTdeeData.weightTrend
-                      ? formatWeight(adaptiveTdeeData.weightTrend, weightUnit)
-                      : t('common.calculating', 'Calculating...')}
-                  </span>
-                </div>
-                <div className="flex flex-col">
-                  <span className="text-gray-500 dark:text-slate-400">
-                    {t('exercise.dailyProgress.dataPoints', 'Data Points')}
-                  </span>
-                  <span className="font-semibold text-gray-800 dark:text-slate-200">
-                    {adaptiveTdeeData.daysOfData || 0}{' '}
-                    {t('exercise.dailyProgress.days', 'days')}
-                  </span>
-                </div>
-              </div>
-
-              <div className="pt-1 border-t border-green-200 dark:border-slate-600 flex justify-between items-center">
-                <span className="text-[10px] text-gray-500 dark:text-slate-400">
-                  {t('exercise.dailyProgress.expenditure', 'Expenditure')}
-                </span>
-                <span className="text-[11px] font-bold text-green-700 dark:text-green-400">
-                  {Math.round(
-                    convertEnergy(adaptiveTdeeData.tdee, 'kcal', energyUnit)
-                  )}{' '}
-                  {getEnergyUnitString(energyUnit)}
-                </span>
-              </div>
-
-              {adaptiveTdeeData.isFallback && (
-                <div className="flex items-start gap-1 mt-1 p-1.5 bg-yellow-100 dark:bg-yellow-900/30 rounded border border-yellow-200 dark:border-yellow-800">
-                  <Info className="w-3 h-3 text-yellow-600 dark:text-yellow-400 shrink-0 mt-0.5" />
-                  <span className="text-[10px] text-yellow-700 dark:text-yellow-300">
+              {/* Detailed Burned Breakdown (Visible if data present) */}
+              {(exerciseSource !== 'none' || bmr) && (
+                <div className="text-center p-2 bg-primary/10 rounded-lg space-y-1">
+                  <div className="text-sm font-medium text-primary">
                     {t(
-                      'exercise.dailyProgress.fallbackReason',
-                      'Using estimation: {{reason}}',
-                      { reason: adaptiveTdeeData.fallbackReason }
+                      'exercise.dailyProgress.energyBurnedBreakdownTitle',
+                      'Energy Burned Breakdown'
                     )}
-                  </span>
+                  </div>
+
+                  {exerciseSource === 'logged' && (
+                    <div className="text-xs text-primary">
+                      {t(
+                        'exercise.dailyProgress.otherExerciseCalories',
+                        'Other Exercise: {{exerciseCalories}} {{energyUnit}}',
+                        {
+                          exerciseCalories: display.exerciseOther,
+                          energyUnit: getEnergyUnitString(energyUnit),
+                        }
+                      )}
+                    </div>
+                  )}
+
+                  {exerciseSource === 'active' && (
+                    <div className="text-xs text-primary">
+                      {t(
+                        'exercise.dailyProgress.activeCalories',
+                        'Active Calories: {{activeCaloriesFromExercise}} {{energyUnit}}',
+                        {
+                          activeCaloriesFromExercise: display.exerciseActive,
+                          energyUnit: getEnergyUnitString(energyUnit),
+                        }
+                      )}
+                    </div>
+                  )}
+
+                  {exerciseSource === 'steps' && (
+                    <div className="text-xs text-primary flex items-center justify-center gap-1">
+                      <Zap className="w-3 h-3" />
+                      {t(
+                        'exercise.dailyProgress.stepsCalories',
+                        'Steps: {{dailySteps}} = {{stepsCalories}} {{energyUnit}}',
+                        {
+                          dailySteps: backgroundSteps.toLocaleString(),
+                          stepsCalories: display.steps,
+                          energyUnit: getEnergyUnitString(energyUnit),
+                        }
+                      )}
+                    </div>
+                  )}
+
+                  {bmr && (
+                    <div className="text-xs text-primary">
+                      {t(
+                        'exercise.dailyProgress.bmrCalories',
+                        'BMR: {{bmr}} {{energyUnit}}',
+                        {
+                          bmr: display.bmr,
+                          energyUnit: getEnergyUnitString(energyUnit),
+                        }
+                      )}
+                      {bmrSource === 'measured'
+                        ? ` (${t('exercise.dailyProgress.bmrSourceMeasured', 'Measured')})`
+                        : ` (${t('exercise.dailyProgress.bmrSourceAlgorithm', 'Algorithm')})`}
+                    </div>
+                  )}
                 </div>
               )}
 
-              {!adaptiveTdeeData.isFallback &&
-                (adaptiveTdeeData.daysOfData ?? 0) <
-                  ADAPTIVE_TDEE_GOAL_MIN_DAYS && (
-                  <div className="flex items-start gap-1 mt-1 p-1.5 bg-blue-100 dark:bg-blue-900/30 rounded border border-blue-200 dark:border-blue-800">
-                    <Info className="w-3 h-3 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
-                    <span className="text-[10px] text-blue-700 dark:text-blue-300">
-                      {getTargetFallbackNotice()}
+              {/* Formula Bar */}
+              {calorieGoalAdjustmentMode === 'adaptive' && adaptiveTdeeData && (
+                <div className="p-3 bg-success/10 bg-muted rounded-lg space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1">
+                      <Activity className="w-3 h-3 text-success shrink-0" />
+                      <span className="text-xs font-medium text-success">
+                        {t(
+                          'exercise.dailyProgress.adaptiveTdee',
+                          'Adaptive TDEE'
+                        )}
+                      </span>
+                    </div>
+                    <div
+                      className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${
+                        adaptiveTdeeData.confidence === 'HIGH'
+                          ? 'bg-success/10 text-success'
+                          : adaptiveTdeeData.confidence === 'MEDIUM'
+                            ? 'bg-warning/10 text-warning'
+                            : 'bg-destructive/10 text-destructive'
+                      }`}
+                    >
+                      {t(
+                        `exercise.dailyProgress.confidence.${adaptiveTdeeData.confidence.toLowerCase()}`,
+                        adaptiveTdeeData.confidence
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="flex flex-col">
+                      <span className="text-muted-foreground">
+                        {t(
+                          'exercise.dailyProgress.weightTrend',
+                          'Weight Trend'
+                        )}
+                      </span>
+                      <span className="font-semibold text-foreground">
+                        {adaptiveTdeeData.weightTrend
+                          ? formatWeight(
+                              adaptiveTdeeData.weightTrend,
+                              weightUnit
+                            )
+                          : t('common.calculating', 'Calculating...')}
+                      </span>
+                    </div>
+                    <div className="flex flex-col">
+                      <span className="text-muted-foreground">
+                        {t('exercise.dailyProgress.dataPoints', 'Data Points')}
+                      </span>
+                      <span className="font-semibold text-foreground">
+                        {adaptiveTdeeData.daysOfData || 0}{' '}
+                        {t('exercise.dailyProgress.days', 'days')}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="pt-1 border-t border-success/30 border-border flex justify-between items-center">
+                    <span className="text-xs text-muted-foreground">
+                      {t('exercise.dailyProgress.expenditure', 'Expenditure')}
+                    </span>
+                    <span className="text-xs font-bold text-success">
+                      {Math.round(
+                        convertEnergy(adaptiveTdeeData.tdee, 'kcal', energyUnit)
+                      )}{' '}
+                      {getEnergyUnitString(energyUnit)}
                     </span>
                   </div>
-                )}
-            </div>
-          )}
 
-          {calorieGoalAdjustmentMode === 'tdee' && tdeeProjection ? (
-            /* Device Projection: the projected burn is the TDEE baseline, and
-                Goal Mode is applied directly to it. */
-            <div className="p-3 bg-orange-50 dark:bg-slate-700 rounded-lg space-y-1">
-              <div className="flex items-center gap-1 mb-2">
-                <Activity className="w-3 h-3 text-orange-400 shrink-0" />
-                <span className="text-xs font-medium text-orange-600 dark:text-orange-400">
-                  {t('exercise.dailyProgress.dailyBurn', 'Device Projection')}
-                </span>
-              </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-gray-500 dark:text-slate-400">
-                  {t('exercise.dailyProgress.projectedBurn', 'Projected TDEE')}
-                </span>
-                <span className="font-semibold text-gray-800 dark:text-slate-200">
-                  {display.projectedBurn} {getEnergyUnitString(energyUnit)}
-                </span>
-              </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-gray-500 dark:text-slate-400">
-                  {t(
-                    'exercise.dailyProgress.goalModeTarget',
-                    'Goal Mode Target'
+                  {adaptiveTdeeData.isFallback && (
+                    <div className="flex items-start gap-1 mt-1 p-1.5 bg-warning/10 rounded border border-warning/30">
+                      <Info className="w-3 h-3 text-warning shrink-0 mt-0.5" />
+                      <span className="text-xs text-warning">
+                        {t(
+                          'exercise.dailyProgress.fallbackReason',
+                          'Using estimation: {{reason}}',
+                          { reason: adaptiveTdeeData.fallbackReason }
+                        )}
+                      </span>
+                    </div>
                   )}
-                </span>
-                <span className="font-semibold text-orange-600">
-                  {display.projectedTarget} {getEnergyUnitString(energyUnit)}
-                </span>
-              </div>
-              <div className="border-t border-orange-200 dark:border-slate-600 pt-1 text-[10px] text-gray-500 dark:text-slate-400">
-                {tdeeProjection.source === 'health_connect_total'
-                  ? t(
-                      'exercise.dailyProgress.healthConnectProjectionSource',
-                      'Health Connect total calories'
-                    )
-                  : tdeeProjection.source === 'active_plus_bmr'
-                    ? t(
-                        'exercise.dailyProgress.fallbackProjectionSource',
-                        'BMR + active calories fallback'
-                      )
-                    : t(
-                        'exercise.dailyProgress.legacyProjectionSource',
-                        'Device projection'
+
+                  {!adaptiveTdeeData.isFallback &&
+                    (adaptiveTdeeData.daysOfData ?? 0) <
+                      ADAPTIVE_TDEE_GOAL_MIN_DAYS && (
+                      <div className="flex items-start gap-1 mt-1 p-1.5 bg-primary/10 rounded border border-primary/30">
+                        <Info className="w-3 h-3 text-primary shrink-0 mt-0.5" />
+                        <span className="text-xs text-primary">
+                          {getTargetFallbackNotice()}
+                        </span>
+                      </div>
+                    )}
+                </div>
+              )}
+
+              {calorieGoalAdjustmentMode === 'tdee' && tdeeProjection ? (
+                /* Device Projection: the projected burn is the TDEE baseline, and
+                Goal Mode is applied directly to it. */
+                <div className="p-3 bg-warning/10 bg-muted rounded-lg space-y-1">
+                  <div className="flex items-center gap-1 mb-2">
+                    <Activity className="w-3 h-3 text-warning shrink-0" />
+                    <span className="text-xs font-medium text-warning">
+                      {t(
+                        'exercise.dailyProgress.dailyBurn',
+                        'Device Projection'
                       )}
-              </div>
-            </div>
-          ) : (
-            /* Dynamic / Fixed / Percentage modes: original Net Energy box */
-            <div className="text-center p-2 dark:bg-slate-300 bg-gray-50 rounded-lg">
-              <div className="text-sm font-medium dark:text-black text-gray-700">
-                {t(
-                  'exercise.dailyProgress.netEnergy',
-                  'Net Energy: {{netCalories}}',
-                  {
-                    netCalories: display.net,
-                    energyUnit: getEnergyUnitString(energyUnit),
-                  }
-                )}
-              </div>
-              <div className="text-xs dark:text-black text-gray-600">
-                {t(
-                  'exercise.dailyProgress.netEnergyBreakdown',
-                  '{{dailyIntakeCalories}} eaten - {{finalTotalCaloriesBurned}} burned',
-                  {
-                    dailyIntakeCalories: display.eaten,
-                    finalTotalCaloriesBurned: display.burnedTotal,
-                    energyUnit: getEnergyUnitString(energyUnit),
-                  }
-                )}
-              </div>
-            </div>
-          )}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">
+                      {t(
+                        'exercise.dailyProgress.projectedBurn',
+                        'Projected TDEE'
+                      )}
+                    </span>
+                    <span className="font-semibold text-foreground">
+                      {display.projectedBurn} {getEnergyUnitString(energyUnit)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground">
+                      {t(
+                        'exercise.dailyProgress.goalModeTarget',
+                        'Goal Mode Target'
+                      )}
+                    </span>
+                    <span className="font-semibold text-warning">
+                      {display.projectedTarget}{' '}
+                      {getEnergyUnitString(energyUnit)}
+                    </span>
+                  </div>
+                  <div className="border-t border-warning/30 border-border pt-1 text-xs text-muted-foreground">
+                    {tdeeProjection.source === 'health_connect_total'
+                      ? t(
+                          'exercise.dailyProgress.healthConnectProjectionSource',
+                          'Health Connect total calories'
+                        )
+                      : tdeeProjection.source === 'active_plus_bmr'
+                        ? t(
+                            'exercise.dailyProgress.fallbackProjectionSource',
+                            'BMR + active calories fallback'
+                          )
+                        : t(
+                            'exercise.dailyProgress.legacyProjectionSource',
+                            'Device projection'
+                          )}
+                  </div>
+                </div>
+              ) : (
+                /* Dynamic / Fixed / Percentage modes: original Net Energy box */
+                <div className="text-center p-2 bg-muted rounded-lg">
+                  <div className="text-sm font-medium text-foreground">
+                    {t(
+                      'exercise.dailyProgress.netEnergy',
+                      'Net Energy: {{netCalories}}',
+                      {
+                        netCalories: display.net,
+                        energyUnit: getEnergyUnitString(energyUnit),
+                      }
+                    )}
+                  </div>
+                  <div className="text-xs text-foreground">
+                    {t(
+                      'exercise.dailyProgress.netEnergyBreakdown',
+                      '{{dailyIntakeCalories}} eaten - {{finalTotalCaloriesBurned}} burned',
+                      {
+                        dailyIntakeCalories: display.eaten,
+                        finalTotalCaloriesBurned: display.burnedTotal,
+                        energyUnit: getEnergyUnitString(energyUnit),
+                      }
+                    )}
+                  </div>
+                </div>
+              )}
 
-          {/* Progress Bar */}
-          <div className="space-y-1">
-            <div className="flex justify-between text-xs">
-              <span>
-                {t('exercise.dailyProgress.dailyProgress', 'Daily Progress')}
-              </span>
-              <span>{Math.round(effectiveProgress)}%</span>
-            </div>
-            <Progress value={effectiveProgress} className="h-2" />
-          </div>
+              {/* Progress Bar */}
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs">
+                  <span>
+                    {t(
+                      'exercise.dailyProgress.dailyProgress',
+                      'Daily Progress'
+                    )}
+                  </span>
+                  <span>{Math.round(effectiveProgress)}%</span>
+                </div>
+                <Progress value={effectiveProgress} className="h-2" />
+              </div>
 
-          {/* Calorie Math Breakdown Dropdown */}
-          <div className="pt-3 border-t border-border/40 space-y-2.5">
-            <CalorieTargetBreakdown
-              asDialog
-              previewResult={previewResult}
-              adaptiveTdeeData={adaptiveTdeeData}
-              bmrAlgorithm={bmrAlgorithm}
-              bodyFatAlgorithm={bodyFatAlgorithm}
-              displayWeight={displayWeight}
-              displayHeight={displayHeight}
-              displayAge={displayAge}
-              displayGender={displayGender}
-              displayBodyFat={displayBodyFat}
-              displayWaist={displayWaist ?? undefined}
-              displayNeck={displayNeck ?? undefined}
-              displayHips={displayHips ?? undefined}
-              goalMode={goalMode}
-              goalModeCalculationMethod={goalModeCalculationMethod}
-              goalModeCustomPercentage={goalModeCustomPercentage}
-              calorieGoalAdjustmentMode={calorieGoalAdjustmentMode}
-              rawManualGoal={rawManualGoal}
-              adjustedManualGoal={adjustedManualGoal}
-              activityMultiplier={activityMultiplier}
-              bmrSource={bmrSource}
-            />
-          </div>
+              {/* Calorie Math Breakdown Dropdown */}
+              <div className="pt-3 border-t border-border/40 space-y-2.5">
+                <CalorieTargetBreakdown
+                  asDialog
+                  previewResult={previewResult}
+                  adaptiveTdeeData={adaptiveTdeeData}
+                  bmrAlgorithm={bmrAlgorithm}
+                  bodyFatAlgorithm={bodyFatAlgorithm}
+                  displayWeight={displayWeight}
+                  displayHeight={displayHeight}
+                  displayAge={displayAge}
+                  displayGender={displayGender}
+                  displayBodyFat={displayBodyFat}
+                  displayWaist={displayWaist ?? undefined}
+                  displayNeck={displayNeck ?? undefined}
+                  displayHips={displayHips ?? undefined}
+                  goalMode={goalMode}
+                  goalModeCalculationMethod={goalModeCalculationMethod}
+                  goalModeCustomPercentage={goalModeCustomPercentage}
+                  calorieGoalAdjustmentMode={calorieGoalAdjustmentMode}
+                  rawManualGoal={rawManualGoal}
+                  adjustedManualGoal={adjustedManualGoal}
+                  activityMultiplier={activityMultiplier}
+                  bmrSource={bmrSource}
+                />
+              </div>
+            </div>
+          </details>
         </div>
       </CardContent>
     </Card>

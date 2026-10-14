@@ -92,15 +92,15 @@ const ExerciseRowThumbnail = ({
   if (!src || imageError) {
     return (
       <div
-        className={`flex-shrink-0 w-10 h-10 rounded-md flex items-center justify-center ${meta.bg}`}
+        className={`flex-shrink-0 w-10 h-10 rounded-md flex items-center justify-center bg-muted`}
       >
-        <CategoryIcon className={`w-4 h-4 ${meta.color}`} />
+        <CategoryIcon className={`w-4 h-4 text-muted-foreground`} />
       </div>
     );
   }
 
   return (
-    <div className="flex-shrink-0 w-10 h-10 rounded-md overflow-hidden ring-1 ring-gray-200 dark:ring-gray-700 bg-gray-50 dark:bg-gray-800">
+    <div className="flex-shrink-0 w-10 h-10 rounded-md overflow-hidden ring-1 ring-border bg-muted">
       <img
         src={src}
         alt={exercise.name}
@@ -266,7 +266,7 @@ const ExerciseDatabaseManager = () => {
                     .map((tag) => (
                       <span
                         key={tag}
-                        className="text-[9px] font-medium px-1 py-0 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 flex items-center gap-0.5"
+                        className="text-xs font-medium px-1 py-0 rounded-full bg-muted text-muted-foreground flex items-center gap-0.5"
                       >
                         {tag === 'public' && <Share2 className="w-2 w-2" />}
                         {tag === 'family' && <Users className="w-2 w-2" />}
@@ -286,7 +286,7 @@ const ExerciseDatabaseManager = () => {
         // Disabled sorting for category since there is a dropdown above it
         enableSorting: false,
         cell: ({ row }) => (
-          <span className="text-xs font-medium text-blue-600 dark:text-blue-400 capitalize">
+          <span className="text-xs font-medium text-primary capitalize">
             {row.original.category}
           </span>
         ),
@@ -306,7 +306,7 @@ const ExerciseDatabaseManager = () => {
             )
           );
           return (
-            <span className="text-xs text-orange-600 dark:text-orange-400 font-medium">
+            <span className="text-xs text-foreground font-medium">
               {caloriesPerHour} {getEnergyUnitString(energyUnit)}/h
             </span>
           );
@@ -322,7 +322,7 @@ const ExerciseDatabaseManager = () => {
             <div className="flex flex-col gap-0.5">
               {exercise.primary_muscles &&
                 exercise.primary_muscles.length > 0 && (
-                  <div className="text-[10px] text-gray-500 truncate max-w-[150px]">
+                  <div className="text-xs text-muted-foreground truncate max-w-[150px]">
                     <span className="font-medium">Muscles: </span>
                     {exercise.primary_muscles
                       .map((m) => localizeMuscle(t, m))
@@ -330,7 +330,7 @@ const ExerciseDatabaseManager = () => {
                   </div>
                 )}
               {exercise.equipment && exercise.equipment.length > 0 && (
-                <div className="text-[10px] text-gray-500 truncate max-w-[150px]">
+                <div className="text-xs text-muted-foreground truncate max-w-[150px]">
                   <span className="font-medium">Equipment: </span>
                   {exercise.equipment
                     .map((eq) => localizeEquipment(t, eq))
@@ -351,7 +351,7 @@ const ExerciseDatabaseManager = () => {
           return (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="h-8 w-8 p-0">
+                <Button variant="ghost" className="h-11 w-11 p-0">
                   <span className="sr-only">Open menu</span>
                   <MoreHorizontal className="h-4 w-4" />
                 </Button>
@@ -437,7 +437,29 @@ const ExerciseDatabaseManager = () => {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-8">
+      <section className="flex min-w-0 flex-wrap items-center justify-between gap-4 border-b pb-6">
+        <div>
+          <h2 className="text-xl font-semibold">
+            {t('trainingPrograms.title', 'Training Programs')}
+          </h2>
+          <p className="mt-1 text-muted-foreground">
+            {t(
+              'trainingPrograms.entryHelp',
+              'Organize your Workout Plans into goal-bearing phases and dated weeks.'
+            )}
+          </p>
+        </div>
+        <Button asChild variant="outline" className="min-h-11">
+          <Link to="/training-programs">
+            {t('trainingPrograms.open', 'Open Training Programs')}
+          </Link>
+        </Button>
+      </section>
+
+      {/* Workout Plans Section */}
+      <WorkoutPlansManager />
+
       {/* Exercises Section */}
       <Card>
         <CardHeader className="pb-2">
@@ -445,11 +467,11 @@ const ExerciseDatabaseManager = () => {
             {t('exercise.databaseManager.cardTitle', 'Exercises')}
           </CardTitle>
         </CardHeader>
-        <CardContent className="pt-0">
+        <CardContent className="min-w-0 px-4 pt-0 sm:px-6">
           <div className="flex flex-col gap-4 mb-4">
             <div className="flex flex-row flex-wrap items-center gap-4">
               <div className="relative flex-1 min-w-[180px]">
-                <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
                   type="text"
                   placeholder={t(
@@ -466,8 +488,8 @@ const ExerciseDatabaseManager = () => {
                 />
               </div>
 
-              <div className="flex items-center gap-2 whitespace-nowrap">
-                <Filter className="h-4 w-4 text-gray-500" />
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <Filter className="h-4 w-4 text-muted-foreground" />
                 <Select
                   onValueChange={(val) => {
                     setCategoryFilter(val);
@@ -556,7 +578,7 @@ const ExerciseDatabaseManager = () => {
                   onClick={toggleEditMode}
                   className={`shrink-0 ${
                     isEditMode
-                      ? 'bg-blue-50 border-blue-200 text-blue-600 dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-400'
+                      ? 'bg-accent border-primary text-accent-foreground'
                       : ''
                   }`}
                   title={
@@ -578,7 +600,7 @@ const ExerciseDatabaseManager = () => {
                   )}
                 </Button>
                 <Button
-                  className="bg-slate-900 hover:bg-slate-800 text-white"
+                  className="min-h-11"
                   onClick={() => setIsAddExerciseDialogOpen(true)}
                 >
                   <Plus className="w-4 h-4 mr-2" />
@@ -678,28 +700,6 @@ const ExerciseDatabaseManager = () => {
 
       {/* Workout Presets Section */}
       <WorkoutPresetsManager />
-
-      <section className="flex flex-wrap items-center justify-between gap-4 border-y py-5">
-        <div>
-          <h2 className="text-xl font-semibold">
-            {t('trainingPrograms.title', 'Training Programs')}
-          </h2>
-          <p className="mt-1 text-muted-foreground">
-            {t(
-              'trainingPrograms.entryHelp',
-              'Organize your Workout Plans into goal-bearing phases and dated weeks.'
-            )}
-          </p>
-        </div>
-        <Button asChild variant="outline" className="min-h-11">
-          <Link to="/training-programs">
-            {t('trainingPrograms.open', 'Open Training Programs')}
-          </Link>
-        </Button>
-      </section>
-
-      {/* Workout Plans Section */}
-      <WorkoutPlansManager />
 
       <AddExerciseDialog
         open={isAddExerciseDialogOpen}

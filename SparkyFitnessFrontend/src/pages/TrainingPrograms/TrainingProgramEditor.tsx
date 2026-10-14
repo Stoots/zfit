@@ -1,3 +1,4 @@
+import { ArrowRight } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -79,7 +80,7 @@ export default function TrainingProgramEditor({
     }
   };
   return (
-    <form onSubmit={submit} className="space-y-8" noValidate>
+    <form onSubmit={submit} className="min-w-0 space-y-8" noValidate>
       <div>
         <h2 className="text-2xl font-semibold">
           {initial
@@ -114,7 +115,7 @@ export default function TrainingProgramEditor({
           </ul>
         </div>
       )}
-      <fieldset disabled={pending} className="space-y-8">
+      <fieldset disabled={pending} className="min-w-0 space-y-8">
         <ProgramHeaderFields
           draft={draft}
           hasRecordedSessions={recordedIds.size > 0}
@@ -185,11 +186,12 @@ export default function TrainingProgramEditor({
             )}
           </p>
         )}
-        <div className="flex flex-wrap gap-3 border-t pt-5">
+        <div className="sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] z-10 flex flex-wrap gap-3 border-t bg-background py-3 sm:bottom-0 [&>button]:min-w-0 [&>button]:flex-1 sm:[&>button]:flex-none [&>button]:whitespace-normal">
           <Button type="submit" className="min-h-11">
             {pending
               ? t('common.saving', 'Saving…')
               : t('trainingPrograms.save', 'Save Training Program')}
+            <ArrowRight aria-hidden="true" />
           </Button>
           <Button
             type="button"

@@ -111,6 +111,12 @@ const WidgetGridInner = ({
   // Never edit while viewing someone else's profile, even if edit mode was
   // toggled on before switching.
   const effectiveEditMode = editMode && canEdit;
+  // Auto-measured heights and positions must paint together, without
+  // independent transitions overlapping rows while content settles.
+  const autoLayoutStyle =
+    pageKey === 'diary' && !effectiveEditMode
+      ? { transition: 'none' }
+      : undefined;
 
   const widgetKeys = useMemo(() => widgets.map((w) => w.key), [widgets]);
   const defaults = useMemo(
@@ -279,13 +285,24 @@ const WidgetGridInner = ({
       )}
       <Button
         variant={effectiveEditMode ? 'default' : 'outline'}
-        size="sm"
+        size={pageKey === 'diary' && !effectiveEditMode ? 'icon' : 'sm'}
+        title={
+          effectiveEditMode
+            ? t('diary.widgets.done', 'Done')
+            : t('diary.widgets.layout', 'Layout')
+        }
         onClick={() => setEditMode((v) => !v)}
       >
-        <Pencil className="mr-2 h-4 w-4" />
-        {effectiveEditMode
-          ? t('diary.widgets.done', 'Done')
-          : t('diary.widgets.layout', 'Layout')}
+        <Pencil className="h-4 w-4" />
+        <span
+          className={
+            pageKey === 'diary' && !effectiveEditMode ? 'sr-only' : undefined
+          }
+        >
+          {effectiveEditMode
+            ? t('diary.widgets.done', 'Done')
+            : t('diary.widgets.layout', 'Layout')}
+        </span>
       </Button>
     </div>
   ) : null;
@@ -307,6 +324,7 @@ const WidgetGridInner = ({
           mounted && (
             <Responsive
               className="layout"
+              style={autoLayoutStyle}
               layouts={displayLayouts as unknown as ResponsiveLayouts}
               breakpoints={GRID_BREAKPOINTS}
               cols={GRID_COLS}
@@ -326,7 +344,7 @@ const WidgetGridInner = ({
               onResizeStop={markPendingSave}
             >
               {visibleWidgets.map((w) => (
-                <div key={w.key}>
+                <div key={w.key} style={autoLayoutStyle}>
                   <WidgetFrame
                     widgetKey={w.key}
                     title={w.title}
@@ -402,7 +420,7 @@ export default function WidgetGrid({
       }
       fallback={
         <div className="space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800/50 dark:bg-amber-950/30 dark:text-amber-200">
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-warning/30 bg-warning/10 px-3 py-2 text-sm text-warning">
             <span>
               {t(
                 'diary.widgets.layoutErrorNotice',

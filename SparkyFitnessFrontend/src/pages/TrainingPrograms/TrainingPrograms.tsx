@@ -1,3 +1,6 @@
+import { ArrowRight } from 'lucide-react';
+import { todayInZone } from '@workspace/shared';
+import { usePreferences } from '@/contexts/PreferencesContext';
 import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
@@ -44,6 +47,8 @@ export default function TrainingPrograms() {
 function ProgramWorkspace({ userId }: { userId: string }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { timezone } = usePreferences();
+  const today = todayInZone(timezone);
   const queryClient = useQueryClient();
   const [startingSession, setStartingSession] = useState<string | null>(null);
   const [startError, setStartError] = useState<string | null>(null);
@@ -110,7 +115,7 @@ function ProgramWorkspace({ userId }: { userId: string }) {
   };
 
   return (
-    <div className="mx-auto max-w-5xl space-y-6">
+    <div className="mx-auto min-w-0 max-w-7xl space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">
@@ -189,6 +194,7 @@ function ProgramWorkspace({ userId }: { userId: string }) {
             selected && (
               <ProgramDetail
                 selected={selected}
+                today={today}
                 outcomePending={outcome.isPending}
                 startingSessionId={startingSession}
                 onStartSession={startWorkout}
@@ -207,9 +213,10 @@ function ProgramWorkspace({ userId }: { userId: string }) {
           <div>
             <Button className="min-h-11" onClick={() => setCreating(true)}>
               {t('trainingPrograms.create', 'Create Training Program')}
+              <ArrowRight aria-hidden="true" />
             </Button>
           </div>
-          <ProgramList programs={programs} />
+          <ProgramList programs={programs} today={today} />
         </>
       )}
       {selected && outcomeTarget && (

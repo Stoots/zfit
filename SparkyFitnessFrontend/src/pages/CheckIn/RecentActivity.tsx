@@ -59,8 +59,8 @@ export const RecentActivity: React.FC<RecentActivityProps> = ({
 
   return (
     <>
-      <Card className="border-t shadow-sm">
-        <CardHeader className="bg-muted/10">
+      <Card>
+        <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
             <Activity className="w-5 h-5 text-primary" />
             {title || t('checkIn.recentMeasurements', 'Recent Activity')}
@@ -179,20 +179,18 @@ export const RecentActivity: React.FC<RecentActivityProps> = ({
                 return (
                   <div
                     key={measurement.id}
-                    className="flex items-center justify-between p-4 hover:bg-muted/5 transition-colors"
+                    className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 hover:bg-muted/40 transition-colors sm:px-6"
                   >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`p-2 rounded-full ${measurement.type === 'fasting' ? 'bg-orange-100 text-orange-600' : 'bg-primary/10 text-primary'}`}
-                      >
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="shrink-0 text-muted-foreground">
                         {measurement.type === 'fasting' ? (
                           <Timer className="w-4 h-4" />
                         ) : (
                           <ClipboardList className="w-4 h-4" />
                         )}
                       </div>
-                      <div>
-                        <p className="font-medium">
+                      <div className="min-w-0">
+                        <p className="font-medium break-words">
                           {measurement.type === 'fasting'
                             ? measurement.fasting_type
                             : measurementName}
@@ -206,9 +204,9 @@ export const RecentActivity: React.FC<RecentActivityProps> = ({
                         </p>
                       </div>
                     </div>
-                    <div className="font-semibold tabular-nums text-right">
+                    <div className="flex max-w-44 flex-wrap items-center justify-end font-medium tabular-nums text-right break-words">
                       {measurement.type === 'fasting' ? (
-                        <span className="text-orange-600">{displayString}</span>
+                        <span className="text-foreground">{displayString}</span>
                       ) : (
                         <span>{displayString}</span>
                       )}
@@ -219,7 +217,8 @@ export const RecentActivity: React.FC<RecentActivityProps> = ({
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-6 w-6 ml-2 text-muted-foreground hover:text-destructive"
+                          aria-label={t('common.delete', 'Delete')}
+                          className="h-11 w-11 text-muted-foreground hover:text-destructive"
                           onClick={() =>
                             handleDeleteMeasurementClick(measurement)
                           }
@@ -233,7 +232,8 @@ export const RecentActivity: React.FC<RecentActivityProps> = ({
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-6 w-6 ml-2 text-muted-foreground hover:text-foreground"
+                              aria-label={t('common.edit', 'Edit')}
+                              className="h-11 w-11 text-muted-foreground hover:text-foreground"
                               onClick={() => handleEditFastClick(measurement)}
                             >
                               <Pencil className="w-3 h-3" />
@@ -242,7 +242,8 @@ export const RecentActivity: React.FC<RecentActivityProps> = ({
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-6 w-6 ml-2 text-muted-foreground hover:text-destructive"
+                            aria-label={t('common.delete', 'Delete')}
+                            className="h-11 w-11 text-muted-foreground hover:text-destructive"
                             onClick={() =>
                               handleDeleteMeasurementClick(measurement)
                             }

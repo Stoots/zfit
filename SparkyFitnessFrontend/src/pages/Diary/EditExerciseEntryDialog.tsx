@@ -869,7 +869,7 @@ const EditExerciseEntryDialog = ({
         {showCaloriesWarning && (
           <Alert
             variant="default"
-            className="bg-yellow-100 border-yellow-400 text-yellow-700 relative py-2"
+            className="bg-warning/10 border-warning/30 text-warning relative py-2"
           >
             <AlertDescription>
               {t(
@@ -1173,7 +1173,7 @@ const EditExerciseEntryDialog = ({
 
                 {/* 🫀 Heart Rate & Respiration */}
                 <div className="space-y-2">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-rose-500">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-destructive">
                     <Heart className="w-4.5 h-4.5" />
                     <span>Heart Rate & Respiration</span>
                   </div>
@@ -1225,7 +1225,7 @@ const EditExerciseEntryDialog = ({
 
                 {/* ⚡ Speed, Cadence & Power */}
                 <div className="space-y-2 pt-2.5 border-t border-border/40">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-amber-500">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-warning">
                     <Zap className="w-4.5 h-4.5" />
                     <span>Speed, Cadence & Power</span>
                   </div>
@@ -1365,7 +1365,7 @@ const EditExerciseEntryDialog = ({
 
                 {/* 🏃 Running Dynamics */}
                 <div className="space-y-2 pt-2 border-t border-border/40">
-                  <div className="flex items-center gap-1.5 text-xs font-semibold text-blue-500">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-primary">
                     <Footprints className="w-3.5 h-3.5" />
                     <span>Running Dynamics</span>
                   </div>
@@ -1419,7 +1419,7 @@ const EditExerciseEntryDialog = ({
 
                 {/* ⛰️ Elevation & Swimming */}
                 <div className="space-y-2 pt-2.5 border-t border-border/40">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-emerald-500">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-success">
                     <Mountain className="w-4.5 h-4.5" />
                     <span>Elevation & Swimming</span>
                   </div>
@@ -1545,7 +1545,7 @@ const EditExerciseEntryDialog = ({
 
                 {/* ⏱️ Time & Calorie Breakdown */}
                 <div className="space-y-2 pt-2 border-t border-border/40">
-                  <div className="flex items-center gap-1.5 text-xs font-semibold text-purple-500">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-primary">
                     <Clock className="w-3.5 h-3.5" />
                     <span>Time & Calorie Breakdown</span>
                   </div>
@@ -1611,7 +1611,7 @@ const EditExerciseEntryDialog = ({
 
                 {/* 🎯 Training Load & Performance */}
                 <div className="space-y-2 pt-2 border-t border-border/40">
-                  <div className="flex items-center gap-1.5 text-xs font-semibold text-orange-500">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-warning">
                     <Gauge className="w-3.5 h-3.5" />
                     <span>Training Load & Performance</span>
                   </div>
@@ -1680,7 +1680,7 @@ const EditExerciseEntryDialog = ({
 
                 {/* 🌤️ Environment & Gear */}
                 <div className="space-y-2 pt-2 border-t border-border/40">
-                  <div className="flex items-center gap-1.5 text-xs font-semibold text-cyan-500">
+                  <div className="flex items-center gap-1.5 text-xs font-semibold text-water">
                     <Sun className="w-3.5 h-3.5" />
                     <span>Environment & Gear</span>
                   </div>
@@ -1781,7 +1781,7 @@ const EditExerciseEntryDialog = ({
                   <div className="p-3 bg-muted/40 rounded-lg border border-border text-xs space-y-2 mb-2">
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-foreground flex items-center gap-1.5">
-                        <ShieldCheck className="w-4 h-4 text-green-500" />
+                        <ShieldCheck className="w-4 h-4 text-success" />
                         {t(
                           'exercise.editExerciseEntryDialog.syncedProviderBackup',
                           'Synced Provider Backup (Protected)'
@@ -1797,7 +1797,7 @@ const EditExerciseEntryDialog = ({
                       >
                         {copied ? (
                           <>
-                            <Check className="w-3.5 h-3.5 text-green-500" />
+                            <Check className="w-3.5 h-3.5 text-success" />
                             {t('common.copied', 'Copied!')}
                           </>
                         ) : (
