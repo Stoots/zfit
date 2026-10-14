@@ -35,7 +35,7 @@ export const MagicLinkRequestDialog: React.FC<MagicLinkRequestDialogProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center p-4 z-50">
       <Card className="w-full max-w-md p-6">
         <CardHeader>
           <CardTitle>Request Magic Link</CardTitle>

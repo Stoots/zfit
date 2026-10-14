@@ -15,8 +15,7 @@ import {
   Target, // Used for Goals
   Pill, // Used for Medications
   Shield,
-  Plus,
-  X,
+  MoreHorizontal,
   Coffee, // Used for Breakfast
   Sandwich, // Used for Lunch
   Cookie, // Used for Snacks
@@ -42,12 +41,17 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { useActiveUser } from '@/contexts/ActiveUserContext';
 import { usePreferences } from '@/contexts/PreferencesContext';
-import { useIsMobile } from '@/hooks/use-mobile';
 import { useMealTypes } from '@/hooks/Diary/useMealTypes';
 import { useCurrentVersionQuery } from '@/hooks/useGeneralQueries';
 import { useCycleSettings } from '@/hooks/useCycle';
 import { cn } from '@/lib/utils';
 import { getGridClassNormal } from '@/utils/layout';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 const SHOW_SPONSOR_BUTTON = false;
 
@@ -72,7 +76,6 @@ const MainLayout: React.FC<MainLayoutProps> = ({
   const { t } = useTranslation();
   const { user, signOut } = useAuth();
   const navigate = useNavigate();
-  const isMobile = useIsMobile();
   const {
     isActingOnBehalf,
     hasPermission,
@@ -84,6 +87,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 
   const { data: appVersion } = useCurrentVersionQuery();
   const [isAddCompOpen, setIsAddCompOpen] = useState(false);
+  const [isTrainingOpen, setIsTrainingOpen] = useState(false);
   const [isMealTypeSelectOpen, setIsMealTypeSelectOpen] = useState(false);
 
   // Fetch meal types for quick log menu
@@ -110,74 +114,6 @@ const MainLayout: React.FC<MainLayoutProps> = ({
       });
     }
   };
-
-  const addCompItems: AddCompItem[] = useMemo(() => {
-    const items: AddCompItem[] = [];
-    if (!isActingOnBehalf) {
-      // Keep this order consistent with the desktop tab order in availableTabs:
-      // Check-In, Cycle, Medications, Foods, Exercises, Goals.
-      items.push({
-        value: 'checkin',
-        label: t('nav.checkin', 'Check-In'),
-        icon: Activity,
-      });
-      if (cycleSettings?.enabled) {
-        items.push({
-          value: 'cycle',
-          label: cycleSettings.discreet_mode
-            ? t('nav.wellness', 'Wellness')
-            : cycleSettings.mode === 'pregnant'
-              ? t('nav.pregnancy', 'Pregnancy')
-              : t('nav.cycle', 'Cycle'),
-          icon: cycleSettings.discreet_mode ? Activity : CalendarHeart,
-        });
-      }
-      items.push(
-        {
-          value: 'medications',
-          label: t('nav.medications', 'Medications'),
-          icon: Pill,
-        },
-        { value: 'foods', label: t('nav.foods', 'Foods'), icon: Utensils },
-        {
-          value: 'exercises',
-          label: t('exercise.title', 'Exercises'),
-          icon: Dumbbell,
-        },
-        { value: 'goals', label: t('nav.goals', 'Goals'), icon: Target },
-        {
-          value: 'foodlog',
-          label: t('nav.foodLog', 'Food Log'),
-          icon: Salad,
-          fullWidth: true,
-        }
-      );
-    } else {
-      if (hasWritePermission('checkin')) {
-        items.push({
-          value: 'checkin',
-          label: t('nav.checkin', 'Check-In'),
-          icon: Activity,
-        });
-      }
-      if (hasWritePermission('diary')) {
-        items.push({
-          value: 'foodlog',
-          label: t('nav.foodLog', 'Food Log'),
-          icon: Salad,
-          fullWidth: true,
-        });
-      }
-    }
-    if (hasPermission('diary')) {
-      items.push({
-        value: '/cardio-tests',
-        label: t('cardioTests.title', 'Cardio Tests'),
-        icon: HeartPulse,
-      });
-    }
-    return items;
-  }, [isActingOnBehalf, hasPermission, hasWritePermission, cycleSettings, t]);
 
   // Map meal type names to icons
   const getMealTypeIcon = useCallback((name: string): LucideIcon => {
@@ -266,6 +202,11 @@ const MainLayout: React.FC<MainLayoutProps> = ({
           label: t('exercise.title', 'Exercises'),
           icon: Dumbbell,
         },
+        {
+          value: '/training-programs',
+          label: t('trainingPrograms.title', 'Training Programs'),
+          icon: Dumbbell,
+        },
         { value: '/goals', label: t('nav.goals'), icon: Target },
         { value: '/settings', label: t('nav.settings'), icon: SettingsIcon }
       );
@@ -328,77 +269,27 @@ const MainLayout: React.FC<MainLayoutProps> = ({
     cycleSettings,
   ]);
 
-  const availableMobileTabs = useMemo(() => {
-    debug(loggingLevel, 'MainLayout: Calculating available tabs (mobile).', {
-      isActingOnBehalf,
-      hasPermission,
-      hasWritePermission,
-      isAddCompOpen,
-    });
-    const mobileTabs = [];
-    // Cycle/Pregnancy and Medications live in the "+" Add menu on mobile
-    // (see addCompItems), not the bottom bar, to keep the bar uncluttered.
-    if (!isActingOnBehalf) {
-      mobileTabs.push(
-        { value: '/', label: t('nav.diary'), icon: Home },
-        { value: '/reports', label: t('nav.reports'), icon: BarChart3 },
-        {
-          value: 'Add',
-          label: t('common.add', 'Add'),
-          icon: isAddCompOpen ? X : Plus,
-        },
-        { value: '/settings', label: t('nav.settings'), icon: SettingsIcon }
-      );
-    } else {
-      if (hasWritePermission('diary')) {
-        mobileTabs.push({ value: '/', label: t('nav.diary'), icon: Home });
-      }
-      if (hasWritePermission('checkin')) {
-        mobileTabs.push({
-          value: '/checkin',
-          label: t('nav.checkin'),
-          icon: Activity,
-        });
-      }
-      if (hasPermission('reports')) {
-        mobileTabs.push({
-          value: '/reports',
-          label: t('nav.reports'),
-          icon: BarChart3,
-        });
-      }
-      // Delegates have no "+" Add menu on mobile, so medications stays in the bar.
-      if (hasWritePermission('can_manage_medications')) {
-        mobileTabs.push({
-          value: '/medications',
-          label: t('nav.medications', 'Medications'),
-          icon: Pill,
-        });
-      }
-      if (
-        hasWritePermission('can_manage_symptoms') &&
-        !hasWritePermission('checkin')
-      ) {
-        mobileTabs.push({
-          value: '/symptoms',
-          label: t('nav.symptoms', 'Symptoms'),
-          icon: HeartPulse,
-        });
-      }
-    }
-    if (user?.role === 'admin' && !isActingOnBehalf) {
-      mobileTabs.push({ value: '/admin', label: t('nav.admin'), icon: Shield });
-    }
-    return mobileTabs;
-  }, [
-    isActingOnBehalf,
-    hasPermission,
-    hasWritePermission,
-    loggingLevel,
-    user?.role,
-    isAddCompOpen,
-    t,
-  ]);
+  const availableMobileTabs = [
+    ...availableTabs.filter((tab) => tab.value === '/'),
+    ...(!isActingOnBehalf
+      ? [
+          {
+            value: 'Training',
+            label: t('nav.training', 'Training'),
+            icon: Dumbbell,
+          },
+        ]
+      : []),
+    ...availableTabs.filter((tab) => tab.value === '/checkin'),
+    { value: 'More', label: t('nav.more', 'More'), icon: MoreHorizontal },
+  ];
+  const moreTabs = availableTabs.filter(
+    (tab) =>
+      !['/', '/checkin', '/exercises', '/training-programs'].includes(tab.value)
+  );
+  const trainingTabs = availableTabs.filter((tab) =>
+    ['/exercises', '/training-programs'].includes(tab.value)
+  );
 
   const handleNavigateFromAddComp = useCallback(
     (value: string) => {
@@ -429,9 +320,6 @@ const MainLayout: React.FC<MainLayoutProps> = ({
     },
     [loggingLevel, navigate]
   );
-
-  const gridClass = getGridClassNormal(availableTabs.length);
-  const mobileGridClass = getGridClassNormal(availableMobileTabs.length);
 
   const location = useLocation();
 
@@ -485,81 +373,40 @@ const MainLayout: React.FC<MainLayoutProps> = ({
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-8">
-        <div className="flex justify-between items-center mb-6">
-          <div className="flex items-center gap-1">
+      <div className="container mx-auto px-4 sm:px-6">
+        <header className="flex min-h-16 items-center justify-between gap-3 border-b pt-[env(safe-area-inset-top)]">
+          <div className="flex min-w-0 items-center gap-2">
             <img
               src="/images/SparkyFitness.webp"
               alt="SparkyFitness Logo"
-              width={54}
-              height={72}
+              width={30}
+              height={40}
+              className="shrink-0"
             />
-            <h1 className="text-xl sm:text-2xl font-bold text-foreground dark:text-slate-300">
+            <span className="hidden sm:inline truncate text-base font-semibold tracking-tight">
               SparkyFitness
-            </h1>
-            {!isMobile && (
-              <>
-                <GitHubStarCounter owner="CodeWithCJ" repo="SparkyFitness" />
-                {SHOW_SPONSOR_BUTTON && (
-                  <GitHubSponsorButton owner="CodeWithCJ" />
-                )}
-                <HeaderLinkPill
-                  href="https://codewithcj.github.io/SparkyFitness/"
-                  label={t('layout.docs', 'Docs')}
-                  icon={BookOpen}
-                />
-                <HeaderLinkPill
-                  href="https://weblate.sparkyfitness.com/engage/sparkyfitness/"
-                  label={t('layout.translate', 'Translate')}
-                  icon={Languages}
-                />
-              </>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <ProfileSwitcher />
-            <span className="text-sm text-muted-foreground hidden sm:inline">
-              {t('layout.welcome', 'Welcome {{activeUserName}}', {
-                activeUserName,
-              })}
             </span>
-            {onStartOnboarding && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onStartOnboarding}
-                className="flex items-center gap-2"
-                title={t('onboarding.completeSetup', 'Complete your setup')}
-              >
-                <span className="hidden sm:inline">
-                  {t('onboarding.completeSetup', 'Complete Setup')}
-                </span>
-                <span className="sm:hidden">
-                  {t('onboarding.setupShort', 'Setup')}
-                </span>
-              </Button>
-            )}
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
             <GlobalNotificationIcon />
             <GlobalSyncButton />
             <ThemeToggle />
+            <ProfileSwitcher />
             <Button
-              variant="outline"
-              size="sm"
-              onClick={handleSignOut}
-              className="flex items-center gap-2"
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsAddCompOpen(true)}
+              aria-label={t('nav.more', 'More')}
+              className="hidden sm:inline-flex"
             >
-              <LogOut className="h-4 w-4" />
-              <span className="hidden sm:inline dark:text-slate-300">
-                {t('auth.signOut', 'Sign Out')}
-              </span>
+              <MoreHorizontal />
             </Button>
           </div>
-        </div>
+        </header>
         <nav
           className={cn(
-            'relative hidden sm:grid w-full gap-1 mb-6 bg-slate-200/60 dark:bg-muted/50 p-1 rounded-lg border transition-colors overflow-hidden',
-            gridClass,
-            selectedDateRelation === 'today' && 'border-transparent',
+            'relative hidden sm:flex flex-wrap w-full gap-1 py-3 mb-6 border-b transition-colors',
+            selectedDateRelation === 'today' && 'border-border',
             selectedDateRelation === 'past' && 'border-date-past/40',
             selectedDateRelation === 'future' && 'border-date-future/40'
           )}
@@ -577,11 +424,12 @@ const MainLayout: React.FC<MainLayoutProps> = ({
             <Button
               key={value}
               variant="ghost"
-              className={`relative flex items-center gap-2 hover:bg-background/50 transition-all ${
+              className={`relative flex items-center gap-2 hover:bg-accent transition-colors ${
                 location.pathname === value
-                  ? 'bg-background shadow-sm text-foreground'
+                  ? 'bg-accent text-primary'
                   : 'text-muted-foreground'
               }`}
+              aria-current={location.pathname === value ? 'page' : undefined}
               onClick={() => navigate(value)}
             >
               <Icon className="h-4 w-4" />
@@ -590,65 +438,130 @@ const MainLayout: React.FC<MainLayoutProps> = ({
           ))}
         </nav>
 
-        {/* Mobile Navigation */}
         <nav
+          aria-label={t('nav.primaryNavigation', 'Primary navigation')}
           className={cn(
-            'apple-safe-area sm:hidden fixed bottom-0 left-0 right-0 z-50 w-full bg-background border-t transition-colors overflow-hidden',
+            'apple-safe-area sm:hidden fixed bottom-0 inset-x-0 z-40 border-t bg-background/90 backdrop-blur-xl',
             selectedDateRelation === 'past' && 'border-date-past/80',
             selectedDateRelation === 'future' && 'border-date-future/50'
           )}
         >
-          {selectedDateRelation !== 'today' && (
-            <div
-              className={cn(
-                'absolute inset-0 pointer-events-none z-10',
-                selectedDateRelation === 'past' && 'bg-date-past/10',
-                selectedDateRelation === 'future' && 'bg-date-future/10'
-              )}
-            />
-          )}
           <div
-            className={`relative h-14 grid ${mobileGridClass} items-center justify-items-center`}
+            className={cn(
+              'grid min-h-16 items-stretch px-2',
+              getGridClassNormal(availableMobileTabs.length)
+            )}
           >
-            {availableMobileTabs.map(({ value, icon: Icon }) => (
-              <Button
-                key={value}
-                variant="ghost"
-                className={`flex flex-col items-center gap-1 py-2 ${
-                  location.pathname ===
-                  (value === 'Add' ? location.pathname : value)
-                    ? 'text-primary'
-                    : ''
-                }`}
-                onClick={() => {
-                  if (value === 'Add') {
-                    setIsAddCompOpen((prev) => !prev);
-                  } else {
-                    setIsAddCompOpen(false);
-                    navigate(value);
+            {availableMobileTabs.map(({ value, label, icon: Icon }) => {
+              const active =
+                value === 'Training'
+                  ? location.pathname.startsWith('/exercises') ||
+                    location.pathname.startsWith('/training-programs') ||
+                    location.pathname.startsWith('/workout-playback')
+                  : value === 'More'
+                    ? moreTabs.some((tab) =>
+                        location.pathname.startsWith(tab.value)
+                      )
+                    : location.pathname === value;
+              return (
+                <Button
+                  key={value}
+                  variant="ghost"
+                  aria-current={active ? 'page' : undefined}
+                  aria-expanded={
+                    value === 'More'
+                      ? isAddCompOpen
+                      : value === 'Training'
+                        ? isTrainingOpen
+                        : undefined
                   }
-                }}
-              >
-                <Icon className="h-8 w-8" />
-              </Button>
-            ))}
+                  className={cn(
+                    'h-auto min-h-16 min-w-0 flex-1 flex-col gap-1 rounded-none px-1 py-2 text-xs [&_svg]:size-5',
+                    active ? 'text-primary' : 'text-muted-foreground'
+                  )}
+                  onClick={() => {
+                    if (value === 'More') setIsAddCompOpen(true);
+                    else if (value === 'Training') setIsTrainingOpen(true);
+                    else navigate(value);
+                  }}
+                >
+                  <Icon aria-hidden="true" />
+                  <span>{label}</span>
+                </Button>
+              );
+            })}
           </div>
         </nav>
 
-        <div className="pb-16 sm:pb-0">
-          {/* Don't mount a disallowed page while the redirect effect runs, or it
-              fires requests the active profile isn't permitted to make. */}
+        <main className="min-w-0 pt-6 pb-[calc(5rem+env(safe-area-inset-bottom))] sm:pt-0 sm:pb-0">
+          {/* Avoid mounting disallowed pages while the profile redirect runs. */}
           {isCurrentPathAllowed ? <Outlet /> : null}
-        </div>
+        </main>
 
         <SparkyChat />
       </div>
 
+      <Dialog open={isAddCompOpen} onOpenChange={setIsAddCompOpen}>
+        <DialogContent
+          className="max-h-[calc(100dvh-2rem)] overflow-y-auto"
+          aria-describedby={undefined}
+        >
+          <DialogHeader>
+            <DialogTitle>{t('nav.more', 'More')}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            {t('layout.welcome', 'Welcome {{activeUserName}}', {
+              activeUserName,
+            })}
+          </p>
+          <div className="grid grid-cols-2 gap-2">
+            {moreTabs.map(({ value, label, icon: Icon }) => (
+              <Button
+                key={value}
+                variant="ghost"
+                className="h-auto min-h-11 justify-start whitespace-normal text-left"
+                onClick={() => handleNavigateFromAddComp(value)}
+              >
+                <Icon aria-hidden="true" />
+                {label}
+              </Button>
+            ))}
+            {(!isActingOnBehalf || hasWritePermission('diary')) && (
+              <Button
+                variant="outline"
+                className="col-span-2"
+                onClick={() => handleNavigateFromAddComp('foodlog')}
+              >
+                <Salad />
+                {t('nav.foodLog', 'Food Log')}
+              </Button>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2 border-t pt-4">
+            {onStartOnboarding && (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsAddCompOpen(false);
+                  onStartOnboarding();
+                }}
+              >
+                {t('onboarding.completeSetup', 'Complete Setup')}
+              </Button>
+            )}
+            <Button variant="outline" onClick={handleSignOut}>
+              <LogOut />
+              {t('auth.signOut', 'Sign Out')}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
       <AddComp
-        isVisible={isAddCompOpen}
-        onClose={() => setIsAddCompOpen(false)}
-        items={addCompItems}
-        onNavigate={handleNavigateFromAddComp}
+        isVisible={isTrainingOpen}
+        onClose={() => setIsTrainingOpen(false)}
+        items={trainingTabs}
+        onNavigate={(value) => navigate(value)}
+        title={t('nav.training', 'Training')}
       />
 
       <AddComp
@@ -660,8 +573,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({
       />
 
       <footer className="text-center text-muted-foreground text-sm py-4">
-        {isMobile ? (
-          <div className="flex flex-col items-center gap-2 mb-14">
+        {
+          <div className="flex flex-col items-center gap-2 mb-[calc(4rem+env(safe-area-inset-bottom))] sm:mb-0">
             <div className="flex flex-wrap justify-center gap-2">
               <GitHubStarCounter owner="CodeWithCJ" repo="SparkyFitness" />
               {SHOW_SPONSOR_BUTTON && (
@@ -681,7 +594,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                className="cursor-pointer underline bg-transparent border-0 p-0 text-inherit font-normal text-sm"
+                className="touch-target cursor-pointer underline bg-transparent border-0 p-0 text-inherit font-normal text-sm"
                 onClick={onShowAboutDialog}
               >
                 SparkyFitness v{appVersion?.version ?? ''}
@@ -689,32 +602,14 @@ const MainLayout: React.FC<MainLayoutProps> = ({
               <span>•</span>
               <button
                 type="button"
-                className="cursor-pointer underline hover:text-foreground bg-transparent border-0 p-0 text-inherit font-normal text-sm"
+                className="touch-target cursor-pointer underline hover:text-foreground bg-transparent border-0 p-0 text-inherit font-normal text-sm"
                 onClick={onShowNewReleaseDialog}
               >
                 {t('release.whatsNew', "What's New")}
               </button>
             </div>
           </div>
-        ) : (
-          <div className="flex justify-center items-center gap-4">
-            <button
-              type="button"
-              className="cursor-pointer underline bg-transparent border-0 p-0 text-inherit font-normal text-sm"
-              onClick={onShowAboutDialog}
-            >
-              SparkyFitness v{appVersion?.version ?? ''}
-            </button>
-            <span>•</span>
-            <button
-              type="button"
-              className="cursor-pointer underline hover:text-foreground bg-transparent border-0 p-0 text-inherit font-normal text-sm"
-              onClick={onShowNewReleaseDialog}
-            >
-              {t('release.whatsNew', "What's New")}
-            </button>
-          </div>
-        )}
+        }
       </footer>
     </div>
   );

@@ -821,7 +821,11 @@
     "medications": "Medications",
     "foodLog": "Food Log",
     "wellness": "Wellness",
-    "symptoms": "Symptoms"
+    "symptoms": "Symptoms",
+    "training": "Training",
+    "more": "More",
+    "primaryNavigation": "Primary navigation",
+    "switchProfile": "Switch profile"
   },
   "nutrition": {
     "calories": "Calories",

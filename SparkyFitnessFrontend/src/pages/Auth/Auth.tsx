@@ -443,11 +443,11 @@ const Auth = () => {
 
   return (
     <>
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="min-h-screen flex items-center justify-center bg-background py-12 px-4 sm:px-6 lg:px-8">
         {loading ? (
-          <div className="flex flex-col items-center justify-center p-8 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-100 dark:border-gray-700 animate-in fade-in zoom-in duration-300">
+          <div className="flex flex-col items-center justify-center p-8 bg-card rounded-3xl border animate-in fade-in zoom-in duration-300">
             <Loader2 className="h-12 w-12 animate-spin text-primary mb-6" />
-            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+            <h2 className="text-xl font-bold text-foreground mb-2">
               Almost there!
             </h2>
             <p className="text-muted-foreground animate-pulse text-sm">
@@ -465,7 +465,7 @@ const Auth = () => {
                   alt="SparkyFitness Logo"
                   className="h-10 w-10 mr-2"
                 />
-                <CardTitle className="text-2xl font-bold text-gray-900 dark:text-gray-300">
+                <CardTitle className="text-2xl font-bold text-foreground">
                   SparkyFitness
                 </CardTitle>
               </div>
@@ -476,7 +476,7 @@ const Auth = () => {
             </CardHeader>
             <CardContent>
               {loginSettings?.warning && (
-                <div className="mb-4 p-3 rounded-md bg-yellow-50 border border-yellow-200 text-sm text-yellow-800">
+                <div className="mb-4 p-3 rounded-md bg-warning/10 border border-warning/30 text-sm text-warning">
                   <p className="font-semibold">Warning</p>
                   <p>{loginSettings.warning}</p>
                 </div>
@@ -598,7 +598,7 @@ const Auth = () => {
                     )}
                     <Button
                       variant="outline"
-                      className="w-full dark:bg-gray-800 dark:hover:bg-gray-600 flex items-center justify-center mb-2"
+                      className="w-full flex items-center justify-center mb-2"
                       onClick={() => setIsMagicLinkRequestDialogOpen(true)}
                     >
                       <Zap className="h-4 w-4 mr-2" /> Request Magic Link
@@ -609,7 +609,7 @@ const Auth = () => {
                           <Button
                             key={provider.id}
                             variant="outline"
-                            className="w-full dark:bg-gray-800 dark:hover:bg-gray-600 flex items-center justify-center"
+                            className="w-full flex items-center justify-center"
                             onClick={() => {
                               if (provider.id) {
                                 initiateOidcLogin({
@@ -719,7 +719,7 @@ const Auth = () => {
                   {passkeyEnabled && (
                     <Button
                       variant="outline"
-                      className="w-full dark:bg-gray-800 dark:hover:bg-gray-600 flex items-center justify-center"
+                      className="w-full flex items-center justify-center"
                       onClick={handlePasskeySignIn}
                       disabled={loading}
                     >
@@ -734,7 +734,7 @@ const Auth = () => {
                         {passkeyEnabled && (
                           <div className="flex items-center my-4">
                             <div className="flex-grow border-t border-gray-300 dark:border-gray-700"></div>
-                            <span className="flex-shrink mx-4 text-gray-400 text-xs uppercase">
+                            <span className="flex-shrink mx-4 text-muted-foreground text-xs uppercase">
                               Or sign in with
                             </span>
                             <div className="flex-grow border-t border-gray-300 dark:border-gray-700"></div>
@@ -745,7 +745,7 @@ const Auth = () => {
                             <Button
                               key={provider.id}
                               variant="outline"
-                              className="w-full dark:bg-gray-800 dark:hover:bg-gray-600 flex items-center justify-center"
+                              className="w-full flex items-center justify-center"
                               onClick={() => {
                                 if (provider.id) {
                                   initiateOidcLogin({
@@ -774,7 +774,7 @@ const Auth = () => {
                   <Button
                     type="button"
                     variant="default"
-                    className="w-full bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-semibold py-2.5 shadow-md flex items-center justify-center gap-2 transition-all hover:scale-[1.01]"
+                    className="w-full font-semibold py-2.5 flex items-center justify-center gap-2"
                     onClick={() => setIsDemoDisclaimerOpen(true)}
                     disabled={loading || isDemoLoginPending}
                   >

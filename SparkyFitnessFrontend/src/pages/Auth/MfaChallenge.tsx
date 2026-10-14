@@ -206,7 +206,7 @@ const MfaChallenge: React.FC<MfaChallengeProps> = ({
 
   // The entire card and its content are returned here
   return (
-    <Card className="w-[400px]">
+    <Card className="w-full max-w-md">
       <CardHeader>
         <CardTitle>
           {t('mfaChallenge.challengeTitle', 'MFA Challenge')}
