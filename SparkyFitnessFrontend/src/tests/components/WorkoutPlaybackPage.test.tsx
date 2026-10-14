@@ -11,6 +11,7 @@ import {
 const mockNavigate = jest.fn();
 const mockCreatePresetSession = jest.fn();
 const mockSearchParams = new URLSearchParams('date=2026-04-27');
+let mockDistanceUnit: 'km' | 'miles' = 'km';
 let mockLocationState: { returnTo?: string; draft?: unknown } | null = null;
 
 jest.mock('react-i18next', () =>
@@ -24,7 +25,11 @@ jest.mock('react-router-dom', () => ({
 }));
 
 jest.mock('@/contexts/PreferencesContext', () => ({
-  usePreferences: () => ({ weightUnit: 'kg', timezone: 'UTC' }),
+  usePreferences: () => ({
+    weightUnit: 'kg',
+    distanceUnit: mockDistanceUnit,
+    timezone: 'UTC',
+  }),
 }));
 
 jest.mock('@/hooks/Exercises/useExerciseEntries', () => ({
@@ -64,11 +69,75 @@ const presetFixture: WorkoutPreset = {
 
 describe('WorkoutPlaybackPage', () => {
   beforeEach(() => {
+    mockDistanceUnit = 'km';
     mockNavigate.mockReset();
     mockCreatePresetSession.mockReset();
     window.localStorage.clear();
     mockLocationState = { returnTo: '/?date=2026-04-27' };
   });
+
+  it.each([
+    {
+      unit: 'km' as const,
+      label: 'm',
+      prescribed: 50,
+      edited: '75.5',
+      saved: 0.0755,
+    },
+    {
+      unit: 'miles' as const,
+      label: 'yd',
+      prescribed: 54.7,
+      edited: '100',
+      saved: 0.09144,
+    },
+  ])(
+    'persists edited carry distance in $label through completion and the save payload',
+    async ({ unit, label, prescribed, edited, saved }) => {
+      mockDistanceUnit = unit;
+      const preset: WorkoutPreset = {
+        ...presetFixture,
+        exercises: [
+          {
+            exercise_id: 'carry',
+            exercise_name: 'Farmer Carry',
+            modality: 'weight_distance',
+            sets: [{ set_number: 1, weight: 20, distance: 0.05 }],
+          },
+        ],
+      };
+      mockLocationState = {
+        draft: createWorkoutPlaybackDraftFromPreset(preset, '2026-04-27'),
+      };
+      const view = render(<WorkoutPlaybackPage />);
+      const input = screen.getByRole('spinbutton', {
+        name: `Distance set 1 (${label})`,
+      });
+      expect(input).toHaveValue(prescribed);
+      expect(screen.queryByLabelText('Reps set 1')).not.toBeInTheDocument();
+      fireEvent.change(input, { target: { value: '' } });
+      expect(input).toHaveValue(null);
+      fireEvent.change(input, { target: { value: '0' } });
+      expect(input).toHaveValue(0);
+      fireEvent.change(input, { target: { value: edited } });
+      fireEvent.click(screen.getByRole('button', { name: 'Log set' }));
+      await waitFor(() => {
+        const draft = loadWorkoutPlaybackDraftFromStorage('2026-04-27');
+        expect(draft?.exercises[0]?.sets[0]?.distance).toBeCloseTo(saved, 8);
+        expect(draft?.exercises[0]?.sets[0]?.completed).toBe(true);
+      });
+      view.unmount();
+      mockLocationState = null;
+      render(<WorkoutPlaybackPage />);
+      fireEvent.click(screen.getByLabelText('Expand Farmer Carry'));
+      expect(
+        screen.getByRole('spinbutton', { name: `Distance set 1 (${label})` })
+      ).toHaveValue(Number(edited));
+      const draft = loadWorkoutPlaybackDraftFromStorage('2026-04-27')!;
+      const payload = buildPresetSessionCreateRequestFromDraft(draft, 'UTC');
+      expect(payload.exercises?.[0]?.sets?.[0]?.distance).toBeCloseTo(saved, 8);
+    }
+  );
 
   it('shows elapsed timer and collapses completed exercises', () => {
     const draft = createWorkoutPlaybackDraftFromPreset(

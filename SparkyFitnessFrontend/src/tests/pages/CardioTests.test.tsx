@@ -95,6 +95,8 @@ function expectTrend(dates: string[], distances: number[]) {
   const chart = screen.getByRole('figure', {
     name: 'Cooper run distance trend by date',
   });
+  expect(chart.querySelectorAll('.recharts-reference-line')).toHaveLength(0);
+  expect(within(chart).queryByText('First attempt')).not.toBeInTheDocument();
   const dateTicks = Array.from(
     chart.querySelectorAll(
       '.recharts-xAxis-tick-labels .recharts-cartesian-axis-tick-value'

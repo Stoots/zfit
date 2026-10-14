@@ -3,15 +3,9 @@ import { render, screen } from '@testing-library/react';
 import { CheckInWeightTrend } from '@/pages/CheckIn/CheckInWeightTrend';
 import { weightTrend } from '@/pages/CheckIn/weightTrend';
 
-jest.mock('react-i18next', () => ({
-  useTranslation: () => ({
-    i18n: { language: 'en' },
-    t: (key: string, arg?: unknown) =>
-      typeof arg === 'string'
-        ? arg
-        : ((arg as { defaultValue?: string } | undefined)?.defaultValue ?? key),
-  }),
-}));
+jest.mock('react-i18next', () =>
+  jest.requireActual('@/tests/mocks/reactI18next')
+);
 
 let mockRows: { entry_date: string; weight: number | null }[] = [];
 let mockActiveUser: string | undefined;
@@ -19,6 +13,7 @@ let mockPending = false;
 let mockError = false;
 let mockUnit = 'kg';
 const mockProfile = jest.fn();
+const mockMeasurements = jest.fn();
 const mockChart = jest.fn();
 jest.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({ user: { id: 'owner' } }),
@@ -34,11 +29,10 @@ jest.mock('@/contexts/PreferencesContext', () => ({
   }),
 }));
 jest.mock('@/hooks/CheckIn/useCheckIn', () => ({
-  useRecentStandardMeasurements: () => ({
-    data: mockRows,
-    isPending: mockPending,
-    isError: mockError,
-  }),
+  useRecentStandardMeasurements: (startDate: string, endDate: string) => {
+    mockMeasurements(startDate, endDate);
+    return { data: mockRows, isPending: mockPending, isError: mockError };
+  },
 }));
 jest.mock('@/hooks/Settings/useProfile', () => ({
   useProfileQuery: (userId?: string) => {
@@ -62,14 +56,14 @@ beforeEach(() => {
   jest.clearAllMocks();
 });
 
-test('averages only recorded weights in two adjacent calendar weeks', () => {
+test('averages only recorded weights in two adjacent 30-calendar-day periods', () => {
   const rows = [
     { entry_date: '2026-10-15', weight: 79 },
-    { entry_date: '2026-10-10', weight: 81 },
+    { entry_date: '2026-09-16', weight: 81 },
     { entry_date: '2026-10-09', weight: null },
-    { entry_date: '2026-10-08', weight: 82 },
-    { entry_date: '2026-10-02', weight: 84 },
-    { entry_date: '2026-10-01', weight: 200 },
+    { entry_date: '2026-09-15', weight: 82 },
+    { entry_date: '2026-08-17', weight: 84 },
+    { entry_date: '2026-08-16', weight: 200 },
     { entry_date: '2026-10-16', weight: 200 },
   ];
   expect(weightTrend(rows, '2026-10-15')).toMatchObject({
@@ -87,7 +81,7 @@ test('averages only recorded weights in two adjacent calendar weeks', () => {
   ).toBeNull();
 });
 
-test('does not invent a trend or weekly change when either week lacks data', () => {
+test('does not invent a trend or monthly change when either period lacks data', () => {
   expect(weightTrend([], '2026-10-15')).toMatchObject({
     current: null,
     delta: null,
@@ -96,7 +90,7 @@ test('does not invent a trend or weekly change when either week lacks data', () 
     weightTrend([{ entry_date: '2026-10-15', weight: 80 }], '2026-10-15')
   ).toMatchObject({ current: 80, delta: null });
   expect(
-    weightTrend([{ entry_date: '2026-10-08', weight: 80 }], '2026-10-15')
+    weightTrend([{ entry_date: '2026-09-15', weight: 80 }], '2026-10-15')
   ).toMatchObject({ current: null, delta: null });
   expect(
     weightTrend([{ entry_date: '2026-10-15', weight: NaN }], '2026-10-15')
@@ -107,7 +101,7 @@ test('does not invent a trend or weekly change when either week lacks data', () 
 test('handles month boundaries and zero without altering the source rows', () => {
   const rows = [
     { entry_date: '2026-03-31', weight: 0 },
-    { entry_date: '2026-03-24', weight: 1 },
+    { entry_date: '2026-03-02', weight: 1 },
   ];
   const original = structuredClone(rows);
   expect(weightTrend(rows, '2026-04-01')).toMatchObject({
@@ -155,5 +149,27 @@ test('shows an error instead of presenting a failed query as a recorded weight',
   expect(screen.getByText('—')).toBeInTheDocument();
   expect(
     screen.getByText('Failed to load recent standard measurements.')
+  ).toBeInTheDocument();
+});
+
+test('requests both 30-day periods and explains the monthly comparison', () => {
+  mockRows = [
+    { entry_date: '2026-08-17', weight: 84 },
+    { entry_date: '2026-09-16', weight: 80 },
+  ];
+  render(<CheckInWeightTrend selectedDate="2026-10-15" photoDates={[]} />);
+  expect(mockMeasurements).toHaveBeenCalledWith('2026-08-17', '2026-10-15');
+  expect(screen.getByText('-4.0 kg this month')).toBeInTheDocument();
+  expect(
+    screen.getByText(
+      'Average of logged weights over 30 days, compared with the previous 30 days.'
+    )
+  ).toBeInTheDocument();
+});
+
+test('explains that both 30-day periods need logged weights when comparison is unavailable', () => {
+  render(<CheckInWeightTrend selectedDate="2026-10-15" photoDates={[]} />);
+  expect(
+    screen.getByText('Log weight in both 30-day periods to see the change.')
   ).toBeInTheDocument();
 });

@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import {
   carryDistanceFromKm,
+  carryDistanceToKm,
   carryDistanceUnitLabel,
   type ExerciseModality,
 } from '@workspace/shared';
@@ -12,6 +13,7 @@ import { MessageSquare, Play, Square, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
+import { NumericInput } from '@/components/NumericInput';
 import { Textarea } from '@/components/ui/textarea';
 import { UnitInput } from '@/components/ui/UnitInput';
 import {
@@ -219,17 +221,31 @@ const WorkoutPlaybackSetRow = ({
             className="min-w-0 px-2 tabular-nums"
           />
         ) : layout.showDistance ? (
-          <span
-            className="text-center text-sm tabular-nums"
-            aria-label={t('workout.distance', 'Distance')}
-          >
-            {distance == null
-              ? '—'
-              : Number(
-                  carryDistanceFromKm(distance, distanceUnit).toFixed(1)
-                )}{' '}
-            {carryDistanceUnitLabel(distanceUnit)}
-          </span>
+          <NumericInput
+            inputMode="decimal"
+            min={0}
+            step={1}
+            decimals={1}
+            aria-label={t(
+              'workout.distanceSet',
+              'Distance set {{setNumber}} ({{unit}})',
+              { setNumber, unit: carryDistanceUnitLabel(distanceUnit) }
+            )}
+            value={
+              distance == null
+                ? null
+                : carryDistanceFromKm(distance, distanceUnit)
+            }
+            onValueChange={(value) =>
+              onSetFieldChange(
+                pointer,
+                'distance',
+                value == null ? null : carryDistanceToKm(value, distanceUnit)
+              )
+            }
+            placeholder="—"
+            className="min-w-0 px-2 tabular-nums"
+          />
         ) : (
           <Input
             id={`set-duration-${exerciseIndex}-${setIndex}`}
