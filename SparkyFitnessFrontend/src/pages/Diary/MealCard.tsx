@@ -1,3 +1,9 @@
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
@@ -15,7 +21,8 @@ import {
   Edit,
   Trash2,
   History,
-  Utensils,
+  Plus,
+  MoreHorizontal,
   ClipboardCopy,
   PlusCircle,
   Users,
@@ -238,14 +245,14 @@ const MealCard = ({
 
   return (
     <>
-      <Card>
-        <CardHeader>
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4">
-            <div className="flex items-center gap-2">
-              <CardTitle className="text-lg sm:text-xl dark:text-slate-300">
+      <Card className="border-x-0 rounded-none">
+        <CardHeader className="px-1 py-3 sm:px-5">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-1">
+              <CardTitle className="text-base font-semibold text-foreground">
                 {meal.name}
               </CardTitle>
-              <span className="text-xs sm:text-sm text-gray-500">
+              <span className="text-xs sm:text-sm text-muted-foreground">
                 {Math.round(convertEnergy(totals.calories, 'kcal', energyUnit))}
                 {!!meal.targetCalories &&
                   ` / ${Math.round(
@@ -254,14 +261,15 @@ const MealCard = ({
                 {getEnergyUnitString(energyUnit)}
               </span>
             </div>
-            <div className="flex flex-wrap gap-2 sm:gap-4 justify-end">
+            <div className="flex shrink-0 items-center gap-1">
               <Dialog
                 open={isFoodSearchOpen}
                 onOpenChange={handleFoodSearchOpenChange}
               >
                 <DialogTrigger asChild>
                   <Button
-                    size="default"
+                    size="icon"
+                    variant="ghost"
                     onClick={() =>
                       debug(
                         loggingLevel,
@@ -270,10 +278,10 @@ const MealCard = ({
                     }
                     title={t('mealCard.addFoodTo', 'Add Food to')}
                   >
-                    <Utensils className="w-4 h-4" />
+                    <Plus className="w-4 h-4" />
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-6xl max-h-[80vh] overflow-y-auto">
+                <DialogContent className="max-w-6xl max-h-[85dvh] overflow-y-auto">
                   <DialogHeader>
                     <DialogTitle>
                       {t('mealCard.addFoodToMeal', {
@@ -296,7 +304,7 @@ const MealCard = ({
                         ).toLowerCase()}.`,
                       })}
                       <br />
-                      <span className="text-red-500">
+                      <span className="text-destructive">
                         {(selectedDateRelation === 'past' &&
                           t(
                             'foodDiary.pastDateWarning',
@@ -311,69 +319,69 @@ const MealCard = ({
                       </span>
                     </DialogDescription>
                   </DialogHeader>
-                  <EnhancedFoodSearch
-                    mealType={meal.type}
-                    onFoodSelect={(item, type) => {
-                      if (type === 'food') {
-                        debug(
-                          loggingLevel,
-                          'MealCard: Food selected in search:',
-                          item
-                        );
-                        onFoodSelect(item as Food, meal.type);
-                      } else {
-                        debug(
-                          loggingLevel,
-                          'MealCard: Meal selected in search:',
-                          item
-                        );
-                        onFoodSelect(item as Meal, meal.type);
-                      }
-                    }}
-                  />
+                  <div className="[&_.bg-card]:rounded-none [&_.bg-card]:border-x-0 [&_.bg-card]:border-t-0 [&_.bg-card]:bg-transparent [&_.bg-card:hover]:bg-muted">
+                    <EnhancedFoodSearch
+                      mealType={meal.type}
+                      onFoodSelect={(item, type) => {
+                        if (type === 'food') {
+                          debug(
+                            loggingLevel,
+                            'MealCard: Food selected in search:',
+                            item
+                          );
+                          onFoodSelect(item as Food, meal.type);
+                        } else {
+                          debug(
+                            loggingLevel,
+                            'MealCard: Meal selected in search:',
+                            item
+                          );
+                          onFoodSelect(item as Meal, meal.type);
+                        }
+                      }}
+                    />
+                  </div>
                 </DialogContent>
               </Dialog>
-              {/* Existing clock icon would go here if it were part of this component */}
-              <Button
-                size="default"
-                onClick={() => onCopyClick(meal.type)}
-                title={t('diary.copyAllToDate', 'Copy entire day to date')}
-              >
-                <ClipboardCopy className="w-4 h-4" />
-              </Button>
-              <Button
-                size="default"
-                onClick={() => onCopyFamilyClick(meal.type)}
-                title={t('diary.copyFamilyTitle', 'Copy Food with Family')}
-              >
-                <Users className="w-4 h-4" />
-              </Button>
-              <Button
-                size="default"
-                onClick={handleCopyFromYesterday}
-                title={t(
-                  'diary.copyAllFromYesterday',
-                  'Copy all from yesterday'
-                )}
-              >
-                <History className="w-4 h-4" />
-              </Button>
-              <Button
-                size="default"
-                onClick={() => onConvertToMealClick(meal.type)}
-                title={t(
-                  'mealCreation.convertToMeal',
-                  'Create Meal from Diary'
-                )}
-              >
-                <PlusCircle className="w-4 h-4" />
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    aria-label={t('diary.mealActions', 'Meal actions')}
+                  >
+                    <MoreHorizontal className="size-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onSelect={() => onCopyClick(meal.type)}>
+                    <ClipboardCopy className="size-4" />
+                    {t('diary.copyAllToDate', 'Copy entire day to date')}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={() => onCopyFamilyClick(meal.type)}
+                  >
+                    <Users className="size-4" />
+                    {t('diary.copyFamilyTitle', 'Copy Food with Family')}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onSelect={handleCopyFromYesterday}>
+                    <History className="size-4" />
+                    {t('diary.copyAllFromYesterday', 'Copy all from yesterday')}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={() => onConvertToMealClick(meal.type)}
+                  >
+                    <PlusCircle className="size-4" />
+                    {t('mealCreation.convertToMeal', 'Create Meal from Diary')}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-1 pb-3 sm:px-5">
           {meal.entries.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
+            <div className="py-3 text-sm text-muted-foreground">
               {t('foodDiary.noFoodsAddedYet', 'No foods added yet')}
             </div>
           ) : (
@@ -477,13 +485,13 @@ const MealCard = ({
                     <div
                       key={item.id}
                       className={cn(
-                        'rounded-xl border bg-card p-4 shadow-sm transition-colors duration-300 dark:bg-secondary/50',
-                        entryIsHighlighted && 'border-2 border-blue-500'
+                        'border-t border-border py-3',
+                        entryIsHighlighted && 'ring-2 ring-primary rounded-lg'
                       )}
                     >
                       <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3">
                         <div className="min-w-0">
-                          <div className="text-base font-semibold leading-tight text-card-foreground">
+                          <div className="text-sm font-medium leading-snug text-card-foreground">
                             {entryName}
                           </div>
                           <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
@@ -499,7 +507,7 @@ const MealCard = ({
                             {item.entry_time && (
                               <>
                                 <span aria-hidden="true">&bull;</span>
-                                <span className="font-medium text-blue-600 dark:text-blue-400">
+                                <span className="font-medium text-primary">
                                   {formatTimeOfDayString(
                                     item.entry_time,
                                     timeFormat
@@ -508,7 +516,7 @@ const MealCard = ({
                               </>
                             )}
                             {isFromMealPlan && (
-                              <Badge variant="outline" className="text-[10px]">
+                              <Badge variant="outline" className="text-xs">
                                 {t('mealCard.fromPlan', 'From Plan')}
                               </Badge>
                             )}
@@ -519,7 +527,7 @@ const MealCard = ({
                               quickInfoNutrients.includes('glycemic_index') && (
                                 <Badge
                                   variant="secondary"
-                                  className="text-[10px] font-medium"
+                                  className="text-xs font-medium"
                                 >
                                   GI: {giValue}
                                 </Badge>
@@ -536,13 +544,12 @@ const MealCard = ({
                           <div className="text-right">
                             <div
                               className={cn(
-                                'text-xl font-semibold leading-none',
-                                mobileCalories.metadata.color
+                                'text-lg font-semibold tabular-nums leading-none text-foreground'
                               )}
                             >
                               {mobileCalories.displayValue}
                             </div>
-                            <div className="mt-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                            <div className="mt-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
                               {mobileCalories.unitDisplay}
                             </div>
                           </div>
@@ -551,7 +558,7 @@ const MealCard = ({
 
                       {mobileNutrients.length > 0 && (
                         <div
-                          className="mt-3 grid gap-2 border-t pt-3"
+                          className="mt-2 grid gap-2"
                           style={{
                             gridTemplateColumns: `repeat(${mobileNutrients.length}, minmax(0, 1fr))`,
                           }}
@@ -566,14 +573,13 @@ const MealCard = ({
                               <div key={nutrient} className="min-w-0">
                                 <div
                                   className={cn(
-                                    'text-sm font-medium leading-tight',
-                                    metadata.color
+                                    'text-xs font-medium leading-tight text-muted-foreground'
                                   )}
                                 >
                                   {displayValue}
                                   {unitDisplay}
                                 </div>
-                                <div className="mt-1 truncate text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                                <div className="mt-1 truncate text-xs font-medium uppercase tracking-wide text-muted-foreground">
                                   {labelOverride
                                     ? t(
                                         labelOverride.label,
@@ -587,11 +593,11 @@ const MealCard = ({
                         </div>
                       )}
 
-                      <div className="mt-3 flex items-center gap-2 border-t pt-2">
+                      <div className="mt-1 flex items-center justify-end gap-1">
                         <Button
                           size="icon"
                           variant="ghost"
-                          className="h-9 w-9 text-muted-foreground"
+                          className="h-11 w-11 text-muted-foreground"
                           onClick={() => {
                             debug(
                               loggingLevel,
@@ -607,7 +613,7 @@ const MealCard = ({
                         <Button
                           size="icon"
                           variant="ghost"
-                          className="h-9 w-9 text-muted-foreground"
+                          className="h-11 w-11 text-muted-foreground"
                           onClick={() => {
                             debug(
                               loggingLevel,
@@ -632,14 +638,14 @@ const MealCard = ({
                   <div
                     key={item.id} // Use item.id directly
                     className={cn(
-                      'flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg gap-4 transition-colors duration-300',
-                      entryIsHighlighted && 'border-2 border-blue-500'
+                      'flex flex-col sm:flex-row sm:items-center justify-between py-3 border-t border-border gap-4',
+                      entryIsHighlighted && 'ring-2 ring-primary rounded-lg'
                     )}
                   >
                     {entryImageSrc && (
                       <button
                         type="button"
-                        className="flex-shrink-0 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        className="flex-shrink-0 rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
                         onClick={() =>
                           openLightbox(entryImages, 0, entryName ?? undefined)
                         }
@@ -657,7 +663,7 @@ const MealCard = ({
                         />
                       </button>
                     )}
-                    <div className="flex-1">
+                    <div className="min-w-0 flex-1">
                       <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-1">
                         <span className="font-medium">{entryName}</span>
                         {entryDescription ? (
@@ -665,11 +671,11 @@ const MealCard = ({
                             {entryDescription}
                           </Badge>
                         ) : null}
-                        <span className="text-sm text-gray-500">
+                        <span className="text-sm text-muted-foreground">
                           {servingLabel}
                         </span>
                         {item.entry_time && (
-                          <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full dark:bg-blue-900/30 dark:text-blue-300 font-medium">
+                          <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">
                             {formatTimeOfDayString(item.entry_time, timeFormat)}
                           </span>
                         )}
@@ -683,7 +689,7 @@ const MealCard = ({
                           quickInfoNutrients.includes('glycemic_index') && (
                             <Badge
                               variant="secondary"
-                              className="text-xs w-fit font-medium px-2 py-0.5 rounded-full bg-purple-100 text-purple-800 dark:bg-transparent dark:text-purple-600"
+                              className="text-xs w-fit font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary dark:bg-transparent"
                             >
                               GI: {giValue}
                             </Badge>
@@ -702,12 +708,12 @@ const MealCard = ({
                           return (
                             <div
                               key={nutrient}
-                              className="text-center min-w-[60px]"
+                              className="text-right min-w-[60px]"
                             >
-                              <div className={`font-medium ${metadata.color}`}>
+                              <div className="font-medium text-muted-foreground">
                                 {displayValue} {unitDisplay}
                               </div>
-                              <div className="text-[10px] sm:text-xs text-gray-500">
+                              <div className="text-xs sm:text-xs text-muted-foreground">
                                 {t(metadata.label, metadata.defaultLabel)}
                               </div>
                             </div>
@@ -762,7 +768,7 @@ const MealCard = ({
               <Separator />
 
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pt-2 gap-4">
-                <span className="font-semibold dark:text-slate-300">
+                <span className="font-semibold text-muted-foreground">
                   {t('mealCard.mealTotal', {
                     mealName: t(`common.${meal.type}`, meal.name),
                     defaultValue: `${meal.name} Total:`,
@@ -799,10 +805,10 @@ const MealCard = ({
 
                     return (
                       <div key={nutrient} className="text-center min-w-[40px]">
-                        <div className={`font-bold ${metadata.color}`}>
+                        <div className="font-semibold text-muted-foreground">
                           {displayValue} {unitDisplay}
                         </div>
-                        <div className="text-xs text-gray-500">
+                        <div className="text-xs text-muted-foreground">
                           {t(metadata.label, metadata.defaultLabel)}
                         </div>
                       </div>
@@ -833,7 +839,7 @@ const MealCard = ({
                 )}
               </DialogDescription>
             </DialogHeader>
-            <p className="text-red-500">
+            <p className="text-destructive">
               {t(
                 'mealCard.editingTemporarilyUnavailable',
                 'Editing food details is temporarily unavailable due to schema changes.'

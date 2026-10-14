@@ -59,18 +59,15 @@ interface ExerciseEntryDisplayProps {
 const SOURCE_BADGES: Record<string, { label: string; className: string }> = {
   wger: {
     label: 'Wger',
-    className:
-      'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300',
+    className: 'bg-success/10 text-success bg-success/10 text-success',
   },
   'free-exercise-db': {
     label: 'Free DB',
-    className:
-      'bg-violet-100 text-violet-800 dark:bg-violet-900/40 dark:text-violet-300',
+    className: 'bg-primary/10 text-primary bg-primary/10 text-primary',
   },
   nutritionix: {
     label: 'Nutritionix',
-    className:
-      'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
+    className: 'bg-warning/10 text-warning bg-warning/10 text-warning',
   },
 };
 
@@ -101,8 +98,7 @@ const ExerciseEntryDisplay: React.FC<ExerciseEntryDisplayProps> = ({
     : snapshot?.is_custom
       ? {
           label: t('exerciseCard.customSource', 'Custom'),
-          className:
-            'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300',
+          className: 'bg-primary/10 text-primary bg-primary/10 text-primary',
         }
       : null;
 
@@ -159,12 +155,12 @@ const ExerciseEntryDisplay: React.FC<ExerciseEntryDisplayProps> = ({
     EXERCISE_CATEGORY_META['general'];
   const CategoryIcon = meta.icon;
   return (
-    <div className="group flex gap-3 p-3 rounded-lg bg-white dark:bg-gray-800/80 border border-gray-100 dark:border-gray-700/60 hover:border-blue-200 dark:hover:border-blue-800 hover:shadow-sm transition-all duration-150">
+    <div className="group flex gap-3 py-3 border-t border-border">
       {/* Optional thumbnail */}
       {imageUrl && !imageError ? (
         <Dialog>
           <DialogTrigger asChild>
-            <button className="flex-shrink-0 w-12 h-12 rounded-lg overflow-hidden cursor-pointer ring-1 ring-gray-200 dark:ring-gray-700 hover:ring-blue-400 transition-all">
+            <button className="flex-shrink-0 w-12 h-12 rounded-lg overflow-hidden cursor-pointer ring-1 ring-ring hover:ring-ring transition-all">
               <img
                 src={imageUrl}
                 alt={
@@ -219,19 +215,19 @@ const ExerciseEntryDisplay: React.FC<ExerciseEntryDisplayProps> = ({
       <div className="flex-1 min-w-0">
         {/* Name row */}
         <div className="flex items-center gap-1.5 flex-wrap mb-1">
-          <span className="font-semibold text-sm text-gray-800 dark:text-gray-100 leading-tight">
+          <span className="font-semibold text-sm text-foreground leading-tight">
             {snapshot?.name
               ? exerciseDisplayLabel(snapshot.name, t, !snapshot.is_custom)
               : t('exerciseCard.unknownExercise', 'Unknown Exercise')}
           </span>
           {exerciseEntry.entry_time && (
-            <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full dark:bg-blue-900/30 dark:text-blue-300 font-medium">
+            <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">
               {formatTimeOfDayString(exerciseEntry.entry_time, timeFormat)}
             </span>
           )}
           {sourceBadge && (
             <span
-              className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${sourceBadge.className}`}
+              className={`text-xs font-medium px-1.5 py-0.5 rounded-full ${sourceBadge.className}`}
             >
               {sourceBadge.label}
             </span>
@@ -239,9 +235,9 @@ const ExerciseEntryDisplay: React.FC<ExerciseEntryDisplayProps> = ({
         </div>
 
         {/* Stats row */}
-        <div className="flex items-center gap-2 flex-wrap text-xs text-gray-500 dark:text-gray-400 mb-1">
+        <div className="flex items-center gap-2 flex-wrap text-xs text-muted-foreground mb-1">
           {isActiveCalories ? (
-            <span className="font-medium text-orange-600 dark:text-orange-400">
+            <span className="font-medium text-warning">
               {t('exerciseCard.activeCaloriesValue', {
                 defaultValue: '{{calories}} active',
                 calories: caloriesDisplay,
@@ -252,17 +248,17 @@ const ExerciseEntryDisplay: React.FC<ExerciseEntryDisplayProps> = ({
               <span>{durationDisplay}</span>
               {exerciseEntry.distance != null && (
                 <>
-                  <span className="text-gray-300 dark:text-gray-600">·</span>
+                  <span className="text-muted-foreground">·</span>
                   <span>{formatDistance(exerciseEntry.distance)}</span>
                 </>
               )}
-              <span className="text-gray-300 dark:text-gray-600">·</span>
-              <span className="text-orange-600 dark:text-orange-400 font-medium">
+              <span className="text-muted-foreground">·</span>
+              <span className="text-warning font-medium">
                 {caloriesDisplay}
               </span>
               {hasSets && (
                 <>
-                  <span className="text-gray-300 dark:text-gray-600">·</span>
+                  <span className="text-muted-foreground">·</span>
                   <span>
                     {t('exerciseCard.setCount', {
                       defaultValue: '{{count}} set',
@@ -316,7 +312,7 @@ const ExerciseEntryDisplay: React.FC<ExerciseEntryDisplayProps> = ({
               return (
                 <span
                   key={index}
-                  className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 font-medium"
+                  className="text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-medium"
                 >
                   {index + 1}: {parts.join(' · ')}
                 </span>
@@ -331,7 +327,7 @@ const ExerciseEntryDisplay: React.FC<ExerciseEntryDisplayProps> = ({
             {metaPills.map((pill) => (
               <span
                 key={pill}
-                className="text-[10px] px-1.5 py-0.5 rounded-full border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 capitalize"
+                className="text-xs px-1.5 py-0.5 rounded-full border border-border text-muted-foreground capitalize"
               >
                 {t(`exerciseCard.meta.${pill}`, pill)}
               </span>
@@ -341,8 +337,8 @@ const ExerciseEntryDisplay: React.FC<ExerciseEntryDisplayProps> = ({
 
         {/* Muscles */}
         {snapshot?.primary_muscles && snapshot.primary_muscles.length > 0 && (
-          <div className="text-[10px] text-gray-400 dark:text-gray-500 leading-snug">
-            <span className="font-medium text-gray-500 dark:text-gray-400">
+          <div className="text-xs text-muted-foreground leading-snug">
+            <span className="font-medium text-muted-foreground">
               {t('exerciseCard.primaryMusclesLabel', 'Primary Muscles')}:{' '}
             </span>
             {snapshot.primary_muscles
@@ -352,8 +348,8 @@ const ExerciseEntryDisplay: React.FC<ExerciseEntryDisplayProps> = ({
         )}
         {snapshot?.secondary_muscles &&
           snapshot.secondary_muscles.length > 0 && (
-            <div className="text-[10px] text-gray-400 dark:text-gray-500 leading-snug">
-              <span className="font-medium text-gray-500 dark:text-gray-400">
+            <div className="text-xs text-muted-foreground leading-snug">
+              <span className="font-medium text-muted-foreground">
                 {t('exerciseCard.secondaryMusclesLabel', 'Secondary Muscles')}
                 :{' '}
               </span>
@@ -363,8 +359,8 @@ const ExerciseEntryDisplay: React.FC<ExerciseEntryDisplayProps> = ({
             </div>
           )}
         {snapshot?.equipment && snapshot.equipment.length > 0 && (
-          <div className="text-[10px] text-gray-400 dark:text-gray-500 leading-snug">
-            <span className="font-medium text-gray-500 dark:text-gray-400">
+          <div className="text-xs text-muted-foreground leading-snug">
+            <span className="font-medium text-muted-foreground">
               {t('exerciseCard.equipmentLabel', 'Equipment')}:{' '}
             </span>
             {snapshot.equipment
@@ -373,7 +369,7 @@ const ExerciseEntryDisplay: React.FC<ExerciseEntryDisplayProps> = ({
           </div>
         )}
         {exerciseEntry.notes && (
-          <div className="text-[10px] italic text-gray-400 dark:text-gray-500 mt-0.5">
+          <div className="text-xs italic text-muted-foreground mt-0.5">
             {exerciseEntry.notes}
           </div>
         )}
@@ -395,14 +391,14 @@ const ExerciseEntryDisplay: React.FC<ExerciseEntryDisplayProps> = ({
               });
               setIsPlaybackModalOpen(true);
             }}
-            colorClass="hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/50"
+            colorClass="hover:text-primary hover:bg-primary/10 hover:bg-primary/10"
           />
         )}
         <ActionButton
           icon={<Edit className="w-3.5 h-3.5" />}
           label={t('exerciseCard.editEntry', 'Edit Entry')}
           onClick={() => handleEdit(exerciseEntry)}
-          colorClass="hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-950/50"
+          colorClass="hover:text-primary hover:bg-primary/10 hover:bg-primary/10"
         />
         {/* Editing the library exercise needs a library exercise to edit. */}
         {snapshot?.id &&
@@ -417,14 +413,14 @@ const ExerciseEntryDisplay: React.FC<ExerciseEntryDisplayProps> = ({
               onClick={() =>
                 handleEditExerciseDatabase(exerciseEntry.exercise_id!)
               }
-              colorClass="hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700"
+              colorClass="hover:text-foreground hover:bg-muted hover:bg-muted"
             />
           )}
         <ActionButton
           icon={<Trash2 className="w-3.5 h-3.5" />}
           label={t('exerciseCard.deleteEntry', 'Delete Entry')}
           onClick={() => handleDelete(exerciseEntry.id)}
-          colorClass="hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/50"
+          colorClass="hover:text-destructive hover:bg-destructive/10 hover:bg-destructive/10"
         />
       </div>
     </div>
@@ -444,7 +440,7 @@ const ActionButton: React.FC<{
           variant="ghost"
           size="icon"
           onClick={onClick}
-          className={`h-7 w-7 text-gray-400 transition-colors ${colorClass}`}
+          className={`h-7 w-7 text-muted-foreground transition-colors ${colorClass}`}
         >
           {icon}
         </Button>

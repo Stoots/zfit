@@ -373,7 +373,9 @@ const Diary = () => {
         key: 'energy',
         title: t('diary.dailyEnergyGoal', 'Daily Energy Goal'),
         icon: Flame,
-        render: () => <DailyProgress selectedDate={selectedDate} />,
+        render: () => (
+          <DailyProgress selectedDate={selectedDate} dayTotals={dayTotals} />
+        ),
       },
       {
         key: 'nutrition',
@@ -498,20 +500,20 @@ const Diary = () => {
   if (loading) return <div>{t('common.loading', 'Loading...')}</div>;
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pb-2 border-b">
-        <div />
-        <div className="flex min-w-0 flex-wrap items-center gap-2 sm:ml-auto">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
+        <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-2">
           <div
             ref={setToolbarContainer}
-            className="flex min-w-0 flex-wrap items-center gap-2"
+            className="order-2 flex min-w-0 flex-wrap items-center gap-2"
           />
           <DayNavigator
+            showTodayLabel
             selectedDate={selectedDate}
             onDateChange={(dateString) => {
               setSelectedDate(dateString);
               setSearchParams({ date: dateString });
             }}
-            className="grid-cols-none flex mb-0 items-center gap-2"
+            className="grid-cols-none flex flex-wrap mb-0 items-center gap-1"
           />
         </div>
       </div>

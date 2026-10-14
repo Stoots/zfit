@@ -281,7 +281,7 @@ const CopyFamilyEntryDialog = ({
               {/* Source Details */}
               <div className="border rounded-lg p-3 bg-muted/40 space-y-3">
                 <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary/10" />
                   {activeTab === 'from'
                     ? t('diary.copySourceTitleFamily', 'Source (Family)')
                     : t('diary.copySourceTitleSelf', 'Source (You)')}
@@ -355,7 +355,7 @@ const CopyFamilyEntryDialog = ({
               {/* Target Details */}
               <div className="border rounded-lg p-3 bg-muted/40 space-y-3">
                 <div className="text-xs font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-success/10" />
                   {activeTab === 'from'
                     ? t('diary.copyTargetTitleSelf', 'Target (You)')
                     : t('diary.copyTargetTitleFamily', 'Target (Family)')}

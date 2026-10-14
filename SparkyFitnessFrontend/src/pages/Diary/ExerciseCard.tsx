@@ -559,24 +559,44 @@ const ExerciseCard = ({
     isActingOnBehalf,
   ]);
 
+  const programContext = trainingPrograms?.flatMap((program) =>
+    program.phases.flatMap((phase) =>
+      phase.weeks.flatMap((week, weekIndex) =>
+        week.sessions
+          .filter(
+            (session) => session.id === programPlan?.training_program_session_id
+          )
+          .map((session) => ({
+            label: `${program.name} · ${phase.name} · ${t('trainingPrograms.weekNumber', 'Week {{number}}', { number: weekIndex + 1 })} · ${session.effective_date}`,
+            date: session.effective_date,
+          }))
+      )
+    )
+  )[0];
+
   if (loading) {
     return <div>Loading exercises...</div>;
   }
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="p-4 sm:p-6">
         <div className="flex justify-between items-center">
-          <CardTitle className="dark:text-slate-300">
-            {t('exerciseCard.title', 'Exercise')}
+          <CardTitle>
+            {programPlan
+              ? programContext?.date === selectedDate
+                ? t('diary.todaysSession', "Today's session")
+                : t('diary.nextSession', 'Next session')
+              : t('exerciseCard.title', 'Exercise')}
           </CardTitle>
           <div className="flex items-center gap-2">
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
-                    size="default"
-                    variant="outline"
+                    size="icon"
+                    aria-label={t('exerciseCard.startWorkout', 'Start Workout')}
+                    variant="ghost"
                     onClick={handleStartWorkoutPlayback}
                   >
                     <Play className="w-4 h-4" />
@@ -590,7 +610,12 @@ const ExerciseCard = ({
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button size="default" onClick={handleOpenAddDialog}>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    aria-label={t('exerciseCard.addExercise', 'Add Exercise')}
+                    onClick={handleOpenAddDialog}
+                  >
                     <Dumbbell className="w-4 h-4" />
                   </Button>
                 </TooltipTrigger>
@@ -612,11 +637,12 @@ const ExerciseCard = ({
           />
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="px-4 pb-4 sm:px-6 sm:pb-6">
         {programPlan && (
           <DashboardPlanCard
             key={`program-${programPlan.id}`}
             plan={programPlan}
+            programContext={programContext?.label}
             allowSessionPicker={false}
             startingSessionId={startingSession}
             onStart={handleStartPlanSession}
@@ -633,7 +659,7 @@ const ExerciseCard = ({
         ))}
 
         {exerciseEntries?.length === 0 ? (
-          <p className="dark:text-slate-300">
+          <p className="text-muted-foreground">
             {t('exerciseCard.noEntries', 'No exercise entries for this day.')}
           </p>
         ) : (
@@ -681,38 +707,38 @@ const ExerciseCard = ({
               </span>
               <div className="grid grid-cols-4 gap-2 sm:gap-4 text-xs sm:text-sm">
                 <div className="text-center">
-                  <div className="font-bold text-gray-900 dark:text-gray-100">
+                  <div className="font-bold text-foreground">
                     {stats.totalSets}
                   </div>
-                  <div className="text-xs text-gray-500">
+                  <div className="text-xs text-muted-foreground">
                     {t('common.totalSets', 'Total Sets')}
                   </div>
                 </div>
                 <div className="text-center">
-                  <div className="font-bold text-gray-900 dark:text-gray-100">
+                  <div className="font-bold text-foreground">
                     {formatMinutesToHHMM(stats.totalDuration)}
                   </div>
-                  <div className="text-xs text-gray-500">
+                  <div className="text-xs text-muted-foreground">
                     {t('common.minutesUnit', 'Min')}
                   </div>
                 </div>
                 <div className="text-center">
-                  <div className="font-bold text-gray-900 dark:text-gray-100">
+                  <div className="font-bold text-foreground">
                     {stats.averageHeartRate > 0
                       ? Math.round(stats.averageHeartRate)
                       : 0}
                   </div>
-                  <div className="text-xs text-gray-500">
+                  <div className="text-xs text-muted-foreground">
                     {t('common.avgHrUnit', 'Avg HR')}
                   </div>
                 </div>
                 <div className="text-center">
-                  <div className="font-bold text-gray-900 dark:text-gray-100">
+                  <div className="font-bold text-foreground">
                     {Math.round(
                       convertEnergy(stats.totalCalories, 'kcal', energyUnit)
                     )}
                   </div>
-                  <div className="text-xs text-gray-500">
+                  <div className="text-xs text-muted-foreground">
                     {t('common.caloriesUnit', getEnergyUnitString(energyUnit))}
                   </div>
                 </div>

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { CalendarDays, ChevronDown, Play, Repeat } from 'lucide-react';
+import { CalendarDays, ChevronDown, ArrowRight, Repeat } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -13,6 +13,7 @@ import type { WorkoutPlanSession, WorkoutPlanTemplate } from '@/types/workout';
 
 interface DashboardPlanCardProps {
   plan: WorkoutPlanTemplate;
+  programContext?: string;
   /** Program-bound plans start the exact scheduled session; standalone plans
    * let the user choose any session. */
   allowSessionPicker: boolean;
@@ -28,6 +29,7 @@ interface DistinctSession {
 
 const DashboardPlanCard = ({
   plan,
+  programContext,
   allowSessionPicker,
   startingSessionId,
   onStart,
@@ -65,10 +67,13 @@ const DashboardPlanCard = ({
   const totalSessions = plan.sessions.length;
   return (
     <div
-      className="mb-3 p-3.5 rounded-lg border bg-muted/40 hover:bg-muted/60 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+      className="border-b pb-5 mb-4 flex flex-col items-start justify-between gap-4"
       data-testid={`dashboard-plan-${plan.id}`}
     >
-      <div className="space-y-1">
+      <div className="min-w-0 space-y-2">
+        {programContext && (
+          <p className="text-sm text-muted-foreground">{programContext}</p>
+        )}
         <div className="flex items-center gap-2 flex-wrap">
           <Badge variant="secondary" className="text-xs font-semibold gap-1">
             {plan.schedule_type === 'sequential' ? (
@@ -89,9 +94,11 @@ const DashboardPlanCard = ({
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="h-7 px-2 font-semibold text-sm gap-1 hover:bg-muted/80 text-foreground"
+                  className="min-h-11 h-auto px-2 py-2 font-semibold text-lg gap-1 hover:bg-muted/80 text-foreground"
                 >
-                  <span>{sessionName}</span>
+                  <span className="whitespace-normal text-left">
+                    {sessionName}
+                  </span>
                   <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
                 </Button>
               </DropdownMenuTrigger>
@@ -114,7 +121,7 @@ const DashboardPlanCard = ({
                     {sessionItem.isSuggested && (
                       <Badge
                         variant="secondary"
-                        className="text-[10px] px-1.5 py-0 shrink-0"
+                        className="text-xs px-1.5 py-0 shrink-0"
                       >
                         {t('exerciseCard.suggestedBadge', 'Suggested')}
                       </Badge>
@@ -124,7 +131,7 @@ const DashboardPlanCard = ({
               </DropdownMenuContent>
             </DropdownMenu>
           ) : (
-            <span className="font-semibold text-sm">{sessionName}</span>
+            <span className="font-semibold text-xl">{sessionName}</span>
           )}
           {plan.schedule_type === 'sequential' && (
             <span className="text-xs text-muted-foreground font-medium">
@@ -144,7 +151,6 @@ const DashboardPlanCard = ({
       </div>
       <div className="flex items-center shrink-0">
         <Button
-          size="sm"
           variant="default"
           aria-label={t('exerciseCard.startExactSession', {
             name: sessionName,
@@ -156,10 +162,10 @@ const DashboardPlanCard = ({
           disabled={startingSessionId === currentSession.id}
           onClick={() => onStart(plan, currentSession)}
         >
-          <Play className="w-3.5 h-3.5 mr-1" />
           {startingSessionId === currentSession.id
             ? t('common.loading', 'Starting…')
             : t('exerciseCard.startWorkoutButton', 'Start Workout')}
+          <ArrowRight aria-hidden="true" className="size-4" />
         </Button>
       </div>
     </div>

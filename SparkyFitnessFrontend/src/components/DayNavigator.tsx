@@ -28,6 +28,7 @@ interface DayNavigatorProps {
   selectedDate: string;
   onDateChange: (date: string) => void;
   className?: string;
+  showTodayLabel?: boolean;
   // Optional YYYY-MM-DD strings to mark with a dot in the calendar (e.g. days
   // that have progress photos). Omitted by callers that don't need markers.
   markedDates?: string[];
@@ -39,6 +40,7 @@ const DayNavigator = ({
   selectedDate,
   onDateChange,
   className,
+  showTodayLabel = false,
   markedDates,
   markedDatesLabel,
 }: DayNavigatorProps) => {
@@ -129,6 +131,7 @@ const DayNavigator = ({
         <Button
           variant="ghost"
           size="icon"
+          aria-label={t('diary.previousDay', 'Previous day')}
           onClick={handlePreviousDay}
           className="relative h-12 w-12 sm:h-9 sm:w-9 rounded-none border-r border-border/60"
         >
@@ -147,7 +150,9 @@ const DayNavigator = ({
                   selectedDateRelation === 'future' && 'text-date-future'
                 )}
               />
-              {selectedPickerDate ? (
+              {showTodayLabel && selectedDateRelation === 'today' ? (
+                t('diary.today', 'Today')
+              ) : selectedPickerDate ? (
                 formatDate(selectedPickerDate)
               ) : (
                 <span className="text-muted-foreground">
@@ -182,6 +187,7 @@ const DayNavigator = ({
         <Button
           variant="ghost"
           size="icon"
+          aria-label={t('diary.nextDay', 'Next day')}
           onClick={handleNextDay}
           className="relative h-12 w-12 sm:h-9 sm:w-9 rounded-none border-l border-border/60"
         >
