@@ -5,7 +5,7 @@
 - `FORK.md` (this file)
 - `agent-docs/` (fork additions: `HANDOVER.md`, `deployment-smoke.md`)
 - `docs/adr/`, `docs/agents/`
-- `scripts/deployment-smoke*`, `.github/workflows/deployment-smoke-checks.yml`
+- `scripts/deployment-smoke*`, `scripts/fork-check-commits*`, `scripts/fork-check-pr-body*`, `.github/workflows/deployment-smoke-checks.yml`
 
 ## Where to start
 
@@ -14,6 +14,14 @@
 - Deployment verification: `agent-docs/deployment-smoke.md`.
 - Before delivery: review changes against `main` on both repo standards and the originating issue/spec (`agent-docs/pr-review-checklist.md`), then verify each commit's affected package typecheck. Green tests alone did not catch the PR #20 spec gaps.
 - Local verification: run multi-file database suites with Vitest `--no-file-parallelism`; place mobile Jest caches under `~/.cache` via `--cacheDirectory`. The `jest-expo` runtime lacks `Promise.withResolvers`.
+
+## Delivery checks
+
+Before pushing, run `node --test scripts/fork-check-*.test.mjs` and `node scripts/fork-check-commits.mjs origin/main`. The commit check fails on missing CI test files, forbidden commit text, or edits to `db_schema_backup.sql`; inspect its upstream-owned-file warnings. For commit-by-commit typechecking, add `--typecheck` (uses temporary worktrees under `~/.cache` and the local pnpm store).
+
+Before opening a PR, save its complete body to a file and run `node scripts/fork-check-pr-body.mjs <body-file>`. Use one closing keyword per issue on its own line. `.agents/skills/pr-submission/SKILL.md` is upstream-owned, so this fork-specific check lives here.
+
+The fork adds a narrow `Promise.withResolvers` restriction in upstream-owned `SparkyFitnessMobile/eslint.config.js`; keep that addition during upstream syncs.
 
 ## Syncing upstream
 
