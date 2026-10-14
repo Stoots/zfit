@@ -1968,7 +1968,36 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
         firstResponse.body.find((item: { id: number }) => item.id === plan.id)
       );
       expect(first.next_session?.id).toBe(plan.sessions[0]!.id);
-      expect(first.next_assignments).toEqual(plan.sessions[0]!.assignments);
+      expect(first.next_assignments).toMatchObject(
+        plan.sessions[0]!.assignments
+      );
+      // Upstream App Store v1.8.0 reads these legacy fields to show due plans.
+      const legacyFirst = firstResponse.body.find(
+        (item: { id: number }) => item.id === plan.id
+      );
+      expect(legacyFirst.assignments).toEqual([
+        expect.objectContaining({
+          id: plan.sessions[0]!.assignments[0]!.id,
+          template_id: plan.id,
+          day_of_week: schedule_type === 'weekly' ? 0 : null,
+          session_index: schedule_type === 'sequential' ? 1 : null,
+          session_name: 'A',
+        }),
+        expect.objectContaining({
+          id: plan.sessions[1]!.assignments[0]!.id,
+          template_id: plan.id,
+          day_of_week: schedule_type === 'weekly' ? 1 : null,
+          session_index: schedule_type === 'sequential' ? 2 : null,
+          session_name: 'A',
+        }),
+      ]);
+      expect(legacyFirst.next_assignment).toMatchObject({
+        id: plan.sessions[0]!.assignments[0]!.id,
+        session_index: schedule_type === 'sequential' ? 1 : null,
+      });
+      expect(legacyFirst.next_assignments[0]).toMatchObject(
+        legacyFirst.next_assignment
+      );
       expect(
         (await startSession(first.next_session!.id, '2026-10-25')).status
       ).toBe(201);
@@ -1982,7 +2011,9 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
         secondResponse.body.find((item: { id: number }) => item.id === plan.id)
       );
       expect(second.next_session?.id).toBe(plan.sessions[1]!.id);
-      expect(second.next_assignments).toEqual(plan.sessions[1]!.assignments);
+      expect(second.next_assignments).toMatchObject(
+        plan.sessions[1]!.assignments
+      );
       if (schedule_type === 'sequential') {
         expect(second.sequence_position).toEqual({
           current: 2,
@@ -2020,6 +2051,47 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
       }
     }
   );
+  it('serves a single-session plan with the upstream App Store assignment contract', async () => {
+    const exerciseId = await seedExercise();
+    const plan = await createPlan({
+      plan_name: 'Single workout',
+      schedule_type: 'weekly',
+      is_active: true,
+      start_date: '2026-10-25',
+      sessions: [
+        {
+          name: 'Sunday workout',
+          day_of_week: 0,
+          sort_order: 0,
+          assignments: [
+            { exercise_id: exerciseId, sort_order: 0, sets: prescribedSets(2) },
+          ],
+        },
+      ],
+    });
+    const response = await request(app)
+      .get('/api/workout-plan-templates/active/2026-10-25')
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(response.status).toBe(200);
+    const active = response.body.find(
+      (item: { id: number }) => item.id === plan.id
+    );
+    expect(active.sessions).toHaveLength(1);
+    expect(active.assignments).toHaveLength(1);
+    expect(active.next_assignment).toMatchObject({
+      id: plan.sessions[0]!.assignments[0]!.id,
+      template_id: plan.id,
+      day_of_week: 0,
+      session_index: null,
+      session_name: 'Sunday workout',
+      sets: [
+        expect.objectContaining({ reps: 8 }),
+        expect.objectContaining({ reps: 8 }),
+      ],
+    });
+    expect(active.next_assignments).toEqual([active.next_assignment]);
+  });
+
   it('transactionally prefills only missing weekly diary entries while preserving incomplete snapshots and stable set IDs across repeated saves', async () => {
     setToday('2026-10-25');
     const exerciseId = await seedExercise();

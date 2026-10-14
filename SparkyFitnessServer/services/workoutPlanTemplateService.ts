@@ -150,10 +150,27 @@ async function deleteWorkoutPlanTemplate(
   }
 }
 async function getActiveWorkoutPlanForDate(userId: string, date: string) {
-  return workoutPlanTemplateRepository.getActiveWorkoutPlanForDate(
+  const plans = await workoutPlanTemplateRepository.getActiveWorkoutPlanForDate(
     userId,
     date
   );
+  for (const plan of plans) {
+    let sessionIndex = 0;
+    for (const session of plan.sessions) {
+      if (session.assignments.length > 0) sessionIndex++;
+      for (const assignment of session.assignments) {
+        // Keep the session model authoritative while serving the upstream app.
+        assignment.template_id = plan.id;
+        assignment.day_of_week = session.day_of_week;
+        assignment.session_index =
+          plan.schedule_type === 'sequential' ? sessionIndex : null;
+        assignment.session_name = session.name;
+      }
+    }
+    plan.assignments = plan.sessions.flatMap((session) => session.assignments);
+    plan.next_assignment = plan.next_assignments?.[0] ?? null;
+  }
+  return plans;
 }
 async function getBulkPrescriptionCandidates(
   userId: string,

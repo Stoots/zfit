@@ -464,7 +464,7 @@ router.delete('/:id', authenticate, async (req, res, next) => {
  *   get:
  *     summary: Get the active workout plan for a specific date
  *     tags: [Fitness & Workouts]
- *     description: Retrieves the active workout plan for the authenticated user on a given date.
+ *     description: Retrieves active plans with Workout Sessions and legacy assignment fields for upstream App Store v1.8.0 clients. The flat assignments are derived from sessions; next_assignment is the first assignment of next_session (or null).
  *     security:
  *       - cookieAuth: []
  *     parameters:
@@ -477,11 +477,13 @@ router.delete('/:id', authenticate, async (req, res, next) => {
  *         description: The date to check for an active plan (YYYY-MM-DD).
  *     responses:
  *       200:
- *         description: The active workout plan for the date.
+ *         description: Active plans for the date, including sessions, next_session, next_assignments, assignments, next_assignment, and sequence_position.
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/WorkoutPlanTemplate'
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/WorkoutPlanTemplate'
  *       401:
  *         description: Unauthorized.
  *       500:

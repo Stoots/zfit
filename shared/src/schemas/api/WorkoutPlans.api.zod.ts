@@ -158,6 +158,11 @@ export const workoutPlanAssignmentResponseSchema = z.object({
   workout_preset_format: workoutFormatSchema.nullable(),
   preset_snapshot: workoutPlanPresetSnapshotSchema.nullable(),
   sets: z.array(workoutPlanAssignmentSetInputSchema),
+  // Present on active-plan reads for upstream App Store v1.8.0 compatibility.
+  template_id: z.number().int().positive().optional(),
+  day_of_week: z.number().int().min(0).max(6).nullable().optional(),
+  session_index: z.number().int().positive().nullable().optional(),
+  session_name: z.string().nullable().optional(),
 });
 export const workoutPlanSessionResponseSchema =
   workoutPlanSessionInputSchema.extend({
@@ -185,6 +190,9 @@ export const workoutPlanResponseSchema = z.object({
   training_program_session_id: z.uuid().optional(),
   next_session: workoutPlanSessionResponseSchema.nullable().optional(),
   next_assignments: z.array(workoutPlanAssignmentResponseSchema).optional(),
+  // Active-plan legacy projection; other plan reads may omit these fields.
+  assignments: z.array(workoutPlanAssignmentResponseSchema).optional(),
+  next_assignment: workoutPlanAssignmentResponseSchema.nullable().optional(),
   sequence_position: workoutPlanSequencePositionSchema.nullable().optional(),
 });
 export type WorkoutPlanPresetSnapshot = z.infer<
