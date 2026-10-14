@@ -111,6 +111,12 @@ const WidgetGridInner = ({
   // Never edit while viewing someone else's profile, even if edit mode was
   // toggled on before switching.
   const effectiveEditMode = editMode && canEdit;
+  // Auto-measured heights and positions must paint together, without
+  // independent transitions overlapping rows while content settles.
+  const autoLayoutStyle =
+    pageKey === 'diary' && !effectiveEditMode
+      ? { transition: 'none' }
+      : undefined;
 
   const widgetKeys = useMemo(() => widgets.map((w) => w.key), [widgets]);
   const defaults = useMemo(
@@ -318,6 +324,7 @@ const WidgetGridInner = ({
           mounted && (
             <Responsive
               className="layout"
+              style={autoLayoutStyle}
               layouts={displayLayouts as unknown as ResponsiveLayouts}
               breakpoints={GRID_BREAKPOINTS}
               cols={GRID_COLS}
@@ -337,7 +344,7 @@ const WidgetGridInner = ({
               onResizeStop={markPendingSave}
             >
               {visibleWidgets.map((w) => (
-                <div key={w.key}>
+                <div key={w.key} style={autoLayoutStyle}>
                   <WidgetFrame
                     widgetKey={w.key}
                     title={w.title}

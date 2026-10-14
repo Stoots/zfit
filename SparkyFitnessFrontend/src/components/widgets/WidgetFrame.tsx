@@ -1,4 +1,5 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, type ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import { AmbientGlow } from '@/components/ui/ambient-glow';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -13,7 +14,7 @@ interface WidgetFrameProps {
   isMax: boolean;
   onToggleMax: () => void;
   onHide: () => void;
-  /** Reports the widget's natural content height (px) so the grid can auto-size. */
+  /** Reports the natural content plus frame borders (px) for grid auto-sizing. */
   onMeasure?: (key: string, height: number) => void;
   children: ReactNode;
 }
@@ -41,12 +42,18 @@ const WidgetFrame = ({
   const { t } = useTranslation();
   const measureRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = measureRef.current;
-    if (!el || !onMeasure) return;
-    const report = () =>
-      onMeasure(widgetKey, el.getBoundingClientRect().height);
-    const ro = new ResizeObserver(report);
+    const frame = el?.parentElement;
+    if (!el || !frame || !onMeasure) return;
+    const report = () => {
+      const style = getComputedStyle(frame);
+      const borders =
+        parseFloat(style.borderTopWidth) + parseFloat(style.borderBottomWidth);
+      onMeasure(widgetKey, el.getBoundingClientRect().height + borders);
+    };
+    // ResizeObserver runs before paint; commit the matching grid geometry then.
+    const ro = new ResizeObserver(() => flushSync(report));
     ro.observe(el);
     report(); // initial measurement
     return () => ro.disconnect();
