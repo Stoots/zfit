@@ -316,3 +316,11 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Sleep-stage marks retain their fixed identities in both themes. */
+:root {
+  --sleep-deep: #4c3bb8;
+  --sleep-core: #7c6ee8;
+  --sleep-rem: #a78bfa;
+  --sleep-awake: #c7cdd9;
+}

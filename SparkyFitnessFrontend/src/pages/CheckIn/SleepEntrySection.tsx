@@ -267,8 +267,8 @@ const SleepEntrySection: React.FC<SleepEntrySectionProps> = ({
       <CardContent>
         <form onSubmit={handleSleepSubmit} className="space-y-4">
           {sleepSessions.map((session, index) => (
-            <div key={index} className="border p-4 rounded-lg space-y-4">
-              <h4 className="text-md font-semibold">
+            <div key={index} className="border-t py-4 space-y-4">
+              <h4 className="text-base font-semibold">
                 {t('sleepEntrySection.sleepSession', {
                   sessionNumber: index + 1,
                   defaultValue: `Sleep Session ${index + 1}`,
@@ -344,7 +344,7 @@ const SleepEntrySection: React.FC<SleepEntrySectionProps> = ({
                 })()}
             </div>
           ))}
-          <div className="flex justify-center space-x-2">
+          <div className="flex flex-wrap justify-end gap-2">
             <Button
               type="button"
               onClick={handleAddSleepSession}
@@ -367,10 +367,10 @@ const SleepEntrySection: React.FC<SleepEntrySectionProps> = ({
         {sleepEntries.length > 0 && (
           <div className="space-y-2 mt-6">
             {sleepEntries.map((entry) => (
-              <div key={entry.id} className="border p-3 rounded-lg mb-2">
-                <div className="flex items-center justify-between">
+              <div key={entry.id} className="border-t py-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
-                    <p className="text-md font-semibold">
+                    <p className="text-base font-semibold">
                       {t('sleepEntrySection.sleepEntryFor', {
                         date: formatDateInUserTimezone(entry.entry_date, 'PPP'),
                         defaultValue: `Sleep Entry for ${formatDateInUserTimezone(entry.entry_date, 'PPP')}`,
@@ -386,6 +386,7 @@ const SleepEntrySection: React.FC<SleepEntrySectionProps> = ({
                               <Button
                                 variant="outline"
                                 size="icon"
+                                aria-label={t('common.cancel', 'Cancel')}
                                 onClick={() => {
                                   setEditingEntryId(null);
                                   setExistingEditDraft(null);
@@ -405,6 +406,7 @@ const SleepEntrySection: React.FC<SleepEntrySectionProps> = ({
                               <Button
                                 variant="ghost"
                                 size="icon"
+                                aria-label={t('common.save', 'Save')}
                                 onClick={() => {
                                   if (existingEditDraft) {
                                     handleSaveExistingEntryStageEvents(
@@ -434,6 +436,7 @@ const SleepEntrySection: React.FC<SleepEntrySectionProps> = ({
                             <Button
                               variant="outline"
                               size="icon"
+                              aria-label={t('common.edit', 'Edit')}
                               onClick={() => {
                                 setEditingEntryId(entry.id);
                                 setExistingEditDraft({
@@ -458,6 +461,7 @@ const SleepEntrySection: React.FC<SleepEntrySectionProps> = ({
                           <Button
                             variant="outline"
                             size="icon"
+                            aria-label={t('common.delete', 'Delete')}
                             onClick={() => handleDeleteSleepEntry(entry.id)}
                           >
                             <Trash2 className="h-4 w-4" />

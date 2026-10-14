@@ -28,16 +28,6 @@ const MOOD_MIN = 10;
 const MOOD_MAX = 95;
 const MOOD_STEP = 5;
 
-/** Where Radix parks the thumb for a value, as a share of its travel. */
-const thumbPercent = (value: number) =>
-  ((value - MOOD_MIN) / (MOOD_MAX - MOOD_MIN)) * 100;
-
-/** Every value the thumb can come to rest on. */
-const stops = Array.from(
-  { length: (MOOD_MAX - MOOD_MIN) / MOOD_STEP + 1 },
-  (_, i) => MOOD_MIN + i * MOOD_STEP
-);
-
 const renderMeter = (mood = 50) => {
   const onMoodChange = jest.fn();
   const { container } = render(
@@ -68,58 +58,26 @@ const valueWrittenBy = (
 };
 
 describe('MoodMeter band legend', () => {
-  // The reported bug (#2369): spread evenly, the legend drifted from the thumb
-  // the further right you went.
-  test('draws every face exactly where the thumb lands for the value it writes', () => {
+  test('offers every band as a named segment with its original slider value', () => {
     const { container, onMoodChange } = renderMeter();
     const faces = legendFaces(container);
-
     expect(faces).toHaveLength(9);
-    faces.forEach((face) => {
-      const value = valueWrittenBy(face, onMoodChange);
-      expect(parseFloat(face.style.left)).toBeCloseTo(thumbPercent(value), 5);
-    });
-  });
-
-  test('puts a face on every second stop', () => {
-    const { container } = renderMeter();
-    const lefts = legendFaces(container).map((face) =>
-      parseFloat(face.style.left)
-    );
-
-    expect(lefts.map((l) => Number(l.toFixed(2)))).toEqual([
-      0, 11.76, 23.53, 35.29, 47.06, 58.82, 70.59, 82.35, 94.12,
+    expect(faces.map((face) => valueWrittenBy(face, onMoodChange))).toEqual([
+      10, 20, 30, 40, 50, 60, 70, 80, 90,
     ]);
-    // Spread evenly the happy face sat at 87.5%, while its own value puts the
-    // thumb at 82.35%: a tenth of the width apart.
-    expect(lefts[7]).not.toBeCloseTo(87.5, 1);
-  });
-
-  // What the reporter saw after the faces were pinned: dragging still left a
-  // gap, because a band held two stops and the face marked only one of them.
-  test('leaves every stop either on a face or exactly half-way between two', () => {
-    const { container } = renderMeter();
-    const lefts = legendFaces(container).map((face) =>
-      parseFloat(face.style.left)
-    );
-    const halfGap = (lefts[1]! - lefts[0]!) / 2;
-
-    stops.forEach((value) => {
-      const nearest = Math.min(
-        ...lefts.map((left) => Math.abs(thumbPercent(value) - left))
-      );
-      expect([0, halfGap].some((d) => Math.abs(nearest - d) < 0.001)).toBe(
-        true
-      );
+    faces.forEach((face) => {
+      expect(face).toHaveAccessibleName(face.title);
+      expect(face).toHaveTextContent(face.title);
     });
   });
 
-  test('insets the row by half a thumb, the way the thumb travel is inset', () => {
-    const { container } = renderMeter();
-    const row = legendFaces(container)[0]!.parentElement!.parentElement!;
-
-    expect(row.style.paddingLeft).toBe('10px');
-    expect(row.style.paddingRight).toBe('10px');
+  test('retains every fine-grained slider stop between segments', () => {
+    const { container, onMoodChange } = renderMeter();
+    const thumb = container.querySelector('[role="slider"]')!;
+    expect(thumb).toHaveAttribute('aria-valuemin', String(MOOD_MIN));
+    expect(thumb).toHaveAttribute('aria-valuemax', String(MOOD_MAX));
+    fireEvent.keyDown(thumb, { key: 'ArrowRight' });
+    expect(onMoodChange).toHaveBeenLastCalledWith(50 + MOOD_STEP);
   });
 
   test('never writes a value the slider cannot show', () => {
@@ -144,15 +102,16 @@ describe('MoodMeter header', () => {
     [100, '😍', 'Excited'],
   ])('at %i it names the band it highlights', (mood, emoji, label) => {
     const { container } = renderMeter(mood);
-    const active = legendFaces(container).find((face) =>
-      face.className.includes('scale-125')
+    const active = legendFaces(container).find(
+      (face) => face.getAttribute('aria-pressed') === 'true'
     );
 
     expect(container.querySelector('span.font-medium')).toHaveTextContent(
       `${emoji}${label}`
     );
     expect(active?.title).toBe(label);
-    expect(active?.textContent).toBe(emoji);
+    expect(active).toHaveTextContent(emoji);
+    expect(active).toHaveTextContent(label);
   });
 });
 

@@ -49,14 +49,14 @@ interface MoodMeterProps {
   onTagsChange: (tags: string[]) => void;
 }
 
-// Domain color tokens -> hex, so mood colors are actually rendered on chips.
+// Persisted mood color names map to the shared semantic palette.
 const MOOD_COLOR: Record<string, string> = {
-  sky: '#7FB6CE',
-  green: '#A8C8A0',
-  amber: '#E8B54A',
-  period: '#E4796B',
-  lavender: '#B49BD8',
-  neutral: '#B8ABA3',
+  sky: 'hsl(var(--water))',
+  green: 'hsl(var(--success))',
+  amber: 'hsl(var(--warning))',
+  period: 'hsl(var(--destructive))',
+  lavender: 'hsl(var(--sleep))',
+  neutral: 'hsl(var(--muted-foreground))',
 };
 const colorHex = (token?: string | null) =>
   (token && MOOD_COLOR[token]) || MOOD_COLOR['neutral'];
@@ -95,17 +95,7 @@ const MOOD_FACE_STEP = MOOD_STEP * 2;
 const clampToScale = (value: number) =>
   Math.min(MOOD_MAX, Math.max(MOOD_MIN, value));
 
-/** Half the `h-5 w-5` thumb in `components/ui/slider.tsx`. Radix keeps the thumb
- *  inside the track, so its centre travels the track inset by this much at
- *  either end -- the legend has to use that same box. */
-const THUMB_INSET_PX = 10;
-
-/**
- * The nine banded moods, sad -> excited, on the slider's own scale: the value
- * tapping an emoji writes, and where the thumb then lands for it. Both from one
- * number on purpose -- spread evenly instead, the legend drifted from the thumb
- * the further right you went, since the bands are not evenly spread over 10-100.
- */
+// Keep the existing band values and fine-grained slider stops when presenting segments.
 const BAND_SCALE = BUILT_IN_MOODS.filter((m) => m.band != null).map((m) => {
   // `representativeMoodValue` gives the band midpoint on the raw 0-100 scale,
   // which the two end bands put where no stop can land: 8 for "sad" (0-15),
@@ -121,7 +111,6 @@ const BAND_SCALE = BUILT_IN_MOODS.filter((m) => m.band != null).map((m) => {
   return {
     ...m,
     value,
-    percent: ((value - MOOD_MIN) / (MOOD_MAX - MOOD_MIN)) * 100,
   };
 });
 
@@ -207,7 +196,7 @@ const MoodMeter = ({
         onClick={() => toggleTag(name)}
         aria-pressed={active}
         className={cn(
-          'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm transition',
+          'flex min-h-11 items-center gap-1.5 rounded-full border px-3 py-2 text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
           active
             ? 'border-primary bg-primary/10 font-medium'
             : 'border-transparent bg-muted/40 hover:bg-muted'
@@ -247,35 +236,33 @@ const MoodMeter = ({
           className="w-full"
           aria-label={t('moodMeter.intensity', 'Overall mood')}
         />
-        {/* Tappable band emojis: the scale, and a shortcut to a face. Each is
-            pinned where the thumb lands for it -- see BAND_SCALE. */}
         <div
-          className="mt-2"
-          style={{ paddingLeft: THUMB_INSET_PX, paddingRight: THUMB_INSET_PX }}
+          className="mt-4 grid grid-cols-3 gap-px overflow-hidden rounded-xl border border-border bg-border"
+          role="group"
+          aria-label={t('moodMeter.intensity', 'Overall mood')}
         >
-          <div className="relative h-6">
-            {BAND_SCALE.map((m) => {
-              const active = currentBand.name === m.name;
-              return (
-                <button
-                  key={m.name}
-                  type="button"
-                  onClick={() => onMoodChange(m.value)}
-                  aria-label={builtInMoodLabel(m.name, m.displayName)}
-                  title={builtInMoodLabel(m.name, m.displayName)}
-                  style={{ left: `${m.percent}%` }}
-                  className={cn(
-                    'absolute top-0 -translate-x-1/2 text-lg leading-none transition',
-                    active
-                      ? 'scale-125'
-                      : 'opacity-40 grayscale hover:opacity-80 hover:grayscale-0'
-                  )}
-                >
-                  {m.emoji}
-                </button>
-              );
-            })}
-          </div>
+          {BAND_SCALE.map((m) => {
+            const active = currentBand.name === m.name;
+            return (
+              <button
+                key={m.name}
+                type="button"
+                onClick={() => onMoodChange(m.value)}
+                aria-label={builtInMoodLabel(m.name, m.displayName)}
+                aria-pressed={active}
+                title={builtInMoodLabel(m.name, m.displayName)}
+                className={cn(
+                  'flex min-h-11 min-w-0 items-center justify-center gap-1.5 px-2 py-3 text-xs transition-colors focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
+                  active
+                    ? 'bg-primary-fill text-background'
+                    : 'bg-card text-muted-foreground hover:bg-muted'
+                )}
+              >
+                <span aria-hidden="true">{m.emoji}</span>
+                <span>{builtInMoodLabel(m.name, m.displayName)}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -285,7 +272,11 @@ const MoodMeter = ({
           <Label>{t('moodMeter.moods', 'Moods')}</Label>
           <Dialog>
             <DialogTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="min-h-11 px-3 text-sm"
+              >
                 <Settings className="mr-1 h-3.5 w-3.5" />
                 {t('moodMeter.manage', 'Manage')}
               </Button>
@@ -313,8 +304,9 @@ const MoodMeter = ({
                       key={e}
                       type="button"
                       onClick={() => setNewEmoji(e)}
+                      aria-pressed={newEmoji === e}
                       className={cn(
-                        'flex h-8 w-8 items-center justify-center rounded-lg border text-lg',
+                        'flex h-11 w-11 items-center justify-center rounded-lg border text-lg',
                         newEmoji === e
                           ? 'border-primary bg-primary/10'
                           : 'border-transparent bg-muted/40'
@@ -331,8 +323,9 @@ const MoodMeter = ({
                       type="button"
                       onClick={() => setNewColor(c)}
                       aria-label={c}
+                      aria-pressed={newColor === c}
                       className={cn(
-                        'h-7 w-7 rounded-full border-2',
+                        'h-11 w-11 rounded-full border-2',
                         newColor === c
                           ? 'border-foreground'
                           : 'border-transparent'
@@ -458,7 +451,7 @@ function ManageRow({
           type="button"
           variant="ghost"
           size="icon"
-          className="h-6 w-6"
+          className="h-11 w-11"
           onClick={onToggleHidden}
           aria-label={
             isHidden
@@ -479,7 +472,7 @@ function ManageRow({
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="h-6 w-6"
+                className="h-11 w-11"
                 aria-label={t('moodMeter.deleteMood', 'Delete mood')}
               >
                 <Trash className="h-3.5 w-3.5" />

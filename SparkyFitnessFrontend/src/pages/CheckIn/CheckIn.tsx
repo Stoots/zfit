@@ -12,12 +12,11 @@ import { CheckInPhotos } from './CheckInPhotos';
 import SymptomsPanel from '../Symptoms/SymptomsPanel';
 import { useCheckInPhotoDates } from '@/hooks/CheckIn/useCheckInPhotos';
 import { useState } from 'react';
-import { Button } from '@/components/ui/button';
 import { EditFastDialog } from '../Fasting/EditFastDialog';
 import { useUpdateFastMutation } from '@/hooks/Fasting/useFasting';
 import { FastingLog } from '@/types/fasting';
 import { CombinedMeasurement } from '@/types/checkin';
-import { Tabs, TabsContent } from '@/components/ui/tabs';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Timer,
   Activity,
@@ -27,6 +26,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { CheckInWeightTrend } from './CheckInWeightTrend';
 import { MindfulnessSection } from './MindfulnessSection';
 
 const CheckIn = () => {
@@ -111,15 +111,15 @@ const CheckIn = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="min-w-0 space-y-6">
       <Tabs
         value={activeTab}
         onValueChange={handleTabChange}
         className="w-full"
       >
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6 pb-2 border-b">
+        <div className="flex flex-col gap-4 mb-6 border-b pb-4">
           {/* Tab Selector on the Left */}
-          <div className="flex flex-wrap items-center justify-center lg:justify-start gap-1">
+          <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-2xl sm:grid-cols-3 lg:grid-cols-6">
             {[
               {
                 id: 'measurements',
@@ -153,28 +153,24 @@ const CheckIn = () => {
               },
             ].map((tab) => {
               const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
               return (
-                <Button
+                <TabsTrigger
                   key={tab.id}
-                  variant={isActive ? 'secondary' : 'ghost'}
-                  size="sm"
-                  onClick={() => handleTabChange(tab.id)}
-                  className={`rounded-full px-4 h-9 gap-2 transition-all ${
-                    isActive
-                      ? 'bg-slate-200/60 dark:bg-muted shadow-sm text-foreground'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-muted/50'
-                  }`}
+                  value={tab.id}
+                  className="min-h-11 min-w-0 gap-2 whitespace-normal px-3 text-sm"
                 >
-                  <Icon className="w-4.5 h-4.5" />
-                  <span className="text-xs font-semibold">{tab.label}</span>
-                </Button>
+                  <Icon className="size-4 shrink-0" aria-hidden="true" />
+                  <span>{tab.label}</span>
+                </TabsTrigger>
               );
             })}
-          </div>
+          </TabsList>
 
           {/* Date Filter on the Right */}
-          <div className="flex flex-col sm:flex-row items-center gap-2 w-full lg:w-auto lg:justify-end">
+          <div className="order-first flex min-w-0 flex-wrap items-center justify-between gap-3">
+            <h1 className="text-xl font-semibold">
+              {t('checkIn.title', 'Check-In')}
+            </h1>
             <DayNavigator
               selectedDate={selectedDate}
               onDateChange={(dateString) => {
@@ -189,7 +185,7 @@ const CheckIn = () => {
                 'checkIn.photos.calendarLegend',
                 'Progress photos'
               )}
-              className="grid-cols-none flex mb-0 items-center gap-2"
+              className="grid-cols-none flex flex-wrap mb-0 items-center gap-2"
             />
           </div>
         </div>
@@ -229,6 +225,10 @@ const CheckIn = () => {
           value="measurements"
           className="focus-visible:outline-none space-y-6"
         >
+          <CheckInWeightTrend
+            selectedDate={selectedDate}
+            photoDates={photoDates}
+          />
           <CheckInForm
             bodyFatPercentage={bodyFatPercentage}
             boneMassKg={boneMassKg}

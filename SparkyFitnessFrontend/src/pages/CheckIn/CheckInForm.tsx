@@ -18,7 +18,7 @@ import {
   MAX_MEASURED_BMR_KCAL,
 } from '@workspace/shared';
 import { CheckInPlaceholders } from '@/types/checkin';
-import { History } from 'lucide-react';
+import { ArrowRight, History } from 'lucide-react';
 import {
   healthMetricLabel,
   healthMetricUnitLabel,
@@ -45,7 +45,7 @@ const UseLastButton: React.FC<UseLastButtonProps> = ({
       type="button"
       variant="link"
       size="sm"
-      className="h-7 gap-1.5 p-0 text-xs underline [&_svg]:size-3.5"
+      className="min-h-11 gap-1.5 p-0 text-xs underline [&_svg]:size-3.5"
       onClick={() => onAdopt(lastValue.toString())}
     >
       <History />
@@ -139,14 +139,22 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="p-4 sm:p-6">
         <CardTitle>{t('checkIn.dailyCheckIn', 'Daily Check-In')}</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="px-4 pb-4 sm:px-6 sm:pb-6">
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="sticky top-[env(safe-area-inset-top)] z-10 -mx-4 flex justify-end border-b bg-card px-4 py-3 sm:top-0 sm:-mx-6 sm:px-6">
+            <Button type="submit" disabled={loading} className="min-w-44">
+              {loading
+                ? t('checkIn.saving', 'Saving...')
+                : t('checkIn.saveCheckIn', 'Save Check-In')}
+              <ArrowRight aria-hidden="true" />
+            </Button>
+          </div>
+          <div className="divide-y divide-border [&>div]:grid [&>div]:min-w-0 [&>div]:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] [&>div]:items-center [&>div]:gap-x-4 [&>div]:gap-y-2 [&>div]:py-3 [&_input]:text-base">
             <div>
-              <div className="mb-1 flex items-center justify-between">
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-2">
                 <Label htmlFor="weight">{t('checkIn.weight', 'Weight')}</Label>
                 <UseLastButton
                   value={weight}
@@ -167,7 +175,7 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
             </div>
 
             <div>
-              <div className="mb-1 flex items-center justify-between">
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-2">
                 <Label htmlFor="height">{t('checkIn.height', 'Height')}</Label>
                 <UseLastButton
                   value={height}
@@ -201,7 +209,7 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
             </div>
 
             <div>
-              <div className="mb-1 flex items-center justify-between">
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-2">
                 <Label htmlFor="neck">{t('checkIn.neck', 'Neck')}</Label>
                 <UseLastButton
                   value={neck}
@@ -220,7 +228,7 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
             </div>
 
             <div>
-              <div className="mb-1 flex items-center justify-between">
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-2">
                 <Label htmlFor="waist">{t('checkIn.waist', 'Waist')}</Label>
                 <UseLastButton
                   value={waist}
@@ -239,7 +247,7 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
             </div>
 
             <div>
-              <div className="mb-1 flex items-center justify-between">
+              <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-2">
                 <Label htmlFor="hips">{t('checkIn.hips', 'Hips')}</Label>
                 <UseLastButton
                   value={hips}
@@ -256,7 +264,7 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
                 onChange={(val) => setHips(val !== null ? val.toString() : '')}
               />
             </div>
-            <div>
+            <div className="!block space-y-3">
               <div className="mb-1 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                 <Label htmlFor="bodyFat" className="whitespace-nowrap">
                   {t('checkIn.bodyFatPercentage', 'Body Fat %')}
@@ -315,6 +323,7 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
                 <Button
                   type="button"
                   onClick={handleCalculateBodyFat}
+                  variant="outline"
                   className="ml-2"
                 >
                   {t('checkIn.calculate', 'Calculate')}
@@ -386,8 +395,6 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
               />
             </div>
             {/* Custom Categories */}
-
-            {/* Custom Categories */}
             {customCategories.map((category) => {
               const categoryLabel = healthMetricLabel(
                 category.name,
@@ -420,7 +427,7 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
 
               return (
                 <div key={category.id}>
-                  <div className="mb-1 flex items-center justify-between">
+                  <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-2">
                     <Label htmlFor={`custom-${category.id}`}>
                       {categoryLabel} ({displayUnit})
                     </Label>
@@ -489,19 +496,12 @@ export const CheckInForm: React.FC<CheckInFormProps> = ({
                       }));
                     }}
                     placeholder={t('checkIn.notesOptional', 'Notes (optional)')}
-                    className="mt-2"
+                    aria-label={`${categoryLabel}: ${t('checkIn.notesOptional', 'Notes (optional)')}`}
+                    className="col-span-2"
                   />
                 </div>
               );
             })}
-          </div>
-
-          <div className="flex justify-center">
-            <Button type="submit" disabled={loading} size="sm">
-              {loading
-                ? t('checkIn.saving', 'Saving...')
-                : t('checkIn.saveCheckIn', 'Save Check-In')}
-            </Button>
           </div>
         </form>
       </CardContent>

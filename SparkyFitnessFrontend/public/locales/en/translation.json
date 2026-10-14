@@ -3389,6 +3389,16 @@
     "editingTemporarilyUnavailable": "Editing food details is temporarily unavailable due to schema changes."
   },
   "checkIn": {
+    "fastingGoalReached": "Goal reached",
+    "title": "Check-In",
+    "trendWeight": {
+      "title": "Trend weight",
+      "weeklyDelta": "{{delta}} {{unit}} this week",
+      "noComparison": "Log weight in both weeks to see the change.",
+      "method": "Average of logged weights over 7 days, compared with the previous 7 days.",
+      "chart": "Weight trend · 30 days",
+      "goal": "Goal weight"
+    },
     "howAreYouFeelingToday": "How are you feeling today?",
     "neutral": "Neutral",
     "anyThoughtsOrFeelings": "Any thoughts or feelings you'd like to add?",

@@ -9,8 +9,10 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import FastingTimerRing from '../Fasting/FastingTimerRing';
-import { Play, Timer, Square, Sparkles } from 'lucide-react';
+import { Numeral } from '@/components/ui/numeral';
+import { StatRows } from '@/components/ui/stat-rows';
+import { Progress } from '@/components/ui/progress';
+import { Play, Timer, Square, Sparkles, ArrowRight } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {
   Dialog,
@@ -63,12 +65,15 @@ const HomeDashboardFasting = () => {
   const { mutate: endFast } = useEndFastMutation();
 
   useEffect(() => {
-    if (!activeFast?.is_eating_window) return;
-    const interval = setInterval(() => {
-      setNow(Date.now());
-    }, 10000);
+    if (!activeFast) return;
+    const interval = setInterval(
+      () => {
+        setNow(Date.now());
+      },
+      activeFast.is_eating_window ? 10000 : 1000
+    );
     return () => clearInterval(interval);
-  }, [activeFast?.is_eating_window]);
+  }, [activeFast]);
 
   const dynamicEatingRemainingMinutes = useMemo(() => {
     if (!activeFast?.is_eating_window) return 0;
@@ -137,15 +142,38 @@ const HomeDashboardFasting = () => {
     return `${h}h ${m}m`;
   };
 
-  const fastDurationHours = activeFast
-    ? (new Date().getTime() - parseISO(activeFast.start_time).getTime()) /
-      (1000 * 60 * 60)
+  const elapsedMs = activeFast
+    ? Math.max(0, now - parseISO(activeFast.start_time).getTime())
+    : 0;
+  const fastDurationHours = elapsedMs / (1000 * 60 * 60);
+  const elapsedSeconds = Math.floor(elapsedMs / 1000);
+  const elapsed = [
+    Math.floor(elapsedSeconds / 3600),
+    Math.floor((elapsedSeconds % 3600) / 60),
+    elapsedSeconds % 60,
+  ]
+    .map((part) => String(part).padStart(2, '0'))
+    .join(':');
+  const progress = activeFast?.target_end_time
+    ? Math.min(
+        100,
+        Math.max(
+          0,
+          (elapsedMs /
+            Math.max(
+              1,
+              parseISO(activeFast.target_end_time).getTime() -
+                parseISO(activeFast.start_time).getTime()
+            )) *
+            100
+        )
+      )
     : 0;
 
   return (
-    <Card className="flex flex-col h-full bg-card/50 backdrop-blur-sm border-primary/20">
+    <Card className="flex min-w-0 flex-col h-full">
       <CardHeader className="pb-2">
-        <CardTitle className="flex items-center justify-between text-xl">
+        <CardTitle className="flex flex-wrap items-center justify-between gap-3 text-xl">
           <div className="flex items-center gap-2">
             <Timer className="w-5 h-5 text-primary" />
             {t('fasting.checklistTitle', 'Fasting Timer')}
@@ -153,7 +181,7 @@ const HomeDashboardFasting = () => {
           {activeFast?.is_eating_window ? (
             <Badge
               variant="secondary"
-              className="flex items-center gap-1 text-xs bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+              className="flex items-center gap-1 text-xs bg-success/10 text-success border-success/20"
             >
               <Sparkles className="w-3 h-3" />
               {t('fasting.eatingWindowOpen', 'Eating Window Open')}
@@ -193,21 +221,14 @@ const HomeDashboardFasting = () => {
         <div className="flex flex-col items-center justify-center">
           {activeFast && activeFast.is_eating_window ? (
             <div className="flex flex-col items-center justify-center py-2 text-center space-y-4 w-full">
-              <div className="w-24 h-24 rounded-full bg-emerald-500/10 border-2 border-emerald-500/30 flex items-center justify-center text-4xl shadow-sm">
-                🍽️
-              </div>
-              <div>
-                <div className="text-2xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
-                  {Math.floor(dynamicEatingRemainingMinutes / 60)}h{' '}
-                  {dynamicEatingRemainingMinutes % 60}m
-                </div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {t(
-                    'fasting.remainingInEatingWindow',
-                    'Remaining in your eating window'
-                  )}
-                </p>
-              </div>
+              <Numeral
+                value={`${Math.floor(dynamicEatingRemainingMinutes / 60)}h ${dynamicEatingRemainingMinutes % 60}m`}
+                size="lg"
+                subline={t(
+                  'fasting.remainingInEatingWindow',
+                  'Remaining in your eating window'
+                )}
+              />
 
               {/* Eating Window Color Bands Bar */}
               {activeFast.start_time && activeFast.target_end_time && (
@@ -220,7 +241,7 @@ const HomeDashboardFasting = () => {
                 </div>
               )}
 
-              <p className="text-xs text-muted-foreground/80 max-w-xs">
+              <p className="text-xs text-muted-foreground max-w-xs">
                 {t(
                   'fasting.eatingWindowHint',
                   'Fasting will automatically resume after your eating window closes.'
@@ -242,18 +263,24 @@ const HomeDashboardFasting = () => {
           ) : activeFast &&
             activeFast.start_time &&
             activeFast.target_end_time ? (
-            <div className="flex justify-center">
-              <FastingTimerRing
-                startTime={parseISO(activeFast.start_time)}
-                targetEndTime={parseISO(activeFast.target_end_time)}
-                size={180}
+            <div className="w-full space-y-4 py-4">
+              <Numeral
+                value={elapsed}
+                size="lg"
+                subline={
+                  progress >= 100
+                    ? t('checkIn.fastingGoalReached', 'Goal reached')
+                    : `${Math.round(progress)}%`
+                }
+              />
+              <Progress
+                value={progress}
+                aria-label={t('fasting.checklistTitle', 'Fasting Timer')}
+                className="h-1"
               />
             </div>
           ) : (
             <div className="text-center space-y-4 py-4">
-              <div className="w-32 h-32 rounded-full bg-secondary/50 flex items-center justify-center mx-auto border-2 border-dashed border-muted-foreground/30">
-                <span className="text-4xl">🍽️</span>
-              </div>
               <Button
                 onClick={() => {
                   setStartLocal(formatForLocalInput(new Date()));
@@ -263,6 +290,7 @@ const HomeDashboardFasting = () => {
               >
                 <Play className="w-4 h-4" />
                 {t('fasting.startFast', 'Start Fast')}
+                <ArrowRight aria-hidden="true" />
               </Button>
             </div>
           )}
@@ -282,7 +310,7 @@ const HomeDashboardFasting = () => {
               variant="destructive"
               size="lg"
               onClick={() => setShowEndDialog(true)}
-              className="w-full shadow-md hover:shadow-lg transition-all"
+              className="w-full"
             >
               <Square className="w-4 h-4 mr-2 fill-current" />
               {t('fasting.endFast', 'End Fast')}
@@ -292,27 +320,23 @@ const HomeDashboardFasting = () => {
 
         {/* Mini Stats Row */}
         {stats && (
-          <div className="grid grid-cols-2 gap-4 pt-4 border-t">
-            <div className="flex flex-col items-center p-2 bg-secondary/20 rounded-lg">
-              <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">
-                {t('fasting.totalFasts', 'Total Fasts')}
-              </span>
-              <span className="text-xl font-bold">
-                {stats.total_completed_fasts}
-              </span>
-            </div>
-            <div className="flex flex-col items-center p-2 bg-secondary/20 rounded-lg">
-              <span className="text-xs text-muted-foreground uppercase font-bold tracking-wider">
-                {t('fasting.avgDuration', 'Avg Duration')}
-              </span>
-              <span className="text-xl font-bold">
-                {t('fasting.hoursShort', {
+          <StatRows
+            rows={[
+              {
+                id: 'total',
+                label: t('fasting.totalFasts', 'Total Fasts'),
+                value: stats.total_completed_fasts,
+              },
+              {
+                id: 'average',
+                label: t('fasting.avgDuration', 'Avg Duration'),
+                value: t('fasting.hoursShort', {
                   count: averageDurationHours,
                   defaultValue: `${averageDurationHours}h`,
-                })}
-              </span>
-            </div>
-          </div>
+                }),
+              },
+            ]}
+          />
         )}
       </CardContent>
 

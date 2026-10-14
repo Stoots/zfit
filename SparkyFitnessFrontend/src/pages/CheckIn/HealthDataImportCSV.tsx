@@ -227,7 +227,7 @@ const HealthDataImportCSV = () => {
                       type="button"
                       variant="outline"
                       size="sm"
-                      className="h-7 px-2 flex items-center gap-1"
+                      className="min-h-11 px-3 flex items-center gap-1"
                       onClick={() => copyToClipboard(opt)}
                     >
                       {opt} <Copy className="h-3 w-3" />
@@ -319,7 +319,7 @@ const HealthDataImportCSV = () => {
             />
           )}
           {csvData.length > 0 && (
-            <div className="text-sm text-green-600">
+            <div className="text-sm text-success">
               {t('healthDataImport.loadedRecords', 'Loaded {{count}} rows.', {
                 count: csvData.length,
               })}
@@ -357,7 +357,7 @@ const HealthDataImportCSV = () => {
                   {csvData.map((row) => (
                     <tr
                       key={row.id}
-                      className="block md:table-row mb-4 border rounded-lg md:border-0 md:rounded-none md:border-t hover:bg-muted/50"
+                      className="block md:table-row mb-4 border-b md:border-b-0 md:border-t hover:bg-muted/50"
                     >
                       {headers.map((h) => (
                         <td
@@ -438,7 +438,7 @@ const HealthDataImportCSV = () => {
             className="w-full flex items-center gap-2"
           >
             {loading ? (
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white" />
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current" />
             ) : (
               <Upload size={16} />
             )}
