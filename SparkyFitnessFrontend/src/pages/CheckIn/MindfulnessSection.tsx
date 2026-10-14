@@ -363,16 +363,16 @@ export const MindfulnessSection: React.FC<MindfulnessSectionProps> = ({
   return (
     <div className="space-y-6">
       {/* Overview Metric Header */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="bg-gradient-to-br from-indigo-500/10 via-purple-500/5 to-background border-indigo-500/20">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)]">
+        <Card className="rounded-3xl">
           <CardHeader className="pb-2">
-            <CardDescription className="flex items-center gap-2 text-indigo-400 font-medium">
+            <CardDescription className="flex items-center gap-2 text-primary font-medium">
               <Sparkles className="w-4 h-4" />
               {t('mindfulness.stats.totalMinutes', 'Mindful Minutes Today')}
             </CardDescription>
-            <CardTitle className="text-3xl font-bold tracking-tight text-foreground">
+            <CardTitle className="text-5xl font-numeral font-bold tracking-tight text-foreground">
               {summary?.total_mindful_minutes ?? 0}{' '}
-              <span className="text-sm font-normal text-muted-foreground">
+              <span className="font-sans text-sm font-normal text-muted-foreground">
                 min
               </span>
             </CardTitle>
@@ -388,9 +388,9 @@ export const MindfulnessSection: React.FC<MindfulnessSectionProps> = ({
         </Card>
 
         {/* Quick Tool Launchers */}
-        <Card className="flex flex-col justify-between border-blue-500/20 bg-blue-500/5">
+        <Card className="flex flex-col justify-between border-0 border-b rounded-none bg-transparent">
           <CardHeader className="pb-2">
-            <CardDescription className="flex items-center gap-2 text-blue-400 font-medium">
+            <CardDescription className="flex items-center gap-2 text-primary font-medium">
               <Wind className="w-4 h-4" />
               {t('mindfulness.pacer.title', 'Paced Breathing')}
             </CardDescription>
@@ -405,7 +405,7 @@ export const MindfulnessSection: React.FC<MindfulnessSectionProps> = ({
               onClick={() =>
                 setActiveTool(activeTool === 'breathe' ? 'none' : 'breathe')
               }
-              className="w-full border-blue-500/30 hover:bg-blue-500/10 text-blue-400"
+              className="w-full border-primary/30 hover:bg-primary/10 text-primary"
             >
               {activeTool === 'breathe'
                 ? t('mindfulness.pacer.hide', 'Hide Pacer')
@@ -414,9 +414,9 @@ export const MindfulnessSection: React.FC<MindfulnessSectionProps> = ({
           </CardContent>
         </Card>
 
-        <Card className="flex flex-col justify-between border-purple-500/20 bg-purple-500/5">
+        <Card className="flex flex-col justify-between border-0 border-b rounded-none bg-transparent">
           <CardHeader className="pb-2">
-            <CardDescription className="flex items-center gap-2 text-purple-400 font-medium">
+            <CardDescription className="flex items-center gap-2 text-primary font-medium">
               <Timer className="w-4 h-4" />
               {t('mindfulness.timer.title', 'Meditation Timer')}
             </CardDescription>
@@ -431,7 +431,7 @@ export const MindfulnessSection: React.FC<MindfulnessSectionProps> = ({
               onClick={() =>
                 setActiveTool(activeTool === 'timer' ? 'none' : 'timer')
               }
-              className="w-full border-purple-500/30 hover:bg-purple-500/10 text-purple-400"
+              className="w-full border-primary/30 hover:bg-primary/10 text-primary"
             >
               {activeTool === 'timer'
                 ? t('mindfulness.timer.hide', 'Hide Timer')
@@ -443,12 +443,12 @@ export const MindfulnessSection: React.FC<MindfulnessSectionProps> = ({
 
       {/* Interactive Tool: Breathwork Pacer */}
       {activeTool === 'breathe' && (
-        <Card className="border-blue-500/30 bg-blue-950/20 shadow-lg">
+        <Card className="border-primary/30 bg-primary/20">
           <CardHeader>
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
                 <CardTitle className="text-xl flex items-center gap-2">
-                  <Wind className="w-5 h-5 text-blue-400" />
+                  <Wind className="w-5 h-5 text-primary" />
                   {getPatternName(patternKey)}
                 </CardTitle>
                 <CardDescription>{getPatternDesc(patternKey)}</CardDescription>
@@ -478,14 +478,14 @@ export const MindfulnessSection: React.FC<MindfulnessSectionProps> = ({
           <CardContent className="flex flex-col items-center justify-center py-8">
             <div className="relative flex items-center justify-center w-52 h-52 mb-6">
               <div
-                className={`absolute rounded-full border-2 border-blue-400/40 transition-all duration-1000 ease-in-out ${
+                className={`absolute rounded-full border-2 border-primary/40 transition-all duration-1000 ease-in-out ${
                   isBreathingActive && breathPhase === 'Inhale'
-                    ? 'w-48 h-48 bg-blue-500/20 scale-100'
+                    ? 'w-48 h-48 bg-primary/20 scale-100'
                     : isBreathingActive && breathPhase === 'Hold'
-                      ? 'w-48 h-48 bg-indigo-500/30 scale-100'
+                      ? 'w-48 h-48 bg-primary/30 scale-100'
                       : isBreathingActive && breathPhase === 'Exhale'
-                        ? 'w-24 h-24 bg-blue-500/10 scale-75'
-                        : 'w-32 h-32 bg-blue-500/10 scale-90'
+                        ? 'w-24 h-24 bg-primary/10 scale-75'
+                        : 'w-32 h-32 bg-primary/10 scale-90'
                 }`}
               />
               <div className="z-10 text-center">
@@ -495,7 +495,7 @@ export const MindfulnessSection: React.FC<MindfulnessSectionProps> = ({
                     : t('mindfulness.pacer.ready', 'Ready')}
                 </p>
                 {isBreathingActive && (
-                  <p className="text-4xl font-extrabold text-blue-400 mt-1 font-mono">
+                  <p className="text-4xl font-extrabold text-primary mt-1 font-numeral">
                     {phaseSecondsLeft}
                   </p>
                 )}
@@ -504,10 +504,7 @@ export const MindfulnessSection: React.FC<MindfulnessSectionProps> = ({
 
             <div className="flex items-center gap-4">
               {!isBreathingActive ? (
-                <Button
-                  onClick={handleStartBreathing}
-                  className="bg-blue-600 hover:bg-blue-500 text-white px-8"
-                >
+                <Button onClick={handleStartBreathing} className="px-8">
                   <Play className="w-4 h-4 mr-2" />
                   {t('mindfulness.pacer.begin', 'Begin Breathing')}
                 </Button>
@@ -529,12 +526,12 @@ export const MindfulnessSection: React.FC<MindfulnessSectionProps> = ({
 
       {/* Interactive Tool: Meditation Timer */}
       {activeTool === 'timer' && (
-        <Card className="border-purple-500/30 bg-purple-950/20 shadow-lg">
+        <Card className="border-primary/30 bg-primary/20">
           <CardHeader>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <CardTitle className="text-xl flex items-center gap-2">
-                  <Timer className="w-5 h-5 text-purple-400" />
+                  <Timer className="w-5 h-5 text-primary" />
                   {t('mindfulness.timer.heading', 'Meditation Session Timer')}
                 </CardTitle>
                 <CardDescription>
@@ -565,7 +562,7 @@ export const MindfulnessSection: React.FC<MindfulnessSectionProps> = ({
             </div>
           </CardHeader>
           <CardContent className="flex flex-col items-center justify-center py-8">
-            <div className="text-6xl font-mono font-bold tracking-tight text-foreground mb-6">
+            <div className="text-6xl font-numeral font-bold tracking-tight text-foreground mb-6">
               {formatSeconds(timerElapsed)}
               {timerTargetSeconds > 0 && (
                 <span className="text-xl font-normal text-muted-foreground ml-2">
@@ -578,7 +575,7 @@ export const MindfulnessSection: React.FC<MindfulnessSectionProps> = ({
               {!isTimerRunning ? (
                 <Button
                   onClick={() => setIsTimerRunning(true)}
-                  className="bg-purple-600 hover:bg-purple-500 text-white px-8"
+                  className="px-8"
                 >
                   <Play className="w-4 h-4 mr-2" />
                   {timerElapsed > 0
@@ -613,7 +610,7 @@ export const MindfulnessSection: React.FC<MindfulnessSectionProps> = ({
 
       {/* Today's Logged Sessions */}
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between pb-3">
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 pb-3">
           <div>
             <CardTitle className="text-lg">
               {t('mindfulness.history.title', 'Today’s Sessions')}
@@ -657,10 +654,10 @@ export const MindfulnessSection: React.FC<MindfulnessSectionProps> = ({
               {summary.sessions.map((session) => (
                 <div
                   key={session.id}
-                  className="py-3 flex items-center justify-between gap-4"
+                  className="py-3 flex min-w-0 items-center justify-between gap-3"
                 >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
+                  <div className="min-w-0 space-y-1">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="font-semibold text-sm capitalize">
                         {t(
                           `mindfulness.types.${session.session_type}`,
@@ -668,10 +665,7 @@ export const MindfulnessSection: React.FC<MindfulnessSectionProps> = ({
                         )}
                       </span>
                       {session.provider && session.provider !== 'manual' && (
-                        <Badge
-                          variant="outline"
-                          className="text-[10px] uppercase"
-                        >
+                        <Badge variant="outline" className="text-xs uppercase">
                           {session.provider.replace('_', ' ')}
                         </Badge>
                       )}
@@ -683,14 +677,14 @@ export const MindfulnessSection: React.FC<MindfulnessSectionProps> = ({
                       </span>
 
                       {session.heart_rate_avg != null && (
-                        <span className="flex items-center gap-1 text-rose-500 font-medium">
-                          <Heart className="w-3 h-3 fill-rose-500/20" />
+                        <span className="flex items-center gap-1 text-foreground font-medium">
+                          <Heart className="w-3 h-3 fill-activity/20" />
                           {session.heart_rate_avg} bpm
                         </span>
                       )}
 
                       {session.hrv_rmssd != null && (
-                        <span className="flex items-center gap-1 text-indigo-400 font-medium">
+                        <span className="flex items-center gap-1 text-primary font-medium">
                           <Activity className="w-3 h-3" />
                           HRV {session.hrv_rmssd} ms
                         </span>
@@ -708,7 +702,7 @@ export const MindfulnessSection: React.FC<MindfulnessSectionProps> = ({
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="text-muted-foreground hover:text-foreground h-8 w-8"
+                      className="text-muted-foreground hover:text-foreground h-11 w-11"
                       onClick={() => handleOpenEdit(session)}
                       title={t('mindfulness.actions.edit', 'Edit session')}
                     >
@@ -717,7 +711,7 @@ export const MindfulnessSection: React.FC<MindfulnessSectionProps> = ({
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="text-muted-foreground hover:text-destructive h-8 w-8"
+                      className="text-muted-foreground hover:text-destructive h-11 w-11"
                       onClick={() => setSessionToDelete(session.id)}
                       title={t('mindfulness.actions.delete', 'Delete session')}
                     >

@@ -65,8 +65,11 @@ const PhotoSlot = ({
       <span className="text-sm font-medium text-foreground">{label}</span>
 
       {/* Photo preview or placeholder */}
-      <div
-        className="relative w-full aspect-[3/4] rounded-lg border border-border bg-muted overflow-hidden
+      <button
+        type="button"
+        disabled={disabled}
+        aria-label={`${label}: ${t('checkIn.photos.tapToUpload', 'Tap to upload')}`}
+        className="relative w-full aspect-[3/4] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-lg border border-border bg-muted overflow-hidden
                    flex items-center justify-center cursor-pointer group"
         onClick={() => !disabled && fileInputRef.current?.click()}
       >
@@ -77,8 +80,8 @@ const PhotoSlot = ({
               alt={label}
               className="w-full h-full object-cover"
             />
-            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-              <Camera className="h-8 w-8 text-white" />
+            <div className="absolute inset-0 bg-background/80 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+              <Camera className="h-8 w-8 text-foreground" />
             </div>
           </>
         ) : (
@@ -95,7 +98,7 @@ const PhotoSlot = ({
             <div className="h-6 w-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
           </div>
         )}
-      </div>
+      </button>
 
       {/* Hidden file input — no capture attribute so mobile users can pick
           either the camera or an existing photo from the gallery. */}
@@ -108,12 +111,12 @@ const PhotoSlot = ({
         disabled={disabled}
       />
 
-      <div className="flex gap-2 w-full">
+      <div className="flex flex-wrap gap-2 w-full">
         <Button
           type="button"
           variant="outline"
           size="sm"
-          className="flex-1"
+          className="min-h-11 min-w-0 flex-1 px-2"
           disabled={disabled}
           onClick={() => fileInputRef.current?.click()}
         >
@@ -128,7 +131,8 @@ const PhotoSlot = ({
             type="button"
             variant="ghost"
             size="sm"
-            className="text-destructive hover:text-destructive"
+            className="h-11 w-11 p-0 text-destructive hover:text-destructive"
+            aria-label={`${t('common.delete', 'Delete')}: ${label}`}
             disabled={disabled}
             onClick={() => onDelete(photo.id)}
           >
@@ -190,7 +194,10 @@ export const CheckInPhotos = ({ selectedDate }: CheckInPhotosProps) => {
             disabled={hasPhotos}
             className="group disabled:cursor-default"
           >
-            <div className="flex items-center justify-between gap-2 cursor-pointer">
+            <button
+              type="button"
+              className="flex min-h-11 flex-wrap items-center justify-between gap-2 text-left cursor-pointer"
+            >
               <CardTitle>
                 {t('checkIn.photos.title', 'Progress Photos')}
               </CardTitle>
@@ -200,7 +207,7 @@ export const CheckInPhotos = ({ selectedDate }: CheckInPhotosProps) => {
                   <ChevronDown className="h-4 w-4 transition-transform group-data-[state=open]:rotate-180" />
                 </span>
               )}
-            </div>
+            </button>
           </CollapsibleTrigger>
           {expanded && (
             <p className="text-sm text-muted-foreground">

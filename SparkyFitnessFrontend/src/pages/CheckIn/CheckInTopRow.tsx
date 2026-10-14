@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { ArrowRight } from 'lucide-react';
 import MoodMeter from './MoodMeter';
 import HomeDashboardFasting from './HomeDashboardFasting';
 import { useTranslation } from 'react-i18next';
@@ -30,11 +31,11 @@ export const CheckInTopRow = ({
   return (
     <>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
-        <div className="w-full h-full">
+        <div className="min-w-0 w-full">
           <HomeDashboardFasting />
         </div>
 
-        <div className="w-full h-full">
+        <div className="min-w-0 w-full">
           <Card>
             <CardHeader>
               <CardTitle>
@@ -54,11 +55,12 @@ export const CheckInTopRow = ({
                   onNotesChange={setMoodNotes}
                   onTagsChange={setMoodTags}
                 />
-                <div className="flex justify-center pt-2">
-                  <Button type="submit" disabled={isSavingMood} size="sm">
+                <div className="flex justify-end border-t pt-4">
+                  <Button type="submit" disabled={isSavingMood}>
                     {isSavingMood
                       ? t('checkIn.saving', 'Saving...')
                       : t('checkIn.saveMood', 'Save Mood')}
+                    <ArrowRight aria-hidden="true" />
                   </Button>
                 </div>
               </form>

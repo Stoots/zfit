@@ -13,12 +13,20 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { type SleepStageEvent, SLEEP_STAGE_COLORS } from '@/types';
+import { type SleepStageEvent } from '@/types';
+
 import {
   formatSecondsToHHMM,
   formatTimeWithPreference,
 } from '@/utils/timeFormatters';
 import { usePreferences } from '@/contexts/PreferencesContext';
+
+const SLEEP_STAGE_COLORS = {
+  deep: 'var(--sleep-deep)',
+  light: 'var(--sleep-core)',
+  rem: 'var(--sleep-rem)',
+  awake: 'var(--sleep-awake)',
+};
 
 interface SleepTimelineEditorProps {
   bedtime: string;
@@ -306,9 +314,9 @@ const SleepTimelineEditor: React.FC<SleepTimelineEditorProps> = ({
   }, [isDragging, handleMouseUp]);
 
   return (
-    <div className="sleep-timeline-editor border p-4 rounded-lg my-4">
+    <div className="sleep-timeline-editor min-w-0 border-t py-4 my-4">
       {entryDetails && (
-        <div className="mb-4 text-sm text-gray-600 grid grid-cols-2 gap-x-4 gap-y-1 md:grid-cols-4">
+        <div className="mb-4 text-sm text-muted-foreground grid grid-cols-2 gap-x-4 gap-y-3 md:grid-cols-4 [&_b]:font-medium [&_b]:text-foreground">
           {isEditing ? (
             <>
               <div>
@@ -443,7 +451,7 @@ const SleepTimelineEditor: React.FC<SleepTimelineEditorProps> = ({
       </h4>
 
       {isEditing && ( // Conditionally render buttons for editing mode
-        <div className="flex space-x-2 mb-4">
+        <div className="flex flex-wrap gap-2 mb-4">
           {['awake', 'rem', 'light', 'deep'].map((stageType) => (
             <Button
               key={stageType}
@@ -453,15 +461,8 @@ const SleepTimelineEditor: React.FC<SleepTimelineEditorProps> = ({
                   stageType as 'awake' | 'rem' | 'light' | 'deep'
                 )
               }
-              style={{
-                backgroundColor:
-                  selectedStageType === stageType
-                    ? SLEEP_STAGE_COLORS[
-                        stageType as keyof typeof SLEEP_STAGE_COLORS
-                      ]
-                    : undefined,
-              }}
-              className="text-black"
+              variant={selectedStageType === stageType ? 'default' : 'outline'}
+              aria-pressed={selectedStageType === stageType}
             >
               {t(
                 `sleepTimelineEditor.${stageType}`,
@@ -478,7 +479,7 @@ const SleepTimelineEditor: React.FC<SleepTimelineEditorProps> = ({
                 onStageEventsPreviewChange([]); // Notify parent of cleared events
               }
             }}
-            className={`${selectedStageType === null ? 'bg-gray-400' : 'bg-gray-200'} text-black`}
+            variant="ghost"
           >
             {t('sleepTimelineEditor.clear', 'Clear')}
           </Button>
@@ -505,7 +506,7 @@ const SleepTimelineEditor: React.FC<SleepTimelineEditorProps> = ({
 
       <div
         ref={timelineRef}
-        className={`relative h-12 bg-muted rounded-md ${isEditing ? 'cursor-crosshair' : ''}`}
+        className={`relative h-16 overflow-hidden bg-muted rounded-md ${isEditing ? 'cursor-crosshair' : ''}`}
         onMouseDown={isEditing ? handleMouseDown : undefined}
         onMouseMove={isEditing ? handleMouseMove : undefined}
         onMouseUp={isEditing ? handleMouseUp : undefined}
@@ -519,8 +520,11 @@ const SleepTimelineEditor: React.FC<SleepTimelineEditorProps> = ({
             return (
               <span
                 key={`hour-${i}`}
-                className="absolute"
-                style={{ left: `${left}%` }}
+                className={`absolute text-muted-foreground ${i % 2 !== 0 ? 'hidden sm:block' : ''}`}
+                style={{
+                  left: `${left}%`,
+                  transform: i === 0 ? undefined : 'translateX(-100%)',
+                }}
               >
                 {formatTimeWithPreference(hourTime, timeFormat)}
               </span>
@@ -541,7 +545,7 @@ const SleepTimelineEditor: React.FC<SleepTimelineEditorProps> = ({
           return (
             <div
               key={event.id || index}
-              className="absolute h-full rounded-md opacity-75"
+              className="absolute top-6 h-10 border-r border-background/30"
               style={{
                 left: `${left}%`,
                 width: `${width}%`,
