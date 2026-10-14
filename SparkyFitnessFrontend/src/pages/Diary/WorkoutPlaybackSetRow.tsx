@@ -1,7 +1,14 @@
 import { useTranslation } from 'react-i18next';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  carryDistanceFromKm,
+  carryDistanceUnitLabel,
+  type ExerciseModality,
+} from '@workspace/shared';
+import { SET_TABLE_LAYOUT, toSetTableModality } from '@/constants/exercises';
+import { usePreferences } from '@/contexts/PreferencesContext';
 import type { WeightUnit } from '@/contexts/PreferencesContext';
-import { MessageSquare, Play, Square, Timer, Trash2 } from 'lucide-react';
+import { MessageSquare, Play, Square, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -49,6 +56,8 @@ interface WorkoutPlaybackSetRowProps {
   setNumber: number;
   setType: string | null | undefined;
   isTimedExercise: boolean;
+  modality?: ExerciseModality;
+  distance?: number | null;
   reps: number | null | undefined;
   weight: number | null | undefined;
   duration: number | null | undefined;
@@ -82,6 +91,8 @@ const WorkoutPlaybackSetRow = ({
   setNumber,
   setType,
   isTimedExercise,
+  modality,
+  distance,
   reps,
   weight,
   duration,
@@ -102,6 +113,13 @@ const WorkoutPlaybackSetRow = ({
   weightUnit,
 }: WorkoutPlaybackSetRowProps) => {
   const { t } = useTranslation();
+  const { distanceUnit } = usePreferences();
+  const layout =
+    SET_TABLE_LAYOUT[
+      toSetTableModality(
+        modality ?? (isTimedExercise ? 'duration' : 'weight_reps')
+      )
+    ];
   const pointer: WorkoutSetPointer = useMemo(
     () => ({ exerciseIndex, setIndex }),
     [exerciseIndex, setIndex]
@@ -146,258 +164,221 @@ const WorkoutPlaybackSetRow = ({
   }, [stopwatchStartedAt, onSetFieldChange, pointer, exerciseIndex, setIndex]);
 
   return (
-    <div>
-      <div
-        className={`w-full rounded-sm border px-2 py-1.5 text-left ${
-          completed
-            ? 'border-border/60 bg-muted/40 text-muted-foreground'
-            : 'border-border/70 bg-background'
-        }`}
-      >
-        <div className={WORKOUT_PLAYBACK_SET_GRID_CLASSES}>
-          <div className="col-span-2 flex min-w-0 items-center justify-between gap-2 sm:col-start-1 sm:col-span-1 sm:justify-start">
-            <div className="flex min-w-0 items-center gap-2">
-              <Checkbox
-                aria-label={`Complete set ${setNumber}`}
-                checked={completed}
-                className="data-[state=checked]:border-emerald-500 data-[state=checked]:bg-emerald-500 data-[state=checked]:text-white"
-                onClick={(event) => {
-                  event.stopPropagation();
-                }}
-                onCheckedChange={(checked) => {
-                  if (checked === true) {
-                    onCompleteSet(pointer);
-                  } else {
-                    onUncompleteSet(pointer);
-                  }
-                }}
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                className="h-auto p-0 text-sm font-medium hover:bg-transparent"
-                aria-label={`Select set ${setNumber} for ${exerciseName}`}
-                onClick={() => onSelectSet(pointer)}
-              >
-                {t(
-                  'exercise.workoutPlaybackDialog.setRow',
-                  'Set {{setNumber}}',
-                  {
-                    setNumber,
-                  }
-                )}
-              </Button>
-            </div>
-          </div>
-
-          <Select
-            value={setType ?? 'Working Set'}
-            onValueChange={(value) =>
-              onSetFieldChange(pointer, 'set_type', value)
+    <div
+      className={`border-t py-3 ${completed ? 'bg-muted/40 text-muted-foreground' : ''}`}
+    >
+      <div className={WORKOUT_PLAYBACK_SET_GRID_CLASSES}>
+        <Button
+          type="button"
+          variant="ghost"
+          className="h-11 w-11 p-0 tabular-nums"
+          aria-label={`Select set ${setNumber} for ${exerciseName}`}
+          onClick={() => onSelectSet(pointer)}
+        >
+          {setNumber}
+        </Button>
+        {layout.showWeight ? (
+          <UnitInput
+            id={`set-weight-${exerciseIndex}-${setIndex}`}
+            value={weight ?? ''}
+            unit={weightUnit}
+            type="weight"
+            placeholder={
+              layout.signedWeight ? '±0' : t('common.weight', 'Weight')
             }
+            onChange={(value) => onSetFieldChange(pointer, 'weight', value)}
+            inputClassName="pl-2 tabular-nums"
+            className="min-w-0"
+            aria-label={`Weight set ${setNumber}`}
+          />
+        ) : (
+          <span
+            aria-hidden="true"
+            className="text-center text-muted-foreground"
           >
-            <SelectTrigger
-              aria-label={`Type set ${setNumber}`}
-              onClick={(event) => event.stopPropagation()}
-              className="col-span-2 border-border/70 bg-transparent shadow-none outline-none ring-0 focus:border-border/70 focus:outline-none focus:ring-0 focus:ring-offset-0 focus-visible:border-border/70 focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 data-[state=open]:border-border/70 data-[state=open]:outline-none data-[state=open]:ring-0 data-[state=open]:shadow-none sm:col-start-2 sm:col-span-1"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {excerciseWorkoutSetTypes.map((type) => (
-                <SelectItem key={type} value={type}>
-                  {t(`workout.setType.${type}`, type)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {isTimedExercise ? (
-            <div className="col-span-2 flex items-center gap-1.5 sm:col-start-3 sm:col-span-2">
-              <Input
-                id={`set-duration-${exerciseIndex}-${setIndex}`}
-                type="number"
-                inputMode="numeric"
-                min={0}
-                step={1}
-                aria-label={t(
-                  'workout.durationSet',
-                  'Duration set {{setNumber}}',
-                  { setNumber }
-                )}
-                value={
-                  stopwatchStartedAt != null
-                    ? stopwatchElapsedSec
-                    : (duration ?? '')
-                }
-                readOnly={stopwatchStartedAt != null}
-                onClick={(event) => event.stopPropagation()}
-                onChange={(event) =>
-                  onSetFieldChange(
-                    pointer,
-                    'duration',
-                    parseNullableInteger(event.target.value)
-                  )
-                }
-                placeholder={t('workout.durationSecShort', 'Sec')}
-                className="w-full focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
-              />
-              {!completed && (
-                <Button
-                  type="button"
-                  size="icon"
-                  variant={
-                    stopwatchStartedAt != null ? 'destructive' : 'outline'
-                  }
-                  className="h-9 w-9 shrink-0"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleToggleStopwatch();
-                  }}
-                  title={
-                    stopwatchStartedAt != null
-                      ? t('workout.stopTimer', 'Stop stopwatch')
-                      : t('workout.startTimer', 'Start stopwatch')
-                  }
-                >
-                  {stopwatchStartedAt != null ? (
-                    <Square className="h-3.5 w-3.5 fill-current" />
-                  ) : (
-                    <Play className="h-3.5 w-3.5 fill-current" />
-                  )}
-                </Button>
+            —
+          </span>
+        )}
+        {layout.showReps ? (
+          <Input
+            id={`set-reps-${exerciseIndex}-${setIndex}`}
+            type="number"
+            inputMode="numeric"
+            min={0}
+            step={1}
+            aria-label={`Reps set ${setNumber}`}
+            value={reps ?? ''}
+            onChange={(event) =>
+              onSetFieldChange(
+                pointer,
+                'reps',
+                parseNullableInteger(event.target.value)
+              )
+            }
+            placeholder={t('common.reps', 'reps')}
+            className="min-w-0 px-2 tabular-nums"
+          />
+        ) : layout.showDistance ? (
+          <span
+            className="text-center text-sm tabular-nums"
+            aria-label={t('workout.distance', 'Distance')}
+          >
+            {distance == null
+              ? '—'
+              : Number(
+                  carryDistanceFromKm(distance, distanceUnit).toFixed(1)
+                )}{' '}
+            {carryDistanceUnitLabel(distanceUnit)}
+          </span>
+        ) : (
+          <Input
+            id={`set-duration-${exerciseIndex}-${setIndex}`}
+            type="number"
+            inputMode="numeric"
+            min={0}
+            step={1}
+            aria-label={t('workout.durationSet', 'Duration set {{setNumber}}', {
+              setNumber,
+            })}
+            value={
+              stopwatchStartedAt != null
+                ? stopwatchElapsedSec
+                : (duration ?? '')
+            }
+            readOnly={stopwatchStartedAt != null}
+            onChange={(event) =>
+              onSetFieldChange(
+                pointer,
+                'duration',
+                parseNullableInteger(event.target.value)
+              )
+            }
+            placeholder={t('workout.durationSecShort', 'Sec')}
+            className="min-w-0 px-2 tabular-nums"
+          />
+        )}
+        <Input
+          type="number"
+          inputMode="decimal"
+          min={0}
+          max={10}
+          step={0.5}
+          aria-label={t('workout.rpeSet', 'RPE set {{setNumber}}', {
+            setNumber,
+          })}
+          value={rpe ?? ''}
+          onChange={(event) =>
+            onSetFieldChange(
+              pointer,
+              'rpe',
+              event.target.value === '' ? null : Number(event.target.value)
+            )
+          }
+          className="min-w-0 px-2 tabular-nums"
+        />
+      </div>
+      <div className="mt-2 grid grid-cols-[2.75rem_minmax(0,1fr)_2.75rem_2.75rem_2.75rem] items-center gap-2">
+        <Checkbox
+          aria-label={`Complete set ${setNumber}`}
+          checked={completed}
+          className="h-11 w-11 shrink-0 rounded-full data-[state=checked]:border-border data-[state=checked]:bg-muted data-[state=checked]:text-muted-foreground"
+          onCheckedChange={(checked) =>
+            checked === true ? onCompleteSet(pointer) : onUncompleteSet(pointer)
+          }
+        />
+        <Select
+          value={setType ?? 'Working Set'}
+          onValueChange={(value) =>
+            onSetFieldChange(pointer, 'set_type', value)
+          }
+        >
+          <SelectTrigger
+            aria-label={`Type set ${setNumber}`}
+            className="min-w-0 bg-transparent px-2 text-sm"
+          >
+            <SelectValue>
+              {t(
+                `workout.setType.${setType ?? 'Working Set'}`,
+                setType ?? 'Working Set'
               )}
-            </div>
-          ) : (
-            <>
-              <Input
-                id={`set-reps-${exerciseIndex}-${setIndex}`}
-                type="number"
-                inputMode="numeric"
-                min={0}
-                step={1}
-                aria-label={`Reps set ${setNumber}`}
-                value={reps ?? ''}
-                onClick={(event) => event.stopPropagation()}
-                onChange={(event) =>
-                  onSetFieldChange(
-                    pointer,
-                    'reps',
-                    parseNullableInteger(event.target.value)
-                  )
-                }
-                placeholder={t('common.reps', 'reps')}
-                className="col-span-1 w-full focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0 sm:col-start-3"
-              />
-
-              <div
-                className="col-span-1 w-full sm:col-start-4"
-                onClick={(event) => event.stopPropagation()}
-              >
-                <UnitInput
-                  id={`set-weight-${exerciseIndex}-${setIndex}`}
-                  value={weight ?? ''}
-                  unit={weightUnit}
-                  type="weight"
-                  placeholder={t('common.weight', 'Weight')}
-                  onChange={(value) =>
-                    onSetFieldChange(pointer, 'weight', value)
-                  }
-                  inputClassName="focus-visible:outline-none focus-visible:ring-0 focus-visible:ring-offset-0"
-                  aria-label={`Weight set ${setNumber}`}
-                />
-              </div>
-            </>
-          )}
-
-          <label className="col-span-1 min-w-0 sm:col-start-5">
-            <span className="text-xs text-muted-foreground sm:sr-only">
-              {t('workout.rpe', 'RPE')}
-            </span>
-            <Input
-              type="number"
-              inputMode="decimal"
-              min={0}
-              max={10}
-              step={0.5}
-              aria-label={t('workout.rpeSet', 'RPE set {{setNumber}}', {
-                setNumber,
-              })}
-              value={rpe ?? ''}
-              onClick={(event) => event.stopPropagation()}
-              onChange={(event) =>
-                onSetFieldChange(
-                  pointer,
-                  'rpe',
-                  event.target.value === '' ? null : Number(event.target.value)
-                )
-              }
-              className="w-full"
-            />
-          </label>
-
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            {excerciseWorkoutSetTypes.map((type) => (
+              <SelectItem key={type} value={type}>
+                {t(`workout.setType.${type}`, type)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button
+          type="button"
+          variant="ghost"
+          className="w-11 px-0 text-sm tabular-nums"
+          aria-label={`Edit rest for set ${setNumber}`}
+          onClick={() => onOpenRestEditor(pointer)}
+        >
+          {formatRestChip(restTime)}
+        </Button>
+        {!layout.showReps && !layout.showDistance && !completed && (
           <Button
             type="button"
-            variant="outline"
-            className="col-span-1 w-full min-w-0 justify-center px-2 text-xs tabular-nums sm:col-start-6 sm:col-span-1"
-            aria-label={`Edit rest for set ${setNumber}`}
-            onClick={(event) => {
-              event.stopPropagation();
-              onOpenRestEditor(pointer);
-            }}
+            size="icon"
+            variant={stopwatchStartedAt != null ? 'destructive' : 'outline'}
+            onClick={handleToggleStopwatch}
+            aria-label={
+              stopwatchStartedAt != null
+                ? t('workout.stopTimer', 'Stop stopwatch')
+                : t('workout.startTimer', 'Start stopwatch')
+            }
+            title={
+              stopwatchStartedAt != null
+                ? t('workout.stopTimer', 'Stop stopwatch')
+                : t('workout.startTimer', 'Start stopwatch')
+            }
           >
-            <Timer className="h-3.5 w-3.5 text-muted-foreground" />
-            {formatRestChip(restTime)}
+            {stopwatchStartedAt != null ? (
+              <Square className="h-4 w-4 fill-current" />
+            ) : (
+              <Play className="h-4 w-4 fill-current" />
+            )}
           </Button>
-
-          <div className="col-span-4 flex items-center justify-end gap-1 sm:col-start-7 sm:col-span-1 sm:justify-center">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="cursor-pointer"
-              aria-label={`Toggle notes for set ${setNumber}`}
-              aria-expanded={isNotesVisible}
-              onClick={(event) => {
-                event.stopPropagation();
-                onToggleNotesVisibility(notesKey);
-              }}
-            >
-              <MessageSquare className="h-4 w-4" />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="cursor-pointer"
-              disabled={!canRemove}
-              aria-label={`Remove set ${setNumber} for ${exerciseName}`}
-              onClick={(event) => {
-                event.stopPropagation();
-                onRemoveSet(pointer);
-              }}
-            >
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
-
-          {isNotesVisible && (
-            <Textarea
-              aria-label={`Set notes ${setNumber}`}
-              value={notes ?? ''}
-              onClick={(event) => event.stopPropagation()}
-              onChange={(event) =>
-                onSetFieldChange(pointer, 'notes', event.target.value)
-              }
-              placeholder={t(
-                'workout.notesPlaceholder',
-                'Add a note for this set...'
-              )}
-              className="col-span-4 min-h-16 resize-none text-sm sm:col-span-7"
-            />
-          )}
-        </div>
+        )}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label={`Toggle notes for set ${setNumber}`}
+          aria-expanded={isNotesVisible}
+          onClick={() => onToggleNotesVisibility(notesKey)}
+        >
+          <MessageSquare className="h-4 w-4" />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          disabled={!canRemove}
+          aria-label={`Remove set ${setNumber} for ${exerciseName}`}
+          onClick={() => onRemoveSet(pointer)}
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
       </div>
+      {isNotesVisible && (
+        <Textarea
+          aria-label={`Set notes ${setNumber}`}
+          value={notes ?? ''}
+          onChange={(event) =>
+            onSetFieldChange(pointer, 'notes', event.target.value)
+          }
+          placeholder={t(
+            'workout.notesPlaceholder',
+            'Add a note for this set...'
+          )}
+          className="mt-2 min-h-16 resize-none"
+        />
+      )}
     </div>
   );
 };
