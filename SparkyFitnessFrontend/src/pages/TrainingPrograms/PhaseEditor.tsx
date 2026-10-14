@@ -96,7 +96,7 @@ export default function PhaseEditor({
           )
         )}
       />
-      <div>
+      <div className="min-w-0 grid gap-2 border-b py-3 sm:grid-cols-[10rem_minmax(0,1fr)] sm:items-start sm:gap-4">
         <Label htmlFor={`phase-${p}-name`}>
           {t('trainingPrograms.phaseName', 'Phase name')}
         </Label>
@@ -109,7 +109,7 @@ export default function PhaseEditor({
           }
         />
       </div>
-      <div>
+      <div className="min-w-0 grid gap-2 border-b py-3 sm:grid-cols-[10rem_minmax(0,1fr)] sm:items-start sm:gap-4">
         <Label htmlFor={`phase-${p}-goal`}>
           {t('trainingPrograms.phaseGoal', 'Phase goal')}
         </Label>

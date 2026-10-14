@@ -184,7 +184,7 @@ export function DataTable<TData extends RowData>({
     <div className="space-y-4">
       {onSearchChange && (
         <div className="relative">
-          <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+          <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder={searchPlaceholder || 'Search...'}
             onChange={(event) => onSearchChange(event.target.value)}
@@ -260,8 +260,8 @@ export function DataTable<TData extends RowData>({
                       colSpan={columns.length}
                       className="p-0 border-none relative h-[2px]"
                     >
-                      <div className="absolute inset-0 bg-blue-500/20" />
-                      <div className="absolute inset-0 bg-blue-500 animate-progress origin-left w-full h-full" />
+                      <div className="absolute inset-0 bg-primary/20" />
+                      <div className="absolute inset-0 bg-primary animate-progress origin-left w-full h-full" />
                     </TableCell>
                   </TableRow>
                 )}
@@ -313,15 +313,15 @@ export function DataTable<TData extends RowData>({
       {/* Mobile Row View (Super Clean) */}
       <div className="md:hidden space-y-2 relative">
         {isLoading && !table.getRowModel().rows?.length ? (
-          <div className="p-12 text-center text-muted-foreground italic border-2 border-dashed rounded-2xl bg-gray-50/50 dark:bg-gray-900/20">
+          <div className="p-12 text-center text-muted-foreground italic border-2 border-dashed rounded-2xl bg-muted/30">
             <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 opacity-50" />
             {t('dataTable.loading', 'Loading...')}
           </div>
         ) : table.getRowModel().rows?.length ? (
           <>
             {isLoading && (
-              <div className="absolute inset-x-0 -top-2 h-1 bg-blue-500/30 overflow-hidden rounded-full z-10">
-                <div className="h-full bg-blue-500 animate-progress origin-left" />
+              <div className="absolute inset-x-0 -top-2 h-1 bg-primary/30 overflow-hidden rounded-full z-10">
+                <div className="h-full bg-primary animate-progress origin-left" />
               </div>
             )}
             {table.getRowModel().rows.map((row) => (
@@ -329,10 +329,10 @@ export function DataTable<TData extends RowData>({
                 key={row.id}
                 onDoubleClick={() => onRowDoubleClick?.(row.original)}
                 onClick={(event) => handleRowClick(event, row.original, true)}
-                className={`transition-all duration-200 border-2 overflow-hidden shadow-sm ${
+                className={`transition-colors duration-200 overflow-hidden ${
                   row.getIsSelected()
-                    ? 'border-blue-500 bg-blue-50/30 dark:bg-blue-900/10'
-                    : 'border-gray-100 dark:border-gray-800 bg-white dark:bg-gray-900'
+                    ? 'border-primary bg-accent'
+                    : 'border-border bg-card'
                 } ${onRowClick || onRowDoubleClick ? 'active:scale-[0.98]' : ''} ${
                   isLoading ? 'opacity-70 grayscale-[0.3]' : ''
                 }`}
@@ -352,7 +352,7 @@ export function DataTable<TData extends RowData>({
                           : null;
                       })()}
 
-                      <div className="truncate font-bold text-gray-900 dark:text-gray-100 text-sm flex-1">
+                      <div className="truncate font-bold text-foreground text-sm flex-1">
                         {(() => {
                           const titleCell = row
                             .getVisibleCells()
@@ -425,7 +425,7 @@ export function DataTable<TData extends RowData>({
                         <div
                           key={cell.id}
                           className={cn(
-                            'flex flex-col gap-0.5',
+                            'min-w-0 flex flex-col gap-0.5',
                             (
                               cell.column.columnDef as ColumnDef<
                                 DataTableFeatures,
@@ -452,14 +452,14 @@ export function DataTable<TData extends RowData>({
                             ).meta?.colSpan === 4 && 'col-span-4'
                           )}
                         >
-                          <span className="text-[9px] uppercase font-bold text-gray-400 dark:text-gray-500 tracking-tighter truncate">
+                          <span className="text-xs font-medium text-muted-foreground tracking-tighter truncate">
                             {tableHeader
                               ? flexRender(header, tableHeader.getContext())
                               : typeof header === 'string'
                                 ? header
                                 : cell.column.id}
                           </span>
-                          <div className="text-xs text-gray-700 dark:text-gray-300 font-medium truncate">
+                          <div className="text-xs text-foreground font-medium truncate">
                             {flexRender(
                               cell.column.columnDef.cell,
                               cell.getContext()
@@ -474,7 +474,7 @@ export function DataTable<TData extends RowData>({
             ))}
           </>
         ) : (
-          <div className="p-12 text-center text-muted-foreground italic border-2 border-dashed rounded-2xl bg-gray-50/50 dark:bg-gray-900/20">
+          <div className="p-12 text-center text-muted-foreground italic border-2 border-dashed rounded-2xl bg-muted/30">
             {t('dataTable.noResults', 'No results found.')}
           </div>
         )}

@@ -34,7 +34,6 @@ import {
   SortableContext,
   sortableKeyboardCoordinates,
 } from '@dnd-kit/sortable';
-import { Card } from '@/components/ui/card';
 import { toast } from '@/hooks/use-toast';
 import {
   Dialog,
@@ -201,7 +200,7 @@ const AddWorkoutPlanDialog = ({
       <TooltipProvider>
         <DialogContent
           requireConfirmation
-          className="sm:max-w-[1200px] max-h-[90vh] overflow-y-auto"
+          className="sm:max-w-[1200px] max-h-[90dvh] overflow-y-auto"
         >
           <DialogHeader>
             <DialogTitle>
@@ -221,7 +220,7 @@ const AddWorkoutPlanDialog = ({
                   )}
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
+          <div className="min-w-0 grid gap-6 py-4">
             <div className="space-y-2">
               <Label htmlFor="planName">
                 {t('addWorkoutPlanDialog.planNameLabel', 'Plan Name')}
@@ -255,12 +254,12 @@ const AddWorkoutPlanDialog = ({
               <Label>
                 {t('addWorkoutPlanDialog.scheduleTypeLabel', 'Schedule Mode')}
               </Label>
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <button
                   type="button"
-                  className={`w-full flex flex-col h-auto py-2.5 px-3.5 text-left rounded-lg border transition-all ${
+                  className={`min-w-0 w-full flex flex-col h-auto py-3 px-4 text-left rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                     scheduleType === 'sequential'
-                      ? 'border-primary bg-primary/10 ring-1 ring-primary shadow-xs'
+                      ? 'border-primary bg-accent'
                       : 'border-border/70 bg-card hover:bg-accent/40 text-muted-foreground hover:text-foreground'
                   }`}
                   onClick={() => setScheduleType('sequential')}
@@ -289,9 +288,9 @@ const AddWorkoutPlanDialog = ({
                 </button>
                 <button
                   type="button"
-                  className={`w-full flex flex-col h-auto py-2.5 px-3.5 text-left rounded-lg border transition-all ${
+                  className={`min-w-0 w-full flex flex-col h-auto py-3 px-4 text-left rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                     scheduleType === 'weekly'
-                      ? 'border-primary bg-primary/10 ring-1 ring-primary shadow-xs'
+                      ? 'border-primary bg-accent'
                       : 'border-border/70 bg-card hover:bg-accent/40 text-muted-foreground hover:text-foreground'
                   }`}
                   onClick={() => setScheduleType('weekly')}
@@ -326,12 +325,12 @@ const AddWorkoutPlanDialog = ({
                 <Label>
                   {t('addWorkoutPlanDialog.entryModeLabel', 'Diary Behavior')}
                 </Label>
-                <div className="grid grid-cols-2 gap-2.5">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <button
                     type="button"
-                    className={`w-full flex flex-col h-auto py-2.5 px-3.5 text-left rounded-lg border transition-all ${
+                    className={`min-w-0 w-full flex flex-col h-auto py-3 px-4 text-left rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                       entryMode === 'prompt'
-                        ? 'border-primary bg-primary/10 ring-1 ring-primary shadow-xs'
+                        ? 'border-primary bg-accent'
                         : 'border-border/70 bg-card hover:bg-accent/40 text-muted-foreground hover:text-foreground'
                     }`}
                     onClick={() => setEntryMode('prompt')}
@@ -351,9 +350,9 @@ const AddWorkoutPlanDialog = ({
                   </button>
                   <button
                     type="button"
-                    className={`w-full flex flex-col h-auto py-2.5 px-3.5 text-left rounded-lg border transition-all ${
+                    className={`min-w-0 w-full flex flex-col h-auto py-3 px-4 text-left rounded-lg border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                       entryMode === 'prefill'
-                        ? 'border-primary bg-primary/10 ring-1 ring-primary shadow-xs'
+                        ? 'border-primary bg-accent'
                         : 'border-border/70 bg-card hover:bg-accent/40 text-muted-foreground hover:text-foreground'
                     }`}
                     onClick={() => setEntryMode('prefill')}
@@ -419,7 +418,7 @@ const AddWorkoutPlanDialog = ({
               </Label>
             </div>
             <p
-              className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mt-2 text-sm"
+              className="rounded-lg border border-warning/30 bg-card p-4 mt-2 text-sm text-warning"
               role="alert"
             >
               <span className="font-bold">
@@ -452,11 +451,11 @@ const AddWorkoutPlanDialog = ({
               >
                 <div className="space-y-4">
                   {sessions.map((session, sessionIdx) => (
-                    <Card key={session.id} className="p-4 bg-muted/30">
+                    <section key={session.id} className="min-w-0 border-t py-5">
                       <div className="space-y-4">
                         <div className="flex flex-wrap items-center justify-between gap-3">
                           <div className="flex flex-wrap items-center gap-2">
-                            <h3 className="font-semibold text-primary">
+                            <h3 className="font-semibold">
                               {t(
                                 'addWorkoutPlanDialog.sessionNumber',
                                 'Session {{number}}',
@@ -479,7 +478,7 @@ const AddWorkoutPlanDialog = ({
                               onChange={(e) =>
                                 setSessionName(session.id, e.target.value)
                               }
-                              className="w-44 sm:w-60 bg-background/90"
+                              className="w-full min-w-0 sm:w-60"
                             />
                             <div className="flex min-h-11 items-center gap-2">
                               <Checkbox
@@ -519,7 +518,7 @@ const AddWorkoutPlanDialog = ({
                                         : Number(e.target.value)
                                     )
                                   }
-                                  className="h-11 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                  className="h-11 rounded-md border border-input bg-background px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                 >
                                   <option value="">
                                     {t(
@@ -681,7 +680,7 @@ const AddWorkoutPlanDialog = ({
                           })}
                         </SortableContext>
                       </div>
-                    </Card>
+                    </section>
                   ))}
                   <Button
                     type="button"
@@ -705,7 +704,7 @@ const AddWorkoutPlanDialog = ({
               {saveError}
             </p>
           )}
-          <DialogFooter>
+          <DialogFooter className="sticky bottom-0 z-10 flex-wrap gap-3 border-t bg-background pt-3 [&>button]:min-w-0 [&>button]:whitespace-normal">
             {initialData && (
               <Button
                 type="button"

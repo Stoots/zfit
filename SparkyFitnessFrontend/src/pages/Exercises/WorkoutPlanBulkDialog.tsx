@@ -93,7 +93,7 @@ function PrescriptionValues({
       ? t('workoutPlanBulk.unspecified', 'Unspecified')
       : String(value);
   return (
-    <div className="space-y-3 text-sm">
+    <div className="min-w-0 space-y-3 break-words text-sm">
       {snapshot &&
         fields
           .filter((field) => presetFields.includes(field))
@@ -283,7 +283,7 @@ export default function WorkoutPlanBulkDialog({
       }}
     >
       <DialogContent
-        className="max-h-[90vh] overflow-y-auto sm:max-w-4xl [&>button]:min-h-11 [&>button]:min-w-11"
+        className="max-h-[90dvh] overflow-y-auto sm:max-w-4xl [&>button]:min-h-11 [&>button]:min-w-11"
         onEscapeKeyDown={(event) => {
           if (pending) event.preventDefault();
         }}
@@ -307,7 +307,7 @@ export default function WorkoutPlanBulkDialog({
           </DialogDescription>
         </DialogHeader>
         <fieldset disabled={pending || !!preview} className="min-w-0 space-y-6">
-          <div className="space-y-2">
+          <div className="min-w-0 space-y-2">
             <Label htmlFor="bulk-source">
               {t(
                 'workoutPlanBulk.sourceAssignment',
@@ -354,7 +354,7 @@ export default function WorkoutPlanBulkDialog({
               </p>
             )}
           </div>
-          <div className="space-y-2">
+          <div className="min-w-0 space-y-2">
             <Label htmlFor="bulk-scope">
               {t(
                 'workoutPlanBulk.scope',
@@ -418,18 +418,18 @@ export default function WorkoutPlanBulkDialog({
             )}
           </div>
           {source && (
-            <fieldset className="space-y-2">
+            <fieldset className="min-w-0 space-y-2">
               <legend className="font-medium">
                 {t('workoutPlanBulk.fieldsToCopy', 'Fields to copy')}
               </legend>
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="grid gap-x-6 sm:grid-cols-2">
                 {[
                   ...setFields,
                   ...(source.assignment.preset_snapshot ? presetFields : []),
                 ].map((field) => (
                   <Label
                     key={field}
-                    className="flex min-h-11 cursor-pointer items-center gap-3 rounded-md border p-3"
+                    className="flex min-h-11 cursor-pointer items-center gap-3 border-b py-3"
                   >
                     <Checkbox
                       disabled={pending || !!preview}
@@ -510,7 +510,7 @@ export default function WorkoutPlanBulkDialog({
                 return (
                   <div
                     key={candidate.workout_session_id}
-                    className="space-y-2 border-b pb-4"
+                    className="min-w-0 space-y-2 break-words border-b pb-4"
                   >
                     <p className="font-medium">{candidate.name}</p>
                     <p className="break-all text-xs text-muted-foreground">
@@ -680,7 +680,7 @@ export default function WorkoutPlanBulkDialog({
             {preview.targets.map((target) => (
               <div
                 key={target.workout_session_id}
-                className="space-y-3 border-b pb-5"
+                className="min-w-0 space-y-3 break-words border-b pb-5"
               >
                 <h4 className="font-medium">
                   {t(
@@ -701,7 +701,7 @@ export default function WorkoutPlanBulkDialog({
                   </p>
                 ))}
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
+                  <div className="min-w-0 space-y-2">
                     <h5 className="font-semibold">
                       {t('workoutPlanBulk.before', 'Before')}
                     </h5>
@@ -710,7 +710,7 @@ export default function WorkoutPlanBulkDialog({
                       fields={preview.request.fields}
                     />
                   </div>
-                  <div className="space-y-2">
+                  <div className="min-w-0 space-y-2">
                     <h5 className="font-semibold">
                       {t('workoutPlanBulk.after', 'After')}
                     </h5>
@@ -724,7 +724,7 @@ export default function WorkoutPlanBulkDialog({
             ))}
           </section>
         )}
-        <div className="flex flex-wrap justify-end gap-3">
+        <div className="sticky bottom-0 z-10 flex flex-wrap justify-end gap-3 border-t bg-background pt-3 [&>button]:min-w-0 [&>button]:whitespace-normal">
           <Button
             type="button"
             variant="outline"

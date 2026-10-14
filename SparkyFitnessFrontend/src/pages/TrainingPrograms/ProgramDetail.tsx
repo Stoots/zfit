@@ -1,3 +1,8 @@
+import { ArrowRight, Check } from 'lucide-react';
+import { Numeral } from '@/components/ui/numeral';
+import { cn } from '@/lib/utils';
+import ProgramSchedule from './ProgramSchedule';
+import { programProgress } from './programProgress';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import type { TrainingProgram } from '@workspace/shared';
@@ -8,6 +13,7 @@ import type { ProgramSession, OutcomeStatus } from './programTypes';
 
 export default function ProgramDetail({
   selected,
+  today,
   outcomePending,
   startingSessionId,
   onStartSession,
@@ -16,6 +22,7 @@ export default function ProgramDetail({
   onRecordOutcome,
 }: {
   selected: TrainingProgram;
+  today: string;
   outcomePending: boolean;
   startingSessionId: string | null;
   onStartSession: (session: ProgramSession) => void;
@@ -27,11 +34,12 @@ export default function ProgramDetail({
   }) => void;
 }) {
   const { t } = useTranslation();
+  const progress = programProgress(selected, today);
   return (
-    <article className="space-y-7">
-      <div className="space-y-3 border-b pb-5">
+    <article className="min-w-0 space-y-8">
+      <div className="space-y-4 rounded-3xl border bg-card p-5 sm:p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <h2 className="break-words text-2xl font-semibold">
+          <h2 className="min-w-0 flex-1 break-words text-2xl font-semibold">
             {selected.name}
           </h2>
           <Badge variant="secondary">
@@ -40,6 +48,14 @@ export default function ProgramDetail({
               : t('trainingPrograms.fixedDates', 'Fixed dates')}
           </Badge>
         </div>
+        <Numeral
+          value={progress.current}
+          unit={t('trainingPrograms.weekProgress', {
+            current: progress.current,
+            total: progress.total,
+            defaultValue: 'Week {{current}} of {{total}}',
+          })}
+        />
         <p className="whitespace-pre-wrap break-words">{selected.goal}</p>
         <p className="text-muted-foreground">
           <time dateTime={selected.start_date}>{selected.start_date}</time> –{' '}
@@ -66,13 +82,19 @@ export default function ProgramDetail({
         </p>
         <div className="flex flex-wrap gap-3">
           <Button className="min-h-11" onClick={onEdit}>
-            {t('trainingPrograms.edit', 'Edit Training Program')}
+            {t('trainingPrograms.edit', 'Edit Training Program')}{' '}
+            <ArrowRight aria-hidden="true" />
           </Button>
-          <Button variant="destructive" className="min-h-11" onClick={onDelete}>
+          <Button
+            variant="outline"
+            className="min-h-11 text-destructive"
+            onClick={onDelete}
+          >
             {t('trainingPrograms.delete', 'Delete Training Program')}
           </Button>
         </div>
       </div>
+      <ProgramSchedule program={selected} today={today} />
       {selected.phases.length === 0 && (
         <p className="text-muted-foreground">
           {t(
@@ -82,7 +104,7 @@ export default function ProgramDetail({
         </p>
       )}
       {selected.phases.map((phase, p) => (
-        <section key={phase.id} className="space-y-4">
+        <section key={phase.id} className="min-w-0 space-y-4">
           <h3 className="break-words text-xl font-semibold">
             {p + 1}. {phase.name}
           </h3>
@@ -98,7 +120,7 @@ export default function ProgramDetail({
             </p>
           )}
           {phase.weeks.map((week, w) => (
-            <section key={week.id} className="space-y-3 border-t pt-4">
+            <section key={week.id} className="min-w-0 space-y-3 border-t pt-4">
               <h4 className="font-semibold">
                 {t('trainingPrograms.weekNumber', {
                   number: w + 1,
@@ -119,7 +141,18 @@ export default function ProgramDetail({
                   {week.sessions.map((session) => (
                     <li
                       key={session.id}
-                      className="grid gap-3 py-4 sm:grid-cols-[9rem_1fr] sm:gap-4"
+                      id={`program-session-${session.id}`}
+                      tabIndex={-1}
+                      aria-current={
+                        session.effective_date === today ? 'date' : undefined
+                      }
+                      className={cn(
+                        'grid min-w-0 scroll-mt-24 gap-3 p-3 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-4',
+                        session.effective_date === today &&
+                          'rounded-lg outline -outline-offset-1 outline-primary',
+                        session.status === 'completed' &&
+                          'text-muted-foreground'
+                      )}
                     >
                       <div className="space-y-1">
                         <time
@@ -138,12 +171,23 @@ export default function ProgramDetail({
                         )}
                         <div className="flex flex-wrap gap-2">
                           <Badge
+                            className={
+                              session.status === 'missed'
+                                ? 'border-destructive/30 text-destructive'
+                                : 'text-muted-foreground'
+                            }
                             variant={
                               session.status === 'missed'
                                 ? 'outline'
                                 : 'secondary'
                             }
                           >
+                            {session.status === 'completed' && (
+                              <Check
+                                className="mr-1 size-3"
+                                aria-hidden="true"
+                              />
+                            )}
                             {t(
                               `trainingPrograms.state.${session.status}`,
                               session.status

@@ -16,8 +16,8 @@ export default function ProgramHeaderFields({
   const { t } = useTranslation();
   return (
     <>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="sm:col-span-2">
+      <div className="min-w-0">
+        <div className="min-w-0 grid gap-2 border-b py-3 sm:grid-cols-[10rem_minmax(0,1fr)] sm:items-start sm:gap-4">
           <Label htmlFor="program-name">
             {t('trainingPrograms.name', 'Program name')}
           </Label>
@@ -29,7 +29,7 @@ export default function ProgramHeaderFields({
             required
           />
         </div>
-        <div className="sm:col-span-2">
+        <div className="min-w-0 grid gap-2 border-b py-3 sm:grid-cols-[10rem_minmax(0,1fr)] sm:items-start sm:gap-4">
           <Label htmlFor="program-goal">
             {t('trainingPrograms.goal', 'Program goal')}
           </Label>
@@ -41,7 +41,7 @@ export default function ProgramHeaderFields({
             required
           />
         </div>
-        <div>
+        <div className="min-w-0 grid gap-2 border-b py-3 sm:grid-cols-[10rem_minmax(0,1fr)] sm:items-start sm:gap-4">
           <Label htmlFor="program-start">
             {t('trainingPrograms.startDate', 'Program start date')}
           </Label>
@@ -53,7 +53,7 @@ export default function ProgramHeaderFields({
             required
           />
         </div>
-        <div>
+        <div className="min-w-0 grid gap-2 border-b py-3 sm:grid-cols-[10rem_minmax(0,1fr)] sm:items-start sm:gap-4">
           <Label htmlFor="program-end">
             {t('trainingPrograms.endDate', 'Program end date')}
           </Label>

@@ -33,7 +33,7 @@ export default function SessionRow({
 }) {
   const { t } = useTranslation();
   return (
-    <fieldset className="min-w-0 space-y-3 border-t pt-4">
+    <fieldset className="min-w-0 space-y-3 border-t pt-4 sm:pl-5">
       <legend className="pt-3 font-medium">
         {t('trainingPrograms.sessionNumber', {
           number: index + 1,
@@ -48,7 +48,7 @@ export default function SessionRow({
         onRemove={onRemove}
         preserveHistory={locked}
       />
-      <div>
+      <div className="min-w-0 grid gap-2 border-b py-3 sm:grid-cols-[10rem_minmax(0,1fr)] sm:items-start sm:gap-4">
         <Label htmlFor={`${prefix}-name`}>
           {t('trainingPrograms.sessionName', 'Session name')}
         </Label>
@@ -60,8 +60,8 @@ export default function SessionRow({
           onChange={(e) => onChange({ name: e.target.value })}
         />
       </div>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
+      <div className="min-w-0">
+        <div className="min-w-0 grid gap-2 border-b py-3 sm:grid-cols-[10rem_minmax(0,1fr)] sm:items-start sm:gap-4">
           <Label htmlFor={`${prefix}-date`}>
             {t('trainingPrograms.sessionDate', 'Session date')}
           </Label>
@@ -75,14 +75,14 @@ export default function SessionRow({
             onChange={(e) => onChange({ scheduled_date: e.target.value })}
           />
         </div>
-        <div>
+        <div className="min-w-0 grid gap-2 border-b py-3 sm:grid-cols-[10rem_minmax(0,1fr)] sm:items-start sm:gap-4">
           <Label htmlFor={`${prefix}-session`}>
             {t('trainingPrograms.workoutSession', 'Workout Session')}
           </Label>
           <select
             id={`${prefix}-session`}
             disabled={locked}
-            className="flex h-11 w-full min-w-0 rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex h-11 w-full min-w-0 rounded-md border border-input bg-background px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             value={session.workout_session_id ?? ''}
             onChange={(event) => {
               const workout_session_id = event.target.value || null;
