@@ -1342,7 +1342,8 @@
       "noDraft": "No active workout draft was found for this date.",
       "setRow": "Set {{setNumber}}",
       "sets": "sets",
-      "title": "Live Workout"
+      "title": "Live Workout",
+      "sessionDetails": "Session details"
     },
     "workoutPlaybackPage": {
       "addDropSets": "Add {{sets}} Drop Sets (-{{percent}}%)",
@@ -1365,7 +1366,8 @@
       "restTimer": "Rest",
       "volume": "Volume",
       "replaceExercise": "Replace exercise",
-      "replaceExerciseNamed": "Replace {{name}}"
+      "replaceExerciseNamed": "Replace {{name}}",
+      "logSet": "Log set"
     },
     "workoutFinishSummary": {
       "title": "Workout complete",
@@ -6052,7 +6054,8 @@
     "startTimer": "Start timer",
     "stopTimer": "Stop timer",
     "type": "Type",
-    "weight": "weight"
+    "weight": "weight",
+    "addedAssistedWeight": "+/− weight"
   },
   "food": {
     "imagesLabel": "Images",
@@ -6995,7 +6998,9 @@
       "distance": "12-minute distance (m)",
       "distanceLabel": "Distance",
       "empty": "No Cooper run Test Attempts recorded yet.",
-      "chartA11y": "Cooper run distance trend by date"
+      "chartA11y": "Cooper run distance trend by date",
+      "latestResult": "Latest Cooper run",
+      "firstAttempt": "First attempt"
     }
   },
   "workoutPlanBulk": {

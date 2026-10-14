@@ -2,13 +2,17 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   CheckCircle2,
+  ArrowRight,
   Pause,
   Play,
   RotateCcw,
   Volume2,
   VolumeX,
 } from 'lucide-react';
-import type { GuidedSetTarget } from '@workspace/shared';
+import { Numeral } from '@/components/ui/numeral';
+import { Progress } from '@/components/ui/progress';
+import WorkoutPlaybackTarget from './WorkoutPlaybackTarget';
+import { formatSecondsClock } from '@/utils/timeFormatters';
 import { Button } from '@/components/ui/button';
 import { resolveExerciseImageSrc } from '@/utils/exercises';
 import type {
@@ -72,26 +76,8 @@ export default function WorkoutPlaybackGuidedCard({
   const [failedImageSrc, setFailedImageSrc] = useState<string | null>(null);
   const isImageValid = imageSrc != null && failedImageSrc !== imageSrc;
 
-  const describeTarget = (target: GuidedSetTarget): string | null => {
-    if (target.kind === 'reps') {
-      return t('guidedWorkout.card.targetReps', {
-        defaultValue: '{{count}} rep',
-        defaultValue_other: '{{count}} reps',
-        count: target.reps,
-      });
-    }
-    if (target.kind === 'time') {
-      return t('guidedWorkout.card.targetSeconds', {
-        defaultValue: '{{count}} second',
-        defaultValue_other: '{{count}} seconds',
-        count: target.seconds,
-      });
-    }
-    return null;
-  };
-
   const cardClasses =
-    'bg-white dark:bg-gray-900 rounded-2xl p-4 sm:p-5 border border-gray-200 dark:border-gray-800 shadow-sm';
+    'bg-card text-card-foreground rounded-3xl p-4 sm:p-6 border border-border';
 
   if (phase.kind === 'done') {
     return (
@@ -99,7 +85,7 @@ export default function WorkoutPlaybackGuidedCard({
         data-testid="guided-workout-card"
         className={`${cardClasses} flex flex-col items-center text-center gap-2`}
       >
-        <CheckCircle2 className="h-7 w-7 text-emerald-600" />
+        <CheckCircle2 className="h-7 w-7 text-muted-foreground" />
         <p className="font-semibold">
           {t(
             'guidedWorkout.card.doneWeb',
@@ -125,28 +111,28 @@ export default function WorkoutPlaybackGuidedCard({
   }
   if (paused) label = t('guidedWorkout.card.paused', 'Paused');
 
-  const target = set ? describeTarget(set.target) : null;
+  const exercise = set ? draft.exercises[set.pointer.exerciseIndex] : null;
 
   const captionText = caption ? (
     <p
       data-testid="guided-caption"
       aria-live="polite"
-      className="text-sm sm:text-base font-medium text-white text-center"
+      className="text-sm sm:text-base font-medium text-foreground text-center"
     >
       {caption}
     </p>
   ) : null;
 
   const iconButtonClasses =
-    'h-9 w-9 rounded-full flex items-center justify-center transition-colors';
+    'h-11 w-11 rounded-full flex items-center justify-center transition-colors';
 
   return (
     <div data-testid="guided-workout-card" className={cardClasses}>
-      <div className="flex items-center gap-3 mb-3">
-        <span className="px-2.5 py-1 text-xs font-bold rounded-lg bg-blue-50 dark:bg-blue-950/80 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-900 tracking-wider">
+      <div className="flex flex-wrap items-center gap-2 mb-5">
+        <span className="px-2.5 py-1 text-xs font-medium rounded-full bg-accent text-accent-foreground border border-primary/20 ">
           {t('guidedWorkout.card.badge', 'GUIDED')}
         </span>
-        <span className="flex-1 truncate text-sm font-medium text-gray-500 dark:text-gray-400">
+        <span className="min-w-16 flex-1 text-sm font-medium text-muted-foreground">
           {label}
         </span>
         <button
@@ -155,7 +141,7 @@ export default function WorkoutPlaybackGuidedCard({
           disabled={paused}
           aria-label={t('guidedWorkout.card.replay', 'Replay instructions')}
           title={t('guidedWorkout.card.replay', 'Replay instructions')}
-          className={`${iconButtonClasses} bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 disabled:opacity-40`}
+          className={`${iconButtonClasses} bg-muted hover:bg-accent text-foreground disabled:opacity-40`}
         >
           <RotateCcw className="h-4 w-4" />
         </button>
@@ -168,8 +154,8 @@ export default function WorkoutPlaybackGuidedCard({
               : t('guidedWorkout.card.mute', 'Mute voice')
           }
           aria-pressed={muted}
-          className={`${iconButtonClasses} bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 ${
-            muted ? 'text-gray-400' : 'text-gray-700 dark:text-gray-200'
+          className={`${iconButtonClasses} bg-muted hover:bg-accent ${
+            muted ? 'text-muted-foreground' : 'text-foreground'
           }`}
         >
           {muted ? (
@@ -189,7 +175,7 @@ export default function WorkoutPlaybackGuidedCard({
           className={`${iconButtonClasses} ${
             paused
               ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-              : 'bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200'
+              : 'bg-muted hover:bg-accent text-foreground'
           }`}
         >
           {paused ? (
@@ -200,8 +186,38 @@ export default function WorkoutPlaybackGuidedCard({
         </button>
       </div>
 
+      {set && exercise && (
+        <div className="space-y-4 mb-5">
+          <h2 className="break-words text-2xl font-semibold">
+            {set.exerciseName}
+          </h2>
+          {phase.kind === 'timed' || phase.kind === 'getReady' ? (
+            <Numeral value={formatSecondsClock(phase.remainingSec)} />
+          ) : (
+            <WorkoutPlaybackTarget
+              exercise={exercise}
+              setIndex={set.pointer.setIndex}
+            />
+          )}
+          {phase.kind === 'rest' && (
+            <p className="text-sm text-muted-foreground">
+              {t('guidedWorkout.card.nextUp', 'Next up')}
+            </p>
+          )}
+          <Progress
+            value={
+              (exercise.sets.filter((item) => item.completed).length /
+                exercise.sets.length) *
+              100
+            }
+            className="h-1"
+            aria-label={t('exercise.workoutPlaybackPage.progress', 'Sets')}
+          />
+        </div>
+      )}
+
       {isImageValid ? (
-        <div className="relative w-full aspect-[3/2] max-h-[60vh] overflow-hidden rounded-xl bg-gray-50 dark:bg-gray-800">
+        <div className="relative w-full aspect-[3/2] max-h-48 overflow-hidden rounded-xl bg-muted">
           <img
             src={imageSrc}
             alt={set?.exerciseName ?? ''}
@@ -209,41 +225,27 @@ export default function WorkoutPlaybackGuidedCard({
             className="h-full w-full object-contain"
           />
           {captionText && (
-            <div className="absolute inset-x-0 bottom-0 bg-black/60 px-3 py-2">
+            <div className="absolute inset-x-0 bottom-0 bg-background/95 px-3 py-2">
               {captionText}
             </div>
           )}
         </div>
       ) : (
         captionText && (
-          <div className="rounded-xl bg-black/70 px-3 py-2">{captionText}</div>
+          <div className="rounded-xl bg-muted px-3 py-2">{captionText}</div>
         )
-      )}
-
-      {set && (
-        <div className="text-center mt-3">
-          {phase.kind === 'rest' && (
-            <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">
-              {t('guidedWorkout.card.nextUp', 'Next up')}
-            </p>
-          )}
-          <p className="text-xl font-bold">{set.exerciseName}</p>
-          {target && (
-            <p className="text-base text-gray-500 dark:text-gray-400">
-              {target}
-            </p>
-          )}
-        </div>
       )}
 
       {phase.kind === 'reps' && (
         <Button
           type="button"
           size="lg"
-          className="mt-4 w-full h-16 text-xl font-black tracking-wider"
+          className="mt-4 w-full h-14 text-lg "
           onClick={() => finish(phase.set.pointer)}
+          aria-label={t('guidedWorkout.card.doneNext', 'DONE — NEXT')}
         >
-          {t('guidedWorkout.card.doneNext', 'DONE — NEXT')}
+          {t('exercise.workoutPlaybackPage.logSet', 'Log set')}
+          <ArrowRight aria-hidden="true" />
         </Button>
       )}
     </div>

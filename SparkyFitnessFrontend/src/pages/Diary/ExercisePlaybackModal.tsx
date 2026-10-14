@@ -397,30 +397,41 @@ const ExercisePlaybackModal: React.FC<ExercisePlaybackModalProps> = ({
         }
       }}
     >
-      <DialogContent className="sm:max-w-[800px] h-[90vh] flex flex-col">
+      <DialogContent className="sm:max-w-[800px] max-h-[90dvh] overflow-y-auto flex flex-col">
         <DialogHeader>
           <DialogTitle>{exercise.name}</DialogTitle>
           <DialogDescription>{exercise.description}</DialogDescription>
         </DialogHeader>
-        <div className="flex-grow flex flex-col items-center justify-center p-4 space-y-4">
+        <div className="min-w-0 flex flex-col items-center justify-center space-y-4">
           {currentImageSrc && (
             <img
               src={currentImageSrc}
               alt={exercise.name}
-              className="max-h-[50vh] object-contain rounded-md shadow-lg"
+              className="max-h-[40dvh] w-full object-contain rounded-lg bg-muted"
             />
           )}
           <div className="text-lg text-center font-medium">
             {instructions[currentInstructionIndex]}
           </div>
-          <div className="flex items-center space-x-4 mt-4">
+          <div className="flex w-full items-center justify-center gap-2 border-t pt-4">
             <Button
+              variant="outline"
+              size="icon"
+              aria-label={t('common.previous', 'Previous')}
               onClick={handlePrevious}
               disabled={currentInstructionIndex === 0}
             >
               <SkipBack className="w-5 h-5" />
             </Button>
-            <Button onClick={togglePlayPause}>
+            <Button
+              size="icon"
+              aria-label={
+                isPlaying
+                  ? t('common.pause', 'Pause')
+                  : t('common.resume', 'Resume')
+              }
+              onClick={togglePlayPause}
+            >
               {isPlaying ? (
                 <Pause className="w-5 h-5" />
               ) : (
@@ -428,12 +439,25 @@ const ExercisePlaybackModal: React.FC<ExercisePlaybackModalProps> = ({
               )}
             </Button>
             <Button
+              variant="outline"
+              size="icon"
+              aria-label={t('common.next', 'Next')}
               onClick={handleNext}
               disabled={currentInstructionIndex === instructions.length - 1}
             >
               <SkipForward className="w-5 h-5" />
             </Button>
-            <Button onClick={toggleMute}>
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label={
+                isMuted
+                  ? t('guidedWorkout.card.unmute', 'Unmute voice')
+                  : t('guidedWorkout.card.mute', 'Mute voice')
+              }
+              aria-pressed={isMuted}
+              onClick={toggleMute}
+            >
               {isMuted ? (
                 <VolumeX className="w-5 h-5" />
               ) : (
@@ -441,7 +465,7 @@ const ExercisePlaybackModal: React.FC<ExercisePlaybackModalProps> = ({
               )}
             </Button>
           </div>
-          <div className="flex items-center space-x-2 mt-2">
+          <div className="flex w-full min-w-0 items-center gap-2 mt-2">
             <Label htmlFor="voice-select" className="text-sm">
               {t('exercise.playbackModal.voiceLabel', 'Voice:')}
             </Label>
@@ -463,7 +487,7 @@ const ExercisePlaybackModal: React.FC<ExercisePlaybackModalProps> = ({
                 }
               }}
             >
-              <SelectTrigger id="voice-select" className="w-[180px]">
+              <SelectTrigger id="voice-select" className="w-full min-w-0">
                 <SelectValue
                   placeholder={t(
                     'exercise.playbackModal.selectVoicePlaceholder',
@@ -480,7 +504,7 @@ const ExercisePlaybackModal: React.FC<ExercisePlaybackModalProps> = ({
               </SelectContent>
             </Select>
           </div>
-          <div className="text-sm text-gray-500 mt-2">
+          <div className="text-sm text-muted-foreground mt-2">
             {t(
               'exercise.playbackModal.stepCount',
               'Step {{currentInstructionIndex}} of {{totalInstructions}}',

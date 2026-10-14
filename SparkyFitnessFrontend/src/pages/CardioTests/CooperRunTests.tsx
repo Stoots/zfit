@@ -1,14 +1,8 @@
 import { useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import {
-  CartesianGrid,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from 'recharts';
+import { ArrowRight } from 'lucide-react';
+import { Numeral } from '@/components/ui/numeral';
+import { TrendChart } from '@/components/ui/trend-chart';
 import type { CooperRunAttempt } from '@workspace/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,6 +27,8 @@ function ProfileCooperRunTests() {
   const [editing, setEditing] = useState<CooperRunAttempt | null>(null);
   const [attemptDate, setAttemptDate] = useState('');
   const [distance, setDistance] = useState('');
+  const latest = attempts.data?.at(-1);
+  const first = attempts.data?.[0];
   const mutation = editing ? update : create;
   const pending = create.isPending || update.isPending;
   const savingRef = useRef(false);
@@ -71,12 +67,12 @@ function ProfileCooperRunTests() {
   };
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6">
+    <main className="mx-auto w-full min-w-0 max-w-3xl space-y-6">
       <header>
-        <h1 className="text-2xl font-bold">
+        <h1 className="text-2xl font-semibold">
           {t('cardioTests.title', 'Cardio Tests')}
         </h1>
-        <p className="mt-2 text-muted-foreground">
+        <p className="mt-2 max-w-prose text-muted-foreground">
           {t(
             'cardioTests.cooper.intro',
             'Record the distance you cover in a 12-minute Cooper run and compare attempts over time.'
@@ -93,8 +89,27 @@ function ProfileCooperRunTests() {
         </p>
       ) : (
         <>
+          {latest && !attempts.isError && (
+            <section className="rounded-3xl border bg-card p-5 sm:p-6">
+              <h2 className="mb-4 text-lg font-semibold">
+                {t('cardioTests.cooper.latestResult', 'Latest Cooper run')}
+              </h2>
+              <Numeral
+                value={latest.distance_meters}
+                unit="m"
+                subline={
+                  <time dateTime={latest.attempt_date}>
+                    {latest.attempt_date}
+                  </time>
+                }
+              />
+            </section>
+          )}
           {canWrite ? (
-            <form onSubmit={submit} className="space-y-4 rounded-lg border p-4">
+            <form
+              onSubmit={submit}
+              className="space-y-4 rounded-lg border bg-card p-4 sm:p-6"
+            >
               <h2 className="text-lg font-semibold">
                 {editing
                   ? t('cardioTests.edit', 'Edit Test Attempt')
@@ -135,13 +150,14 @@ function ProfileCooperRunTests() {
                   />
                 </div>
               </div>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 border-t pt-4">
                 <Button type="submit" disabled={pending}>
                   {pending
                     ? t('common.saving', 'Saving…')
                     : editing
                       ? t('common.save', 'Save')
                       : t('cardioTests.record', 'Record Test')}
+                  <ArrowRight aria-hidden="true" />
                 </Button>
                 {editing ? (
                   <Button
@@ -186,46 +202,34 @@ function ProfileCooperRunTests() {
               </p>
             ) : (
               <>
-                <div
-                  className="h-64 w-full"
-                  role="img"
-                  aria-label={t(
+                <TrendChart
+                  showDots
+                  data={attempts.data.map((attempt) => ({
+                    label: attempt.attempt_date,
+                    value: attempt.distance_meters,
+                  }))}
+                  label={t(
                     'cardioTests.cooper.chartA11y',
                     'Cooper run distance trend by date'
                   )}
-                >
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart
-                      data={attempts.data}
-                      margin={{ top: 8, right: 16, bottom: 8, left: 8 }}
-                    >
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="attempt_date" />
-                      <YAxis
-                        width={64}
-                        tickFormatter={(value: number) =>
-                          `${value.toLocaleString()} m`
+                  valueLabel={t('cardioTests.cooper.distanceLabel', 'Distance')}
+                  target={
+                    first
+                      ? {
+                          value: first.distance_meters,
+                          label: t(
+                            'cardioTests.cooper.firstAttempt',
+                            'First attempt'
+                          ),
                         }
-                      />
-                      <Tooltip
-                        formatter={(value) => [
-                          `${Number(value).toLocaleString()} m`,
-                          t('cardioTests.cooper.distanceLabel', 'Distance'),
-                        ]}
-                        labelFormatter={(label) => String(label)}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="distance_meters"
-                        name={t('cardioTests.cooper.distanceLabel', 'Distance')}
-                        stroke="hsl(var(--primary))"
-                        strokeWidth={2}
-                        dot={{ r: 4 }}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-                <ol className="divide-y rounded-lg border">
+                      : undefined
+                  }
+                  formatValue={(value) => `${value.toLocaleString()} m`}
+                />
+                <ol
+                  aria-labelledby="cooper-history-title"
+                  className="divide-y divide-border border-y"
+                >
                   {attempts.data.map((attempt) => (
                     <li
                       key={attempt.id}
@@ -235,7 +239,7 @@ function ProfileCooperRunTests() {
                         <time dateTime={attempt.attempt_date}>
                           {attempt.attempt_date}
                         </time>
-                        <p className="font-semibold">
+                        <p className="font-medium tabular-nums">
                           {attempt.distance_meters.toLocaleString()} m
                         </p>
                       </div>

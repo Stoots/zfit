@@ -17,6 +17,8 @@ import {
   type GuidedSetTarget,
   type WorkoutFormat,
 } from '@workspace/shared';
+import { Numeral } from '@/components/ui/numeral';
+import { Progress } from '@/components/ui/progress';
 import { Button } from '@/components/ui/button';
 import { playIntervalCue } from '@/utils/workoutSounds';
 import { resolveExerciseImageSrc } from '@/utils/exercises';
@@ -301,25 +303,16 @@ export default function WorkoutPlaybackIntervalHud({
 
   const phaseKind = phase?.kind ?? (isFinished ? 'finished' : 'work');
 
-  let pillClasses =
-    'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700';
+  const pillClasses = 'bg-accent text-accent-foreground border-primary/20';
   let pillLabel = t('interval.ready', 'Ready');
 
   if (phaseKind === 'countdown') {
-    pillClasses =
-      'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-800';
     pillLabel = t('interval.countdown', 'Get Ready');
   } else if (phaseKind === 'work') {
-    pillClasses =
-      'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800';
     pillLabel = t('interval.work', 'Work');
   } else if (phaseKind === 'rest') {
-    pillClasses =
-      'bg-sky-100 dark:bg-sky-950/60 text-sky-700 dark:text-sky-400 border-sky-300 dark:border-sky-800';
     pillLabel = t('interval.rest', 'Rest');
   } else if (phaseKind === 'finished') {
-    pillClasses =
-      'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-400 border-blue-300 dark:border-blue-800';
     pillLabel = t('interval.finished', 'Time Cap Reached');
   }
 
@@ -343,14 +336,14 @@ export default function WorkoutPlaybackIntervalHud({
   );
 
   return (
-    <div className="bg-white dark:bg-gray-900 rounded-2xl p-5 mb-6 border border-gray-200 dark:border-gray-800 shadow-sm transition-all">
+    <div className="bg-card text-card-foreground rounded-3xl p-4 sm:p-6 border border-border transition-colors">
       {/* Top Bar: Format Header, Round badge, and Pause/Resume */}
-      <div className="flex items-center justify-between gap-3 mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
         <div className="flex items-center gap-2.5">
-          <span className="px-2.5 py-1 text-xs font-bold rounded-lg bg-blue-50 dark:bg-blue-950/80 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-900 tracking-wider">
+          <span className="px-2.5 py-1 text-xs font-medium rounded-full bg-accent text-accent-foreground border border-primary/20 ">
             {formatTitle}
           </span>
-          <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
+          <span className="text-sm font-medium text-muted-foreground">
             {roundLabel}
           </span>
         </div>
@@ -368,10 +361,10 @@ export default function WorkoutPlaybackIntervalHud({
                   : t('guidedWorkout.card.mute', 'Mute voice')
               }
               aria-pressed={guidedMuted}
-              className="h-8 w-8 p-0 rounded-lg"
+              className="h-11 w-11 p-0 rounded-lg"
             >
               {guidedMuted ? (
-                <VolumeX className="w-3.5 h-3.5 text-gray-400" />
+                <VolumeX className="w-3.5 h-3.5 text-muted-foreground" />
               ) : (
                 <Volume2 className="w-3.5 h-3.5" />
               )}
@@ -381,11 +374,7 @@ export default function WorkoutPlaybackIntervalHud({
             variant={isPaused ? 'default' : 'outline'}
             size="sm"
             onClick={handleTogglePause}
-            className={`gap-1.5 font-semibold text-xs h-8 px-3 rounded-lg ${
-              isPaused
-                ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                : 'text-gray-700 dark:text-gray-300'
-            }`}
+            className="gap-1.5 min-h-11 px-3"
           >
             {isPaused ? (
               <>
@@ -411,12 +400,10 @@ export default function WorkoutPlaybackIntervalHud({
           <span>{pillLabel}</span>
         </div>
 
-        <div className="text-5xl sm:text-6xl font-black text-gray-900 dark:text-gray-50 font-mono tracking-tight my-1">
-          {formatClock(displayClockSec)}
-        </div>
+        <Numeral value={formatClock(displayClockSec)} />
 
         {timeCapSeconds != null && (
-          <div className="text-xs font-medium text-gray-400 dark:text-gray-500 mt-1">
+          <div className="text-xs font-medium text-muted-foreground mt-1">
             {t('interval.timeCapLabel', 'Cap: {{cap}}', {
               cap: formatClock(timeCapSeconds),
             })}
@@ -425,12 +412,11 @@ export default function WorkoutPlaybackIntervalHud({
       </div>
 
       {/* Progress Bar */}
-      <div className="w-full h-2 bg-gray-100 dark:bg-gray-800 rounded-full overflow-hidden mb-5">
-        <div
-          className="h-full bg-blue-600 dark:bg-blue-500 transition-all duration-300 rounded-full"
-          style={{ width: `${progressPercent}%` }}
-        />
-      </div>
+      <Progress
+        value={progressPercent}
+        aria-label={pillLabel}
+        className="mb-5 h-1"
+      />
 
       {guidedStep && (
         <div
@@ -438,17 +424,17 @@ export default function WorkoutPlaybackIntervalHud({
           className="flex flex-col items-center text-center mb-5"
         >
           {guidedImage ? (
-            <div className="relative w-full aspect-[3/2] max-h-[60vh] overflow-hidden rounded-xl bg-gray-50 dark:bg-gray-800">
+            <div className="relative w-full aspect-[3/2] max-h-[60vh] overflow-hidden rounded-xl bg-muted">
               <img
                 src={resolveExerciseImageSrc(guidedImage)}
                 alt={guidedStep.exerciseName}
                 className="h-full w-full object-contain"
               />
               {guidedCaption && (
-                <div className="absolute inset-x-0 bottom-0 bg-black/60 px-3 py-2">
+                <div className="absolute inset-x-0 bottom-0 bg-background/95 px-3 py-2">
                   <p
                     data-testid="guided-caption"
-                    className="text-sm sm:text-base font-medium text-white"
+                    className="text-sm sm:text-base font-medium text-foreground"
                   >
                     {guidedCaption}
                   </p>
@@ -457,10 +443,10 @@ export default function WorkoutPlaybackIntervalHud({
             </div>
           ) : (
             guidedCaption && (
-              <div className="w-full rounded-xl bg-black/70 px-3 py-2">
+              <div className="w-full rounded-xl bg-muted px-3 py-2">
                 <p
                   data-testid="guided-caption"
-                  className="text-sm sm:text-base font-medium text-white"
+                  className="text-sm sm:text-base font-medium text-foreground"
                 >
                   {guidedCaption}
                 </p>
@@ -468,7 +454,7 @@ export default function WorkoutPlaybackIntervalHud({
             )
           )}
           {guidedIsNext && (
-            <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mt-2">
+            <p className="text-xs font-semibold text-muted-foreground mt-2">
               {t('guidedWorkout.card.nextUp', 'Next up')}
             </p>
           )}
@@ -477,20 +463,21 @@ export default function WorkoutPlaybackIntervalHud({
       )}
 
       {/* WOD Scoring Controls */}
-      <div className="pt-4 border-t border-gray-100 dark:border-gray-800 flex flex-col gap-3">
+      <div className="pt-4 border-t border-border flex flex-col gap-3">
         {/* Rx / Scaled Toggle */}
         <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+          <span className="text-xs font-bold text-muted-foreground ">
             {t('interval.wodScoring', 'WOD Scoring')}
           </span>
-          <div className="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5 border border-gray-200 dark:border-gray-700">
+          <div className="flex bg-muted rounded-lg p-0.5 border border-border">
             <button
               type="button"
               onClick={() => onSetStatus('rx')}
-              className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${
+              aria-pressed={status === 'rx'}
+              className={`min-h-11 px-3 py-2 text-sm font-medium rounded-full transition-colors ${
                 status === 'rx'
-                  ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100'
+                  ? 'bg-primary-fill text-background'
+                  : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               {t('interval.rx', 'Rx')}
@@ -498,10 +485,11 @@ export default function WorkoutPlaybackIntervalHud({
             <button
               type="button"
               onClick={() => onSetStatus('scaled')}
-              className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${
+              aria-pressed={status === 'scaled'}
+              className={`min-h-11 px-3 py-2 text-sm font-medium rounded-full transition-colors ${
                 status === 'scaled'
-                  ? 'bg-amber-600 text-white shadow-sm'
-                  : 'text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100'
+                  ? 'bg-primary-fill text-background'
+                  : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               {t('interval.scaled', 'Scaled')}
@@ -516,7 +504,7 @@ export default function WorkoutPlaybackIntervalHud({
               <Button
                 type="button"
                 onClick={onAddRound}
-                className="flex-1 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/60 dark:hover:bg-blue-900/80 border border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300 font-bold py-3.5 h-auto text-sm rounded-xl transition-transform active:scale-[0.99] gap-2"
+                className="flex-1 bg-accent hover:bg-accent/80 border border-primary/20 text-accent-foreground font-bold py-3.5 min-h-12 h-auto whitespace-normal text-sm transition-transform active:scale-[0.99] gap-2"
               >
                 <Plus className="w-4 h-4" />
                 <span>
@@ -535,7 +523,7 @@ export default function WorkoutPlaybackIntervalHud({
                   type="button"
                   variant="outline"
                   onClick={onDecrementRound}
-                  className="px-3.5 py-3.5 h-auto text-xs font-semibold rounded-xl text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 border-gray-200 dark:border-gray-700"
+                  className="px-3.5 py-3.5 h-auto text-xs font-semibold rounded-xl text-muted-foreground hover:text-foreground border-border"
                   title={t('interval.decrementRound', 'Undo 1 round')}
                 >
                   <Minus className="w-3.5 h-3.5" />
@@ -543,8 +531,8 @@ export default function WorkoutPlaybackIntervalHud({
               )}
             </div>
 
-            <div className="flex items-center justify-between bg-gray-50 dark:bg-gray-800/60 px-3.5 py-2.5 rounded-xl border border-gray-100 dark:border-gray-800">
-              <span className="text-xs font-semibold text-gray-600 dark:text-gray-300">
+            <div className="flex flex-wrap items-center justify-between gap-2 bg-muted/40 px-3.5 py-2.5 rounded-xl border border-border">
+              <span className="text-xs font-semibold text-muted-foreground">
                 {t('interval.extraReps', 'Additional Reps')}:
               </span>
               <div className="flex items-center gap-1.5">
@@ -553,7 +541,7 @@ export default function WorkoutPlaybackIntervalHud({
                   variant="ghost"
                   size="sm"
                   onClick={() => onSetReps(Math.max(0, repsCompleted - 5))}
-                  className="h-7 px-2 text-xs font-bold text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
+                  className="h-11 min-w-11 px-2 text-xs font-bold text-muted-foreground hover:text-foreground"
                 >
                   -5
                 </Button>
@@ -562,11 +550,11 @@ export default function WorkoutPlaybackIntervalHud({
                   variant="ghost"
                   size="sm"
                   onClick={() => onSetReps(Math.max(0, repsCompleted - 1))}
-                  className="h-7 px-2 text-xs font-bold text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100"
+                  className="h-11 min-w-11 px-2 text-xs font-bold text-muted-foreground hover:text-foreground"
                 >
                   -1
                 </Button>
-                <span className="text-sm font-bold text-gray-900 dark:text-gray-50 px-2 font-mono min-w-[2rem] text-center">
+                <span className="text-sm font-bold text-foreground px-2 font-numeral min-w-[2rem] text-center">
                   {repsCompleted}
                 </span>
                 <Button
@@ -574,7 +562,7 @@ export default function WorkoutPlaybackIntervalHud({
                   variant="ghost"
                   size="sm"
                   onClick={() => onSetReps(repsCompleted + 1)}
-                  className="h-7 px-2 text-xs font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400"
+                  className="h-11 min-w-11 px-2 text-xs font-bold text-primary hover:text-accent-foreground"
                 >
                   +1
                 </Button>
@@ -583,7 +571,7 @@ export default function WorkoutPlaybackIntervalHud({
                   variant="ghost"
                   size="sm"
                   onClick={() => onSetReps(repsCompleted + 5)}
-                  className="h-7 px-2 text-xs font-bold text-blue-600 hover:text-blue-700 dark:text-blue-400"
+                  className="h-11 min-w-11 px-2 text-xs font-bold text-primary hover:text-accent-foreground"
                 >
                   +5
                 </Button>

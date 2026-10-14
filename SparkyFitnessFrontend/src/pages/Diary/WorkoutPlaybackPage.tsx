@@ -9,7 +9,7 @@ import {
 } from 'react';
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardHeader } from '@/components/ui/card';
 import { useCreatePresetSessionMutation } from '@/hooks/Exercises/useExerciseEntries';
@@ -68,6 +68,8 @@ import WorkoutPlaybackFinishDialog, {
   type WorkoutFinishSummary,
 } from './WorkoutPlaybackFinishDialog';
 import WorkoutPlaybackSummary from './WorkoutPlaybackSummary';
+import WorkoutPlaybackTarget from './WorkoutPlaybackTarget';
+import { Progress } from '@/components/ui/progress';
 // Loaded on first Replace: the exercise dialog pulls in the whole search UI,
 // which the player otherwise never needs.
 const AddExerciseDialog = lazy(
@@ -1108,13 +1110,17 @@ const WorkoutPlaybackPage = () => {
     draft ? getWorkoutPlaybackRestRemainingSeconds(draft.rest_timer) : 0
   );
 
+  const activePointer = getCurrentWorkoutSetPointer(draft);
+  const activeExercise = draft.exercises[activePointer.exerciseIndex];
+  const activeSet = getSetByPointer(draft, activePointer);
+
   const replaceCandidates = draft.exercises.map((exercise) => ({
     exerciseId: exercise.exercise_id,
     exerciseName: exercise.exercise_name,
   }));
 
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-4">
+    <div className="mx-auto w-full max-w-3xl space-y-5">
       <WorkoutPlaybackSummary
         draft={draft}
         elapsedSeconds={elapsedSeconds}
@@ -1133,35 +1139,87 @@ const WorkoutPlaybackPage = () => {
         onSessionNotesChange={handleSessionNotesChange}
         onLocationChange={handleLocationChange}
         onStartTimeChange={handleStartTimeChange}
-      />
-
-      {draft.workout_format && draft.workout_format !== 'standard' && (
-        <WorkoutPlaybackIntervalHud
-          workoutFormat={draft.workout_format}
-          timeCapSeconds={draft.time_cap_seconds}
-          startedAtIso={draft.started_at}
-          roundsCompleted={draft.interval_rounds_completed ?? 0}
-          repsCompleted={draft.interval_reps_completed ?? 0}
-          status={draft.interval_status ?? 'rx'}
-          exercises={draft.exercises}
-          onAddRound={handleAddRound}
-          onDecrementRound={handleDecrementRound}
-          onSetReps={handleSetIntervalReps}
-          onSetStatus={handleSetIntervalStatus}
-          onCompletePhaseWork={handleCompleteIntervalPhase}
-        />
-      )}
-
-      {guidedWorkoutEnabled &&
-        (!draft.workout_format || draft.workout_format === 'standard') && (
-          <WorkoutPlaybackGuidedCard
-            draft={draft}
-            getDraft={getDraft}
-            updateDraft={updateDraft}
-            onCompleteSet={handleCompleteSet}
-            onToggleRestPause={handlePauseResumeRest}
+      >
+        {draft.workout_format && draft.workout_format !== 'standard' && (
+          <WorkoutPlaybackIntervalHud
+            workoutFormat={draft.workout_format}
+            timeCapSeconds={draft.time_cap_seconds}
+            startedAtIso={draft.started_at}
+            roundsCompleted={draft.interval_rounds_completed ?? 0}
+            repsCompleted={draft.interval_reps_completed ?? 0}
+            status={draft.interval_status ?? 'rx'}
+            exercises={draft.exercises}
+            onAddRound={handleAddRound}
+            onDecrementRound={handleDecrementRound}
+            onSetReps={handleSetIntervalReps}
+            onSetStatus={handleSetIntervalStatus}
+            onCompletePhaseWork={handleCompleteIntervalPhase}
           />
         )}
+
+        {guidedWorkoutEnabled &&
+          (!draft.workout_format || draft.workout_format === 'standard') && (
+            <WorkoutPlaybackGuidedCard
+              draft={draft}
+              getDraft={getDraft}
+              updateDraft={updateDraft}
+              onCompleteSet={handleCompleteSet}
+              onToggleRestPause={handlePauseResumeRest}
+            />
+          )}
+
+        {!guidedWorkoutEnabled &&
+          (!draft.workout_format || draft.workout_format === 'standard') &&
+          activeExercise &&
+          activeSet && (
+            <section className="space-y-5 rounded-3xl border bg-card p-5 sm:p-6">
+              <h2 className="break-words text-2xl font-semibold">
+                {activeExercise.exercise_name}
+              </h2>
+              <WorkoutPlaybackTarget
+                exercise={activeExercise}
+                setIndex={activePointer.setIndex}
+              />
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  {t('guidedWorkout.card.setOfTotal', {
+                    defaultValue: 'Set {{current}} of {{total}}',
+                    current: activeSet.set_number,
+                    total: activeExercise.sets.length,
+                  })}
+                </p>
+                <Progress
+                  value={
+                    (activeExercise.sets.filter((set) => set.completed).length /
+                      activeExercise.sets.length) *
+                    100
+                  }
+                  aria-label={t(
+                    'exercise.workoutPlaybackPage.progress',
+                    'Sets'
+                  )}
+                  className="h-1"
+                />
+              </div>
+              <Button
+                type="button"
+                size="lg"
+                className="h-14 w-full text-lg"
+                disabled={activeSet.completed}
+                onClick={() => handleCompleteSet(activePointer)}
+              >
+                {activeSet.completed
+                  ? t('exercise.workoutPlaybackPage.completed', 'Completed')
+                  : t('exercise.workoutPlaybackPage.logSet', 'Log set')}
+                {activeSet.completed ? (
+                  <Check aria-hidden="true" />
+                ) : (
+                  <ArrowRight aria-hidden="true" />
+                )}
+              </Button>
+            </section>
+          )}
+      </WorkoutPlaybackSummary>
 
       <WorkoutPlaybackExercisesList
         exercises={draft.exercises}

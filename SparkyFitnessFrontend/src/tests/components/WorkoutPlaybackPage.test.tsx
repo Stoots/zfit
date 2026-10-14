@@ -89,6 +89,24 @@ describe('WorkoutPlaybackPage', () => {
     expect(screen.getAllByRole('checkbox').length).toBeGreaterThanOrEqual(1);
   });
 
+  it('logs the active set from the hero and advances the persisted draft', async () => {
+    const draft = createWorkoutPlaybackDraftFromPreset(
+      presetFixture,
+      '2026-04-27'
+    );
+    mockLocationState = { returnTo: '/?date=2026-04-27', draft };
+    render(<WorkoutPlaybackPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'Log set' }));
+    await waitFor(() => {
+      const saved = loadWorkoutPlaybackDraftFromStorage('2026-04-27');
+      expect(saved?.exercises[0]?.sets[0]?.completed).toBe(true);
+      expect(saved?.active_exercise_index).toBe(1);
+    });
+    expect(
+      screen.getByRole('heading', { level: 2, name: 'Barbell Row' })
+    ).toBeInTheDocument();
+  });
+
   it('renders duration instead of reps and weight for a timed set', () => {
     const timedPreset = {
       ...presetFixture,

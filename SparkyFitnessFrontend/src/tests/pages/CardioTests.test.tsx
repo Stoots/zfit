@@ -21,6 +21,7 @@ import {
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string, fallback?: string) => fallback ?? key,
+    i18n: { language: 'en' },
   }),
 }));
 const mockServer = { records: [] as CooperRunAttempt[] };
@@ -91,7 +92,7 @@ jest.mock('recharts', () => {
 });
 
 function expectTrend(dates: string[], distances: number[]) {
-  const chart = screen.getByRole('img', {
+  const chart = screen.getByRole('figure', {
     name: 'Cooper run distance trend by date',
   });
   const dateTicks = Array.from(
@@ -188,7 +189,9 @@ describe('Cooper run Test Attempts', () => {
       )
     );
     expect(
-      await within(screen.getByRole('list')).findByText('2,600 m')
+      await within(
+        screen.getByRole('list', { name: 'Test Attempt History' })
+      ).findByText('2,600 m')
     ).toBeInTheDocument();
     await waitFor(() =>
       expectTrend(['2026-09-20', '2026-09-23'], [2400, 2600])

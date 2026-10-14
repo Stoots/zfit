@@ -8,6 +8,7 @@ import {
 } from '@workspace/shared';
 import type { WeightUnit } from '@/contexts/PreferencesContext';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { SET_TABLE_LAYOUT, toSetTableModality } from '@/constants/exercises';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import {
@@ -76,7 +77,7 @@ const WorkoutPlaybackExercisesList = ({
   } | null>(null);
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-5">
       {exercises.map((exercise, exerciseIndex) => {
         const isTimedExercise = exercise.modality
           ? exercise.modality === 'duration' ||
@@ -84,6 +85,13 @@ const WorkoutPlaybackExercisesList = ({
           : exercise.sets.some(
               (set) => set.duration != null && set.reps == null
             );
+        const layout =
+          SET_TABLE_LAYOUT[
+            toSetTableModality(
+              exercise.modality ??
+                (isTimedExercise ? 'duration' : 'weight_reps')
+            )
+          ];
         const completedSets = exercise.sets.filter(
           (set) => set.completed
         ).length;
@@ -104,12 +112,12 @@ const WorkoutPlaybackExercisesList = ({
             key={`${exercise.exercise_id}-${exerciseIndex}`}
             className="border-border/70 shadow-none"
           >
-            <CardHeader className="px-3 py-2">
+            <CardHeader className="px-4 py-4">
               <div className="flex items-center justify-between gap-3">
                 {exerciseImages.length > 0 && (
                   <button
                     type="button"
-                    className="shrink-0 overflow-hidden rounded-md"
+                    className="h-11 w-11 shrink-0 overflow-hidden rounded-lg"
                     aria-label={t(
                       'exercise.workoutPlaybackPage.viewImages',
                       'View {{name}} images',
@@ -125,16 +133,16 @@ const WorkoutPlaybackExercisesList = ({
                     <img
                       src={exerciseImages[0]}
                       alt=""
-                      className="h-10 w-10 object-cover"
+                      className="h-11 w-11 object-cover"
                       loading="lazy"
                     />
                   </button>
                 )}
                 <div className="min-w-0 flex-1">
-                  <h3 className="truncate text-sm font-medium">
+                  <h3 className="break-words text-base font-semibold">
                     {exercise.exercise_name}
                   </h3>
-                  <p className="text-[11px] text-muted-foreground">
+                  <p className="text-xs text-muted-foreground">
                     {completedSets}/{totalSets}{' '}
                     {t('exercise.workoutPlaybackDialog.sets', 'sets')}
                   </p>
@@ -142,7 +150,7 @@ const WorkoutPlaybackExercisesList = ({
                 {onReplaceExercise && (
                   <button
                     type="button"
-                    className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    className="h-11 w-11 shrink-0 rounded-full p-3 text-muted-foreground hover:bg-muted hover:text-foreground"
                     title={t(
                       'exercise.workoutPlaybackPage.replaceExercise',
                       'Replace exercise'
@@ -159,7 +167,7 @@ const WorkoutPlaybackExercisesList = ({
                 )}
                 <button
                   type="button"
-                  className="flex cursor-pointer items-center gap-1.5 text-left"
+                  className="flex min-h-11 cursor-pointer items-center gap-1.5 text-left"
                   aria-label={`${toggleLabel} ${exercise.exercise_name}`}
                   onClick={() => {
                     if (!isComplete) return;
@@ -172,9 +180,9 @@ const WorkoutPlaybackExercisesList = ({
                   <ChevronDown
                     className={`h-4 w-4 transition-transform ${
                       isExpanded ? 'rotate-180' : ''
-                    } ${isComplete ? 'text-emerald-500' : ''}`}
+                    } ${isComplete ? 'text-muted-foreground' : ''}`}
                   />
-                  <span className="text-[11px] text-muted-foreground">
+                  <span className="text-xs text-muted-foreground">
                     {isComplete
                       ? t('exercise.workoutPlaybackPage.completed', 'Completed')
                       : t(
@@ -186,7 +194,7 @@ const WorkoutPlaybackExercisesList = ({
               </div>
             </CardHeader>
             {(exercise.adaptive || exercise.suggest_variation) && (
-              <div className="px-3 pb-2">
+              <div className="px-4 pb-3">
                 <AdaptiveSuggestionNotice
                   adaptive={exercise.adaptive ?? null}
                   suggestVariation={exercise.suggest_variation === true}
@@ -205,48 +213,30 @@ const WorkoutPlaybackExercisesList = ({
               </div>
             )}
             {isExpanded && (
-              <CardContent className="px-3 pb-2 pt-0">
+              <CardContent className="px-4 pb-3 pt-0">
                 <div className="space-y-1">
-                  <div className="hidden overflow-x-auto pb-1 sm:block">
-                    <div
-                      className={`text-[10px] font-medium text-muted-foreground ${WORKOUT_PLAYBACK_SET_GRID_CLASSES}`}
-                    >
-                      <div className="flex justify-center px-3">
-                        {t('exercise.workoutPlaybackPage.columnSet', 'Set')}
-                      </div>
-                      <div className="flex justify-center px-3">
-                        {t('exercise.workoutPlaybackPage.columnType', 'Type')}
-                      </div>
-                      {isTimedExercise ? (
-                        <div className="flex justify-center px-3 sm:col-span-2">
-                          {t('workout.durationSec', 'Duration (s)')}
-                        </div>
-                      ) : (
-                        <>
-                          <div className="flex justify-center px-3">
-                            {t(
-                              'exercise.workoutPlaybackPage.columnReps',
-                              'Reps'
-                            )}
-                          </div>
-                          <div className="flex justify-center px-3">
-                            {t(
-                              'exercise.workoutPlaybackPage.columnWeight',
-                              'Weight'
-                            )}
-                          </div>
-                        </>
-                      )}
-                      <div className="flex justify-center px-3">
-                        {t('workout.rpe', 'RPE')}
-                      </div>
-                      <div className="flex justify-center px-3">
-                        {t('exercise.workoutPlaybackPage.columnRest', 'Rest')}
-                      </div>
-                      <div className="flex justify-end px-3">
-                        {t('common.actions', 'Actions')}
-                      </div>
-                    </div>
+                  <div
+                    className={`text-center text-xs text-muted-foreground ${WORKOUT_PLAYBACK_SET_GRID_CLASSES}`}
+                  >
+                    <span>
+                      {t('exercise.workoutPlaybackPage.columnSet', 'Set')}
+                    </span>
+                    <span>
+                      {layout.signedWeight
+                        ? t('workout.addedAssistedWeight', '+/− weight')
+                        : t(
+                            'exercise.workoutPlaybackPage.columnWeight',
+                            'Weight'
+                          )}
+                    </span>
+                    <span>
+                      {layout.showReps
+                        ? t('exercise.workoutPlaybackPage.columnReps', 'Reps')
+                        : layout.showDistance
+                          ? t('workout.distance', 'Distance')
+                          : t('workout.durationSec', 'Duration (s)')}
+                    </span>
+                    <span>{t('workout.rpe', 'RPE')}</span>
                   </div>
 
                   {exercise.sets.map((set, setIndex) => {
@@ -260,6 +250,8 @@ const WorkoutPlaybackExercisesList = ({
                         setNumber={set.set_number}
                         setType={set.set_type}
                         isTimedExercise={isTimedExercise}
+                        modality={exercise.modality}
+                        distance={set.distance}
                         reps={set.reps}
                         weight={set.weight}
                         duration={set.duration}
@@ -309,11 +301,11 @@ const WorkoutPlaybackExercisesList = ({
                   </div>
                 </div>
 
-                <div className="mt-2 flex justify-center gap-3">
+                <div className="mt-3 flex flex-wrap justify-center gap-3 border-t">
                   <button
                     type="button"
                     aria-label={`Add set for ${exercise.exercise_name}`}
-                    className="inline-flex items-center justify-center px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                    className="inline-flex min-h-11 items-center justify-center px-2 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
                     onClick={() => onAddSet(exerciseIndex)}
                   >
                     {t('exercise.workoutPlaybackPage.addSet', 'Add Set')}
@@ -326,7 +318,7 @@ const WorkoutPlaybackExercisesList = ({
                         'Add drop sets for {{name}}',
                         { name: exercise.exercise_name }
                       )}
-                      className="inline-flex items-center justify-center px-2 py-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+                      className="inline-flex min-h-11 items-center justify-center px-2 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
                       onClick={() => onAddDropSets?.(exerciseIndex)}
                     >
                       {t(

@@ -33,6 +33,7 @@ interface TrendChartProps {
   target?: { value: number; label: string };
   events?: { at: string; label: string }[];
   color?: string;
+  showDots?: boolean;
   formatValue?: (value: number) => string;
   className?: string;
 }
@@ -59,6 +60,7 @@ export function TrendChart({
   target,
   events = [],
   color = chartSeries[0],
+  showDots = false,
   formatValue,
   className,
 }: TrendChartProps) {
@@ -127,7 +129,7 @@ export function TrendChart({
               name={valueLabel}
               stroke={color}
               strokeWidth={2}
-              dot={false}
+              dot={showDots ? { r: 4 } : false}
               activeDot={{ r: 4 }}
               isAnimationActive={false}
             />

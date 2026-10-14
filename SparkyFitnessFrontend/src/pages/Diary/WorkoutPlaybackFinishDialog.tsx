@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Trophy } from 'lucide-react';
+import { Check, ArrowRight } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -8,6 +8,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { StatRows } from '@/components/ui/stat-rows';
+import { Numeral } from '@/components/ui/numeral';
 import { Button } from '@/components/ui/button';
 import { usePreferences } from '@/contexts/PreferencesContext';
 import { formatSecondsClock } from '@/utils/timeFormatters';
@@ -46,21 +48,25 @@ export default function WorkoutPlaybackFinishDialog({
     ? Math.round(convertEnergy(summary.caloriesKcal, 'kcal', energyUnit))
     : 0;
 
-  const tiles = summary
+  const rows = summary
     ? [
         {
+          id: 'duration',
           label: t('exercise.workoutFinishSummary.duration', 'Duration'),
           value: formatSecondsClock(summary.durationSeconds),
         },
         {
+          id: 'calories',
           label: t('exercise.workoutFinishSummary.calories', 'Calories'),
           value: `${calories} ${getEnergyUnitString(energyUnit)}`,
         },
         {
+          id: 'sets',
           label: t('exercise.workoutFinishSummary.sets', 'Sets'),
           value: `${summary.completedSets}/${summary.totalSets}`,
         },
         {
+          id: 'volume',
           label: t('exercise.workoutFinishSummary.volume', 'Volume'),
           value: `${Number(summary.volume.toFixed(1))}`,
         },
@@ -76,36 +82,27 @@ export default function WorkoutPlaybackFinishDialog({
     >
       <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader className="items-center text-center">
-          <Trophy className="h-8 w-8 text-amber-500" />
+          <Check className="h-7 w-7 text-muted-foreground" aria-hidden="true" />
           <DialogTitle>
             {t('exercise.workoutFinishSummary.title', 'Workout complete')}
           </DialogTitle>
           <DialogDescription>{summary?.name}</DialogDescription>
         </DialogHeader>
-        <div className="grid grid-cols-2 gap-3">
-          {tiles.map((tile) => (
-            <div
-              key={tile.label}
-              className="rounded-lg border bg-muted/40 p-3 text-center"
-            >
-              <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                {tile.label}
-              </div>
-              <div className="mt-1 text-xl font-semibold tabular-nums">
-                {tile.value}
-              </div>
-            </div>
-          ))}
-        </div>
+        <Numeral
+          value={summary ? formatSecondsClock(summary.durationSeconds) : null}
+          unit={t('exercise.workoutFinishSummary.duration', 'Duration')}
+        />
+        <StatRows rows={rows} />
         {summary?.sessionId && (
           <WorkoutFeedbackPanel
             presetEntryId={summary.sessionId}
             exercises={summary.exercises ?? []}
           />
         )}
-        <DialogFooter>
+        <DialogFooter className="border-t pt-4">
           <Button type="button" className="w-full" onClick={onClose}>
             {t('exercise.workoutFinishSummary.done', 'Done')}
+            <ArrowRight aria-hidden="true" />
           </Button>
         </DialogFooter>
       </DialogContent>
