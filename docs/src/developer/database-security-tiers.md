@@ -1,6 +1,6 @@
 # Database Security & RLS Tiers
 
-_Last updated: 2026-10-11_
+_Last updated: 2026-10-14_
 
 SparkyFitness uses PostgreSQL Row-Level Security (RLS) to enforce strict data isolation between accounts, caregivers, family members, and third-party integrations (API keys). This document covers the security design, context switching mechanism, and the three-tier database table classifications.
 
@@ -102,7 +102,7 @@ These tables contain user profiles, layouts, display settings, and custom databa
 | `workout_presets`                     | Custom workouts/presets created by the user                                                                                                                                                                                                                                             | **Owner-Only**                                                                    | Delegate with `can_view_exercise_library`, `can_manage_diary`, or `can_view_reports`                                                                                                                                                                      |
 | `workout_preset_exercises`            | Exercises assigned inside a workout preset                                                                                                                                                                                                                                              | **Owner-Only**                                                                    | Delegate with `can_view_exercise_library`, `can_manage_diary`, or `can_view_reports`                                                                                                                                                                      |
 | `workout_preset_exercise_sets`        | Reps/sets configured inside a preset exercise                                                                                                                                                                                                                                           | **Owner-Only**                                                                    | Delegate with `can_view_exercise_library`, `can_manage_diary`, or `can_view_reports`                                                                                                                                                                      |
-| `workout_plan_templates`              | Templates for weekly and sequential workout schedules                                                                                                                                                                                                                                   | **Owner-Only**                                                                    | Delegate with `can_view_exercise_library`, `can_manage_diary`, or `can_view_reports`                                                                                                                                                                      |
+| `workout_plan_templates`              | Templates for weekly and sequential workout schedules                                                                                                                                                                                                                                   | **Owner-Only**                                                                    | Delegate with `can_view_exercise_library` or `can_view_reports`                                                                                                                                                                                          |
 | `workout_plan_sessions`               | Stable, independently prescribed weekly/sequential sessions within an owner-consistent plan                                                                                                                                                                                             | **Owner-Only**                                                                    | Inherits parent Workout Plan library visibility                                                                                                                                                                                                           |
 | `external_data_providers`             | Configured API integration credentials, including personal or global Open Food Facts accounts                                                                                                                                                                                           | **Owner-Only**                                                                    | Delegate with `share_external_providers` for search only; contribution credentials are not shared. Manual contribution endpoints require the food owner to be the authenticated actor and require separate data/photo confirmation for the exact preview. |
 | `family_access`                       | Sharing rules & delegation credentials                                                                                                                                                                                                                                                  | **Owner-Only**                                                                    | Owner or Switched Delegate                                                                                                                                                                                                                                |
@@ -127,10 +127,13 @@ A related trap: `food_entries.images` stores paths into `uploads/foods/<foodId>/
 
 ### Workout Session prescription preservation
 
-`workout_plan_sessions` is Tier 2: reads inherit the visible parent plan; only
-the authenticated plan owner authors session identity/name/order. Assignments
-and their sets retain their existing diary-write delegation, with reads inherited
-from session/plan library visibility. The composite assignment foreign key
+`workout_plan_templates` and `workout_plan_sessions` are owner-write: only the
+authenticated owner can create, rename, reorder or delete a plan or session.
+Session reads inherit the visible parent plan. A delegate with `can_manage_diary`
+can insert, update or delete assignment sets and can delete assignments. Adding
+or updating an assignment also requires `can_view_exercise_library` so the
+delegate can see the parent plan and session. This preserves the existing
+upstream RLS behavior. The composite assignment foreign key
 `(workout_session_id, template_id, user_id)` prevents cross-plan and cross-owner
 membership. Program references use `(workout_session_id, user_id)` and remain
 Tier 1; sharing a standalone plan never grants Program access.
@@ -169,7 +172,7 @@ explicitly; changing a live preset reference does not refresh timer history.
 
 ### Tier 3: Delegate-Writable (Daily Logs & Schedules)
 
-These tables contain daily diaries, logging entries, and scheduler items. **Caregivers/delegates with active delegation permissions are granted full read and write access to log or modify data on behalf of the owner.**
+These tables contain daily diaries, logging entries, and scheduler items. **Caregivers/delegates with active delegation permissions can log or modify data on behalf of the owner, subject to the table-specific write rules below.**
 
 #### A. Diary Logs (Writable by delegates with `can_manage_diary` / Readable by `can_view_reports` or `can_manage_diary`)
 
@@ -185,9 +188,8 @@ These tables contain daily diaries, logging entries, and scheduler items. **Care
 | `water_intake` | Total water logged for the day | Delegate with `can_manage_diary` | Delegate with `can_manage_diary` or `can_view_reports` |
 | `water_intake_entries` | Individual logged water cups/containers for the day, plus optional linked food entry references and hydration factors | Delegate with `can_manage_diary` | Delegate with `can_manage_diary` or `can_view_reports` |
 | `meal_plan_template_assignments` | Active meal templates scheduled to the calendar | Delegate with `can_manage_diary` | Delegate with `can_manage_diary` or `can_view_reports` |
-| `workout_plan_sessions` | Owner-scoped Workout Sessions containing independently prescribed workouts | Delegate with `can_manage_diary` | Delegate with `can_manage_diary` or `can_view_reports` |
-| `workout_plan_template_assignments` | Ordered exercise/preset assignments belonging to an exact Workout Session; presets execute from local snapshots | Delegate with `can_manage_diary` | Delegate with `can_manage_diary` or `can_view_reports` |
-| `workout_plan_assignment_sets` | Individual exercise prescriptions; distance and JSONB extension fields retain effort/ranges and per-side instructions | Delegate with `can_manage_diary` | Delegate with `can_manage_diary` or `can_view_reports` |
+| `workout_plan_template_assignments` | Ordered exercise/preset assignments belonging to an exact Workout Session; presets execute from local snapshots | Delegate with `can_manage_diary` may delete; insert/update also require `can_view_exercise_library` for parent plan/session visibility | Delegate with `can_manage_diary`, `can_view_exercise_library`, or `can_view_reports` |
+| `workout_plan_assignment_sets` | Individual exercise prescriptions; distance and JSONB extension fields retain effort/ranges and per-side instructions | Delegate with `can_manage_diary` | Delegate with `can_manage_diary`, `can_view_exercise_library`, or `can_view_reports` |
 | `workout_feedback` | How a logged workout (or one exercise in it) felt: `difficulty` (`too_easy` / `just_right` / `too_hard`), a `pain` flag and optional `pain_note`; drives adaptive workout suggestions. Writes must reference the same user's session/exercise entry | Delegate with `can_manage_diary` | Delegate with `can_manage_diary` or `can_view_reports` |
 | `cardio_test_attempts` | Dated results for Cooper run and supported Cardio Tests | Delegate with `can_manage_diary` | Delegate with `can_manage_diary` or `can_view_reports` |
 
