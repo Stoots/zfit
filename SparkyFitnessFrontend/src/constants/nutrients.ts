@@ -9,7 +9,7 @@ export interface NutrientMetadata {
   defaultLabel: string;
   unit: string;
   color: string; // Tailwind class for UI text
-  chartColor: string; // Hex color for chart rendering
+  chartColor: string; // CSS color for chart rendering
   decimals: number;
   group: 'macros' | 'fats' | 'minerals' | 'custom';
   // Built-in goal direction when the user has no explicit override saved via
@@ -60,7 +60,7 @@ export const CENTRAL_NUTRIENT_CONFIG: Record<string, NutrientMetadata> = {
     defaultLabel: 'Protein',
     unit: 'g',
     color: 'text-blue-600',
-    chartColor: '#3b82f6', // blue-600
+    chartColor: 'var(--protein)',
     decimals: 1,
     group: 'macros',
   },
@@ -70,7 +70,7 @@ export const CENTRAL_NUTRIENT_CONFIG: Record<string, NutrientMetadata> = {
     defaultLabel: 'Carbohydrates',
     unit: 'g',
     color: 'text-orange-600',
-    chartColor: '#f97316', // orange-600
+    chartColor: 'var(--carbs)',
     decimals: 1,
     group: 'macros',
   },
@@ -80,7 +80,7 @@ export const CENTRAL_NUTRIENT_CONFIG: Record<string, NutrientMetadata> = {
     defaultLabel: 'Fat',
     unit: 'g',
     color: 'text-yellow-600',
-    chartColor: '#eab308', // yellow-600
+    chartColor: 'var(--fat)',
     decimals: 1,
     group: 'macros',
   },

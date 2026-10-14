@@ -1,4 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react';
+import { AmbientGlow } from '@/components/ui/ambient-glow';
+import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { GripVertical, Maximize2, Minimize2, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -51,13 +53,19 @@ const WidgetFrame = ({
   }, [onMeasure, widgetKey]);
 
   return (
-    <div className="relative h-full w-full overflow-hidden rounded-lg border border-border/60 bg-card">
+    <div
+      className={cn(
+        'relative isolate h-full w-full overflow-hidden rounded-lg border border-border/60 bg-card',
+        widgetKey === 'energy' && 'rounded-3xl'
+      )}
+    >
+      {widgetKey === 'energy' && <AmbientGlow />}
       {/* Natural-height inner content. Child Card chrome is flattened so only
           the frame's border shows. Content is top-aligned; when the tile is
           taller (row-equalized), the extra space sits inside this one border. */}
       <div
         ref={measureRef}
-        className="[&>*]:border-0 [&>*]:bg-transparent [&>*]:shadow-none"
+        className="relative [&>*]:border-0 [&>*]:bg-transparent [&>*]:shadow-none"
       >
         {children}
       </div>

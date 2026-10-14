@@ -3043,6 +3043,7 @@
     "energyBudget": "of {{goal}} · {{eaten}} eaten",
     "todaysSession": "Today's session",
     "mealActions": "Meal actions",
+    "foodEntryActions": "Actions for {{name}}",
     "trendsLoading": "Loading charts…",
     "trendsEmpty": "No trend data available for the past 14 days",
     "trendsTitle": "14-Day Nutrition Trends",

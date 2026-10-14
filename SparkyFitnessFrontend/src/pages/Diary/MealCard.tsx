@@ -2,6 +2,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -385,7 +387,7 @@ const MealCard = ({
               {t('foodDiary.noFoodsAddedYet', 'No foods added yet')}
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-0 md:space-y-3">
               {meal.entries.map((item) => {
                 // Changed entry to item
                 const entryNutrition = getEntryNutrition(item);
@@ -485,11 +487,11 @@ const MealCard = ({
                     <div
                       key={item.id}
                       className={cn(
-                        'border-t border-border py-3',
+                        'relative border-t border-border py-3 pr-11',
                         entryIsHighlighted && 'ring-2 ring-primary rounded-lg'
                       )}
                     >
-                      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-3">
+                      <div className="grid grid-cols-[minmax(0,1fr)_auto] gap-2">
                         <div className="min-w-0">
                           <div className="text-sm font-medium leading-snug text-card-foreground">
                             {entryName}
@@ -507,7 +509,7 @@ const MealCard = ({
                             {item.entry_time && (
                               <>
                                 <span aria-hidden="true">&bull;</span>
-                                <span className="font-medium text-primary">
+                                <span className="text-muted-foreground">
                                   {formatTimeOfDayString(
                                     item.entry_time,
                                     timeFormat
@@ -549,7 +551,7 @@ const MealCard = ({
                             >
                               {mobileCalories.displayValue}
                             </div>
-                            <div className="mt-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            <div className="mt-1 text-xs text-muted-foreground">
                               {mobileCalories.unitDisplay}
                             </div>
                           </div>
@@ -557,79 +559,111 @@ const MealCard = ({
                       </div>
 
                       {mobileNutrients.length > 0 && (
-                        <div
-                          className="mt-2 grid gap-2"
-                          style={{
-                            gridTemplateColumns: `repeat(${mobileNutrients.length}, minmax(0, 1fr))`,
-                          }}
-                        >
+                        <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
                           {mobileNutrients.map((nutrient) => {
                             const { metadata, displayValue, unitDisplay } =
                               getNutrientDisplay(nutrient);
-                            const labelOverride =
-                              MOBILE_NUTRIENT_LABEL_OVERRIDES[nutrient];
-
+                            const label =
+                              MOBILE_NUTRIENT_LABEL_OVERRIDES[nutrient] ??
+                              metadata;
                             return (
-                              <div key={nutrient} className="min-w-0">
-                                <div
-                                  className={cn(
-                                    'text-xs font-medium leading-tight text-muted-foreground'
-                                  )}
-                                >
-                                  {displayValue}
-                                  {unitDisplay}
-                                </div>
-                                <div className="mt-1 truncate text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                                  {labelOverride
-                                    ? t(
-                                        labelOverride.label,
-                                        labelOverride.defaultLabel
-                                      )
-                                    : t(metadata.label, metadata.defaultLabel)}
-                                </div>
-                              </div>
+                              <span key={nutrient}>
+                                {t(label.label, label.defaultLabel)}{' '}
+                                {displayValue}
+                                {unitDisplay}
+                              </span>
                             );
                           })}
                         </div>
                       )}
-
-                      <div className="mt-1 flex items-center justify-end gap-1">
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-11 w-11 text-muted-foreground"
-                          onClick={() => {
-                            debug(
-                              loggingLevel,
-                              'MealCard: Edit entry button clicked:',
-                              item.id
-                            );
-                            onEditEntry(item);
-                          }}
-                          title={t('common.edit', 'Edit')}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          className="h-11 w-11 text-muted-foreground"
-                          onClick={() => {
-                            debug(
-                              loggingLevel,
-                              'MealCard: Remove entry button clicked:',
-                              item.id
-                            );
-                            onRemoveEntry(
-                              item.id,
-                              isFoodEntryMeal ? 'foodEntryMeal' : 'foodEntry'
-                            );
-                          }}
-                          title={t('common.delete', 'Delete')}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="absolute right-0 top-2 size-11 text-muted-foreground"
+                            aria-label={t('diary.foodEntryActions', {
+                              name: entryName,
+                              defaultValue: 'Actions for {{name}}',
+                            })}
+                          >
+                            <MoreHorizontal className="size-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            className="min-h-11"
+                            onSelect={() => onEditEntry(item)}
+                          >
+                            <Edit className="size-4" />
+                            {t('common.edit', 'Edit')}
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="min-h-11"
+                            onSelect={() => {
+                              void onRemoveEntry(
+                                item.id,
+                                isFoodEntryMeal ? 'foodEntryMeal' : 'foodEntry'
+                              );
+                            }}
+                          >
+                            <Trash2 className="size-4" />
+                            {t('common.delete', 'Delete')}
+                          </DropdownMenuItem>
+                          {entryImageSrc && (
+                            <DropdownMenuItem
+                              className="min-h-11"
+                              onSelect={() =>
+                                openLightbox(
+                                  entryImages,
+                                  0,
+                                  entryName ?? undefined
+                                )
+                              }
+                            >
+                              {t('food.viewImages', 'View images')}
+                            </DropdownMenuItem>
+                          )}
+                          {visibleNutrientsForGrid.some(
+                            (nutrient) =>
+                              nutrient !== 'calories' &&
+                              !mobileNutrients.includes(nutrient)
+                          ) && (
+                            <>
+                              <DropdownMenuSeparator />
+                              {visibleNutrientsForGrid
+                                .filter(
+                                  (nutrient) =>
+                                    nutrient !== 'calories' &&
+                                    !mobileNutrients.includes(nutrient)
+                                )
+                                .map((nutrient) => {
+                                  const {
+                                    metadata,
+                                    displayValue,
+                                    unitDisplay,
+                                  } = getNutrientDisplay(nutrient);
+                                  return (
+                                    <DropdownMenuLabel
+                                      key={nutrient}
+                                      className="flex justify-between gap-4 font-normal text-muted-foreground"
+                                    >
+                                      <span>
+                                        {t(
+                                          metadata.label,
+                                          metadata.defaultLabel
+                                        )}
+                                      </span>
+                                      <span>
+                                        {displayValue} {unitDisplay}
+                                      </span>
+                                    </DropdownMenuLabel>
+                                  );
+                                })}
+                            </>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   );
                 }
@@ -774,12 +808,7 @@ const MealCard = ({
                     defaultValue: `${meal.name} Total:`,
                   })}
                 </span>
-                <div
-                  className="grid gap-x-2 gap-y-2 text-xs sm:text-sm w-full sm:w-[35%] sm:ml-auto"
-                  style={{
-                    gridTemplateColumns: `repeat(auto-fit, minmax(${isMobile ? '40px' : '60px'}, 1fr))`,
-                  }}
-                >
+                <dl className="grid w-full grid-cols-1 gap-x-6 text-xs md:grid-cols-2 md:text-sm">
                   {visibleNutrientsForGrid.map((nutrient) => {
                     const metadata = getNutrientMetadata(
                       nutrient,
@@ -804,17 +833,20 @@ const MealCard = ({
                         : metadata.unit;
 
                     return (
-                      <div key={nutrient} className="text-center min-w-[40px]">
-                        <div className="font-semibold text-muted-foreground">
-                          {displayValue} {unitDisplay}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
+                      <div
+                        key={nutrient}
+                        className="flex min-w-0 items-baseline justify-between gap-4 border-b py-1.5 last:border-0"
+                      >
+                        <dt className="min-w-0 break-words text-muted-foreground">
                           {t(metadata.label, metadata.defaultLabel)}
-                        </div>
+                        </dt>
+                        <dd className="shrink-0 font-medium tabular-nums">
+                          {displayValue} {unitDisplay}
+                        </dd>
                       </div>
                     );
                   })}
-                </div>
+                </dl>
               </div>
             </div>
           )}

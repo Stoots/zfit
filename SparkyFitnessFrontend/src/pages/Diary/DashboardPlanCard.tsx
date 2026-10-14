@@ -67,7 +67,7 @@ const DashboardPlanCard = ({
   const totalSessions = plan.sessions.length;
   return (
     <div
-      className="border-b pb-5 mb-4 flex flex-col items-start justify-between gap-4"
+      className="border-b pb-3 mb-3 md:pb-5 md:mb-4 flex flex-col items-start justify-between gap-3 md:gap-4"
       data-testid={`dashboard-plan-${plan.id}`}
     >
       <div className="min-w-0 space-y-2">

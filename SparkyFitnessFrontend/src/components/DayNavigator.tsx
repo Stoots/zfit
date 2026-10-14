@@ -29,6 +29,7 @@ interface DayNavigatorProps {
   onDateChange: (date: string) => void;
   className?: string;
   showTodayLabel?: boolean;
+  compactOnMobile?: boolean;
   // Optional YYYY-MM-DD strings to mark with a dot in the calendar (e.g. days
   // that have progress photos). Omitted by callers that don't need markers.
   markedDates?: string[];
@@ -41,6 +42,7 @@ const DayNavigator = ({
   onDateChange,
   className,
   showTodayLabel = false,
+  compactOnMobile = false,
   markedDates,
   markedDatesLabel,
 }: DayNavigatorProps) => {
@@ -99,7 +101,9 @@ const DayNavigator = ({
         className
       )}
     >
-      <div className="flex justify-end">
+      <div
+        className={cn('flex justify-end', compactOnMobile && 'max-md:hidden')}
+      >
         {selectedDateRelation !== 'today' && (
           <Button
             variant="ghost"
@@ -116,7 +120,9 @@ const DayNavigator = ({
           'relative flex items-center gap-0 rounded-full border border-border/60 bg-background overflow-hidden transition-colors',
           selectedDateRelation === 'past' && 'border-date-past/40',
           selectedDateRelation === 'future' && 'border-date-future/40',
-          'h-12 sm:h-9'
+          'h-12 sm:h-9',
+          compactOnMobile &&
+            'max-md:min-h-11 max-md:min-w-0 max-md:flex-1 max-md:border-0'
         )}
       >
         {selectedDateRelation !== 'today' && (
@@ -133,7 +139,11 @@ const DayNavigator = ({
           size="icon"
           aria-label={t('diary.previousDay', 'Previous day')}
           onClick={handlePreviousDay}
-          className="relative h-12 w-12 sm:h-9 sm:w-9 rounded-none border-r border-border/60"
+          className={cn(
+            'relative h-12 w-12 sm:h-9 sm:w-9 rounded-none border-r border-border/60',
+            compactOnMobile &&
+              'max-md:min-h-11 max-md:min-w-11 max-md:shrink-0 max-md:border-0'
+          )}
         >
           <ChevronLeft className="h-5 w-5 sm:h-4 sm:w-4" />
         </Button>
@@ -141,27 +151,43 @@ const DayNavigator = ({
           <PopoverTrigger asChild>
             <Button
               variant="ghost"
-              className="relative h-12 px-4 sm:h-9 rounded-none font-normal text-sm gap-2"
+              className={cn(
+                'relative h-12 px-4 sm:h-9 rounded-none font-normal text-sm gap-2',
+                compactOnMobile &&
+                  'max-md:min-h-11 max-md:min-w-11 max-md:shrink max-md:px-1'
+              )}
             >
               <CalendarIcon
                 className={cn(
                   'h-4 w-4 sm:h-3.5 sm:w-3.5',
+                  compactOnMobile && 'max-md:hidden',
                   selectedDateRelation === 'past' && 'text-date-past',
                   selectedDateRelation === 'future' && 'text-date-future'
                 )}
               />
-              {showTodayLabel && selectedDateRelation === 'today' ? (
-                t('diary.today', 'Today')
-              ) : selectedPickerDate ? (
-                formatDate(selectedPickerDate)
-              ) : (
-                <span className="text-muted-foreground">
-                  {t('foodDiary.pickADate', 'Pick a Date')}
-                </span>
-              )}
+              <span className="truncate">
+                {showTodayLabel && selectedDateRelation === 'today' ? (
+                  t('diary.today', 'Today')
+                ) : selectedPickerDate ? (
+                  formatDate(selectedPickerDate)
+                ) : (
+                  <span className="text-muted-foreground">
+                    {t('foodDiary.pickADate', 'Pick a Date')}
+                  </span>
+                )}
+              </span>
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-auto p-0" align="center" sideOffset={8}>
+            {compactOnMobile && selectedDateRelation !== 'today' && (
+              <Button
+                variant="ghost"
+                className="m-2 md:hidden"
+                onClick={handleToday}
+              >
+                {t('diary.today', 'Today')}
+              </Button>
+            )}
             <Calendar
               mode="single"
               selected={selectedPickerDate}
@@ -189,7 +215,11 @@ const DayNavigator = ({
           size="icon"
           aria-label={t('diary.nextDay', 'Next day')}
           onClick={handleNextDay}
-          className="relative h-12 w-12 sm:h-9 sm:w-9 rounded-none border-l border-border/60"
+          className={cn(
+            'relative h-12 w-12 sm:h-9 sm:w-9 rounded-none border-l border-border/60',
+            compactOnMobile &&
+              'max-md:min-h-11 max-md:min-w-11 max-md:shrink-0 max-md:border-0'
+          )}
         >
           <ChevronRight className="h-5 w-5 sm:h-4 sm:w-4" />
         </Button>

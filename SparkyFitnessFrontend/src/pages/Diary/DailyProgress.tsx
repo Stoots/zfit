@@ -35,7 +35,6 @@ import {
 import { DailyProgressSkeleton } from './DailyProgressSkeleton';
 import { getEnergyUnitString } from '@/utils/nutritionCalculations';
 import { formatWeight } from '@/utils/numberFormatting';
-import { AmbientGlow } from '@/components/ui/ambient-glow';
 import { MacroChips } from '@/components/ui/macro-chips';
 import type { DayTotals } from './NutritionSummaryCard';
 import { EnergyCircle } from './EnergyProgressCircle';
@@ -354,9 +353,8 @@ const DailyProgress = ({
 
   return (
     <Card className="relative isolate h-full overflow-hidden rounded-3xl">
-      <AmbientGlow />
       <CardContent className="relative p-4 sm:p-6">
-        <div className="space-y-4">
+        <div className="space-y-3 md:space-y-4">
           <EnergyCircle
             remaining={effectiveRemaining}
             progress={effectiveProgress}
@@ -391,6 +389,7 @@ const DailyProgress = ({
           />
           {dayTotals && (
             <MacroChips
+              className="max-md:gap-1 max-md:[&>li]:gap-1 max-md:[&>li]:px-1.5"
               protein={dayTotals.protein}
               carbs={dayTotals.carbs}
               fat={dayTotals.fat}

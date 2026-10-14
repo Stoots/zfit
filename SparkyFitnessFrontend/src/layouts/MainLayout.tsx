@@ -1,7 +1,7 @@
 import type React from 'react';
 import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useLocation, Outlet, useNavigate } from 'react-router-dom';
+import { useLocation, Outlet, useNavigate, Link } from 'react-router-dom';
 import { debug, info, error } from '@/utils/logging';
 import {
   Home,
@@ -374,8 +374,17 @@ const MainLayout: React.FC<MainLayoutProps> = ({
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 sm:px-6">
-        <header className="flex min-h-16 items-center justify-between gap-3 border-b pt-[env(safe-area-inset-top)]">
-          <div className="flex min-w-0 items-center gap-2">
+        <header
+          className={cn(
+            'flex min-h-16 items-center justify-between gap-3 border-b pt-[env(safe-area-inset-top)]',
+            location.pathname === '/' && 'max-md:hidden'
+          )}
+        >
+          <Link
+            to="/"
+            className="flex min-h-11 min-w-11 items-center gap-2"
+            aria-label={t('nav.diary')}
+          >
             <img
               src="/images/SparkyFitness.webp"
               alt="SparkyFitness Logo"
@@ -386,7 +395,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
             <span className="hidden sm:inline truncate text-base font-semibold tracking-tight">
               SparkyFitness
             </span>
-          </div>
+          </Link>
           <div className="flex shrink-0 items-center gap-1">
             <GlobalNotificationIcon />
             <GlobalSyncButton />
@@ -405,7 +414,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({
         </header>
         <nav
           className={cn(
-            'relative hidden sm:flex flex-wrap w-full gap-1 py-3 mb-6 border-b transition-colors',
+            'relative hidden flex-wrap w-full gap-1 py-3 mb-6 border-b transition-colors',
+            location.pathname === '/' ? 'md:flex' : 'sm:flex',
             selectedDateRelation === 'today' && 'border-border',
             selectedDateRelation === 'past' && 'border-date-past/40',
             selectedDateRelation === 'future' && 'border-date-future/40'
@@ -441,7 +451,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({
         <nav
           aria-label={t('nav.primaryNavigation', 'Primary navigation')}
           className={cn(
-            'apple-safe-area sm:hidden fixed bottom-0 inset-x-0 z-40 border-t bg-background/90 backdrop-blur-xl',
+            'apple-safe-area fixed bottom-0 inset-x-0 z-40 border-t bg-background/90 backdrop-blur-xl',
+            location.pathname === '/' ? 'md:hidden' : 'sm:hidden',
             selectedDateRelation === 'past' && 'border-date-past/80',
             selectedDateRelation === 'future' && 'border-date-future/50'
           )}
@@ -493,7 +504,13 @@ const MainLayout: React.FC<MainLayoutProps> = ({
           </div>
         </nav>
 
-        <main className="min-w-0 pt-6 pb-[calc(5rem+env(safe-area-inset-bottom))] sm:pt-0 sm:pb-0">
+        <main
+          className={cn(
+            'min-w-0 pt-6 pb-[calc(5rem+env(safe-area-inset-bottom))] sm:pt-0 sm:pb-0',
+            location.pathname === '/' &&
+              'max-md:pt-0 max-md:pb-[calc(5rem+env(safe-area-inset-bottom))]'
+          )}
+        >
           {/* Avoid mounting disallowed pages while the profile redirect runs. */}
           {isCurrentPathAllowed ? <Outlet /> : null}
         </main>
@@ -509,6 +526,26 @@ const MainLayout: React.FC<MainLayoutProps> = ({
           <DialogHeader>
             <DialogTitle>{t('nav.more', 'More')}</DialogTitle>
           </DialogHeader>
+          {location.pathname === '/' && (
+            <div className="flex items-center gap-2 md:hidden">
+              <Link
+                to="/"
+                onClick={() => setIsAddCompOpen(false)}
+                className="flex min-h-11 min-w-11 items-center gap-2"
+                aria-label={t('nav.diary')}
+              >
+                <img
+                  src="/images/SparkyFitness.webp"
+                  alt="SparkyFitness Logo"
+                  width={30}
+                  height={40}
+                />
+                <span>SparkyFitness</span>
+              </Link>
+              <GlobalNotificationIcon />
+              <GlobalSyncButton />
+            </div>
+          )}
           <p className="text-sm text-muted-foreground">
             {t('layout.welcome', 'Welcome {{activeUserName}}', {
               activeUserName,

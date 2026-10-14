@@ -580,7 +580,7 @@ const ExerciseCard = ({
 
   return (
     <Card>
-      <CardHeader className="p-4 sm:p-6">
+      <CardHeader className="p-4 pb-2 md:p-6">
         <div className="flex justify-between items-center">
           <CardTitle>
             {programPlan

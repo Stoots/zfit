@@ -96,18 +96,22 @@ it('keeps negative and zero budgets, energy units and target bands readable with
   expect(screen.getByText('target 1800–2200')).toHaveClass('text-success');
 });
 
-it('shows Today in the diary stepper while retaining previous and next day navigation', () => {
-  const changeDate = jest.fn();
-  render(
-    <DayNavigator
-      selectedDate="2026-10-15"
-      onDateChange={changeDate}
-      showTodayLabel
-    />
-  );
-  expect(screen.getByRole('button', { name: 'Today' })).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'Previous day' }));
-  expect(changeDate).toHaveBeenLastCalledWith('2026-10-14');
-  fireEvent.click(screen.getByRole('button', { name: 'Next day' }));
-  expect(changeDate).toHaveBeenLastCalledWith('2026-10-16');
-});
+it.each([false, true])(
+  'keeps date navigation with compactOnMobile=%s',
+  (compactOnMobile) => {
+    const changeDate = jest.fn();
+    render(
+      <DayNavigator
+        selectedDate="2026-10-15"
+        onDateChange={changeDate}
+        showTodayLabel
+        compactOnMobile={compactOnMobile}
+      />
+    );
+    expect(screen.getByRole('button', { name: 'Today' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Previous day' }));
+    expect(changeDate).toHaveBeenLastCalledWith('2026-10-14');
+    fireEvent.click(screen.getByRole('button', { name: 'Next day' }));
+    expect(changeDate).toHaveBeenLastCalledWith('2026-10-16');
+  }
+);
