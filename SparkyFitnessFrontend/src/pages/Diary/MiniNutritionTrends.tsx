@@ -1,3 +1,5 @@
+import { chartSeries, trendChartTheme } from '@/components/ui/trend-chart';
+import type { ExpandedGoals } from '@/types/goals';
 import { useMemo, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -7,6 +9,8 @@ import {
   Tooltip,
   XAxis,
   YAxis,
+  ReferenceLine,
+  CartesianGrid,
   TooltipProps,
 } from 'recharts';
 import { useActiveUser } from '@/contexts/ActiveUserContext';
@@ -25,6 +29,7 @@ import { DayData } from '@/types/diary';
 
 interface MiniNutritionTrendsProps {
   selectedDate: string;
+  goals: ExpandedGoals;
   customNutrients?: UserCustomNutrient[];
 }
 
@@ -85,11 +90,11 @@ const CustomTooltip = ({
         : formatNutrientValue(nutrientName, nutrientValue, customNutrients);
 
     return (
-      <div className="bg-white dark:bg-gray-800 p-2 border border-gray-200 dark:border-gray-700 rounded shadow-lg">
-        <p className="text-xs font-medium text-gray-900 dark:text-gray-100">
+      <div className="bg-card p-2 border border-border rounded shadow-lg">
+        <p className="text-xs font-medium text-foreground">
           {label ? formatDate(parseISO(label), 'MMM dd') : ''}
         </p>
-        <p className="text-xs text-gray-600 dark:text-gray-400">
+        <p className="text-xs text-muted-foreground">
           {getDisplayLabel(nutrientName)}: {displayValue} {unitString}
         </p>
       </div>
@@ -100,6 +105,8 @@ const CustomTooltip = ({
 
 interface MiniTrendChartProps {
   nutrient: string;
+  goal?: number;
+  goalLabel: string;
   details: ChartDetails;
   data: DayData[];
   energyUnit: 'kcal' | 'kJ';
@@ -116,6 +123,8 @@ interface MiniTrendChartProps {
 const MiniTrendChart = memo(
   ({
     nutrient,
+    goal,
+    goalLabel,
     details,
     data,
     energyUnit,
@@ -138,21 +147,34 @@ const MiniTrendChart = memo(
     return (
       <div className="space-y-1">
         <div className="flex justify-between items-center">
-          <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
+          <span className="text-xs font-medium text-muted-foreground">
             {details.label}
           </span>
-          <span
-            className="text-xs font-medium"
-            style={{ color: details.color }}
-          >
+          <span className="text-xs font-medium">
             {displayValue} {unitDisplay}
           </span>
         </div>
-        <div className="h-6 w-full bg-gray-100 dark:bg-gray-800 rounded min-w-0">
-          <ResponsiveContainer width="100%" height={24} debounce={100}>
-            <LineChart data={data}>
+        <div className="h-16 w-full min-w-0">
+          <ResponsiveContainer width="100%" height={64} debounce={100}>
+            <LineChart
+              data={data}
+              margin={{ top: 8, right: 8, bottom: 4, left: 0 }}
+            >
+              <CartesianGrid {...trendChartTheme.grid} />
               <XAxis dataKey="date" hide />
-              <YAxis hide />
+              <YAxis hide domain={[0, 'auto']} />
+              {goal !== undefined && (
+                <ReferenceLine
+                  y={goal}
+                  {...trendChartTheme.reference}
+                  ifOverflow="extendDomain"
+                  label={{
+                    value: goalLabel,
+                    position: 'insideTopRight',
+                    ...trendChartTheme.axis,
+                  }}
+                />
+              )}
               <Tooltip
                 allowEscapeViewBox={{ x: true, y: true }}
                 content={
@@ -166,7 +188,7 @@ const MiniTrendChart = memo(
                 }
               />
               <Line
-                type="monotone"
+                type="linear"
                 dataKey={nutrient}
                 stroke={details.color}
                 strokeWidth={2}
@@ -185,6 +207,7 @@ MiniTrendChart.displayName = 'MiniTrendChart';
 
 const MiniNutritionTrends = ({
   selectedDate,
+  goals,
   customNutrients = [],
 }: MiniNutritionTrendsProps) => {
   const { t } = useTranslation();
@@ -216,16 +239,16 @@ const MiniNutritionTrends = ({
 
   if (isLoading) {
     return (
-      <div className="mt-4 p-3 text-center text-sm text-gray-500 bg-gray-50 dark:bg-gray-800 rounded-lg">
-        Loading charts...
+      <div className="mt-4 p-3 text-center text-sm text-muted-foreground bg-muted rounded-lg">
+        {t('diary.trendsLoading', 'Loading charts…')}
       </div>
     );
   }
 
   if (chartData.length === 0) {
     return (
-      <div className="mt-4 p-3 text-center text-sm text-gray-500 bg-gray-50 dark:bg-gray-800 rounded-lg">
-        No trend data available for the past 14 days
+      <div className="mt-4 p-3 text-center text-sm text-muted-foreground bg-muted rounded-lg">
+        {t('diary.trendsEmpty', 'No trend data available for the past 14 days')}
       </div>
     );
   }
@@ -255,14 +278,17 @@ const MiniNutritionTrends = ({
 
   return (
     <div className="mt-4 space-y-3">
-      <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-        14-Day Nutrition Trends
+      <div className="text-sm font-medium text-foreground mb-2">
+        {t('diary.trendsTitle', '14-Day Nutrition Trends')}
       </div>
 
       {visibleNutrients.map((nutrient) => {
         const metadata = getNutrientMetadata(nutrient, customNutrients);
         const details: ChartDetails = {
-          color: metadata.chartColor || '#808080',
+          color:
+            nutrient === 'protein' || nutrient === 'carbs' || nutrient === 'fat'
+              ? `var(--${nutrient})`
+              : chartSeries[0]!,
           label: getDisplayLabel(nutrient),
           unit: metadata.unit,
         };
@@ -271,6 +297,12 @@ const MiniNutritionTrends = ({
           <MiniTrendChart
             key={nutrient}
             nutrient={nutrient}
+            goal={
+              typeof goals[nutrient as keyof ExpandedGoals] === 'number'
+                ? (goals[nutrient as keyof ExpandedGoals] as number)
+                : goals.custom_nutrients?.[nutrient]
+            }
+            goalLabel={t('exercise.dailyProgress.goal', 'goal')}
             details={details}
             data={displayChartData}
             energyUnit={energyUnit}

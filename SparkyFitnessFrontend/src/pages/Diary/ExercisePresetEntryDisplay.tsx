@@ -116,27 +116,23 @@ const ExercisePresetEntryDisplay: React.FC<ExercisePresetEntryDisplayProps> = ({
   const exerciseCount = presetEntry.exercises?.length ?? 0;
 
   return (
-    <Card className="overflow-hidden border-0 shadow-md bg-white dark:bg-gray-900 rounded-xl">
-      {/* Accent bar + header */}
+    <Card className="overflow-hidden border-0 border-t rounded-none shadow-none bg-transparent">
       <div className="flex">
-        {/* Left accent stripe */}
-        <div className="w-1 flex-shrink-0 bg-gradient-to-b from-blue-500 to-indigo-600 rounded-l-xl" />
-
         <div className="flex-1 min-w-0">
           {/* Header row */}
           <div className="flex items-center justify-between gap-2 px-4 pt-4 pb-3">
             {/* Left: toggle + name */}
             <button
               onClick={toggleExpansion}
-              className="flex items-center gap-3 min-w-0 flex-1 text-left group"
+              className="flex min-h-11 items-center gap-3 min-w-0 flex-1 text-left group"
               aria-expanded={isExpanded}
             >
               <span
                 className={`flex-shrink-0 flex items-center justify-center w-7 h-7 rounded-full border-2 transition-all duration-200
                   ${
                     isExpanded
-                      ? 'border-blue-500 bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400'
-                      : 'border-gray-200 dark:border-gray-700 text-gray-400 group-hover:border-blue-400 group-hover:text-blue-500'
+                      ? 'border-primary/30 bg-primary/10 text-primary'
+                      : 'border-border text-muted-foreground group-hover:border-primary/30 group-hover:text-primary'
                   }`}
               >
                 <ChevronDown
@@ -146,17 +142,17 @@ const ExercisePresetEntryDisplay: React.FC<ExercisePresetEntryDisplayProps> = ({
 
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-semibold text-gray-900 dark:text-gray-50 text-base leading-tight truncate">
+                  <span className="font-semibold text-foreground text-base leading-tight truncate">
                     {presetEntry.name ||
                       t('exerciseCard.workoutPreset', 'Workout Preset')}
                   </span>
                   {earliestTime && (
-                    <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full dark:bg-blue-900/30 dark:text-blue-300 font-medium">
+                    <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">
                       {formatTimeOfDayString(earliestTime, timeFormat)}
                     </span>
                   )}
                   {exerciseCount > 0 && (
-                    <span className="flex-shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300">
+                    <span className="flex-shrink-0 text-xs font-medium px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">
                       {exerciseCount}{' '}
                       {exerciseCount === 1 ? 'exercise' : 'exercises'}
                     </span>
@@ -220,7 +216,7 @@ const ExercisePresetEntryDisplay: React.FC<ExercisePresetEntryDisplayProps> = ({
                     }
 
                     return (
-                      <span className="flex-shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-900/50 text-amber-800 dark:text-amber-200 border border-amber-300 dark:border-amber-700/50">
+                      <span className="flex-shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full bg-warning/10 text-warning border border-warning/30">
                         {format}
                         {scoreStr ? ` • ${scoreStr}` : ''}
                         {` (${isRx ? 'Rx' : 'Scaled'})`}
@@ -229,7 +225,7 @@ const ExercisePresetEntryDisplay: React.FC<ExercisePresetEntryDisplayProps> = ({
                   })()}
                 </div>
                 {presetEntry.exercise_snapshot?.category && (
-                  <p className="text-[10px] font-medium uppercase tracking-widest text-gray-400 dark:text-gray-500 mt-0.5">
+                  <p className="text-xs font-medium uppercase tracking-widest text-muted-foreground mt-0.5">
                     {presetEntry.exercise_snapshot.category}
                   </p>
                 )}
@@ -244,7 +240,7 @@ const ExercisePresetEntryDisplay: React.FC<ExercisePresetEntryDisplayProps> = ({
                     variant="ghost"
                     size="icon"
                     onClick={() => handleDelete(presetEntry.id)}
-                    className="flex-shrink-0 h-8 w-8 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/50 transition-colors"
+                    className="flex-shrink-0 h-11 w-11 text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </Button>
@@ -265,7 +261,7 @@ const ExercisePresetEntryDisplay: React.FC<ExercisePresetEntryDisplayProps> = ({
             <div className="px-4 pb-2 space-y-0.5">
               {presetEntry.location && (
                 <p
-                  className="inline-flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400"
+                  className="inline-flex items-center gap-1 text-xs text-muted-foreground"
                   title={t('exerciseCard.workoutLocation', 'Gym / Location')}
                 >
                   <MapPin className="w-3 h-3" />
@@ -273,12 +269,12 @@ const ExercisePresetEntryDisplay: React.FC<ExercisePresetEntryDisplayProps> = ({
                 </p>
               )}
               {presetEntry.description && (
-                <p className="text-xs text-gray-500 dark:text-gray-400">
+                <p className="text-xs text-muted-foreground">
                   {presetEntry.description}
                 </p>
               )}
               {presetEntry.notes && (
-                <p className="text-xs text-gray-400 dark:text-gray-500 italic">
+                <p className="text-xs text-muted-foreground italic">
                   {presetEntry.notes}
                 </p>
               )}
@@ -287,30 +283,30 @@ const ExercisePresetEntryDisplay: React.FC<ExercisePresetEntryDisplayProps> = ({
 
           {/* Stats strip */}
           {hasExercises && (
-            <div className="mx-4 mb-4 mt-1 grid grid-cols-4 divide-x divide-gray-100 dark:divide-gray-800 bg-gray-50 dark:bg-gray-800/60 rounded-lg overflow-hidden">
+            <div className="mx-4 mb-4 mt-1 grid grid-cols-4 divide-x divide-border bg-muted rounded-lg overflow-hidden">
               <StatCell
                 icon={<Layers className="w-3 h-3" />}
                 value={String(totalSets)}
                 label={t('common.totalSets', 'Sets')}
-                color="text-blue-600 dark:text-blue-400"
+                color="text-primary"
               />
               <StatCell
                 icon={<Clock className="w-3 h-3" />}
                 value={formatMinutesToHHMM(totalMinutes)}
                 label={t('common.minutesUnit', 'Time')}
-                color="text-indigo-600 dark:text-indigo-400"
+                color="text-primary"
               />
               <StatCell
                 icon={<Activity className="w-3 h-3" />}
                 value={avgHR > 0 ? String(avgHR) : '—'}
                 label={t('common.avgHrUnit', 'Avg HR')}
-                color="text-rose-500 dark:text-rose-400"
+                color="text-destructive text-destructive"
               />
               <StatCell
                 icon={<Flame className="w-3 h-3" />}
                 value={String(totalCalories)}
                 label={getEnergyUnitString(energyUnit)}
-                color="text-orange-500 dark:text-orange-400"
+                color="text-warning text-warning"
               />
             </div>
           )}
@@ -319,7 +315,7 @@ const ExercisePresetEntryDisplay: React.FC<ExercisePresetEntryDisplayProps> = ({
 
       {/* Expanded exercise list */}
       {isExpanded && (
-        <CardContent className="px-4 pb-4 pt-0 space-y-2 border-t border-gray-100 dark:border-gray-800">
+        <CardContent className="px-4 pb-4 pt-0 space-y-2 border-t border-border">
           <div className="pt-3 space-y-2">
             {hasExercises ? (
               presetEntry.exercises!.map((exerciseEntry) => (
@@ -338,7 +334,7 @@ const ExercisePresetEntryDisplay: React.FC<ExercisePresetEntryDisplayProps> = ({
                 />
               ))
             ) : (
-              <p className="text-sm text-center text-gray-400 dark:text-gray-500 py-4">
+              <p className="text-sm text-center text-muted-foreground py-4">
                 {t(
                   'exerciseCard.noExercisesInPreset',
                   'No exercises in this preset.'
@@ -371,11 +367,9 @@ const StatCell: React.FC<{
   <div className="flex flex-col items-center justify-center py-2.5 px-1 gap-0.5">
     <span className={`${color} flex items-center gap-1`}>
       {icon}
-      <span className="font-bold text-sm text-gray-800 dark:text-gray-100">
-        {value}
-      </span>
+      <span className="font-bold text-sm text-foreground">{value}</span>
     </span>
-    <span className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wide font-medium">
+    <span className="text-xs text-muted-foreground uppercase tracking-wide font-medium">
       {label}
     </span>
   </div>

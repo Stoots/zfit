@@ -438,7 +438,7 @@ const EditExerciseDatabaseDialog: React.FC<EditExerciseDatabaseDialogProps> = ({
                   <div key={`new-${index}`} className="relative w-20 h-20">
                     <img
                       src={url}
-                      className="w-full h-full object-cover rounded border-2 border-green-500"
+                      className="w-full h-full object-cover rounded border-2 border-success/30"
                       alt=""
                     />
                     <Button

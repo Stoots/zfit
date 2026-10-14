@@ -3035,6 +3035,17 @@
     "max": "Max"
   },
   "diary": {
+    "nextSession": "Next session",
+    "baseValues": "Base values (per {{serving}})",
+    "today": "Today",
+    "previousDay": "Previous day",
+    "nextDay": "Next day",
+    "energyBudget": "of {{goal}} · {{eaten}} eaten",
+    "todaysSession": "Today's session",
+    "mealActions": "Meal actions",
+    "trendsLoading": "Loading charts…",
+    "trendsEmpty": "No trend data available for the past 14 days",
+    "trendsTitle": "14-Day Nutrition Trends",
     "nutritionSummary": "Nutrition Summary",
     "dailyEnergyGoal": "Daily Energy Goal",
     "waterIntake": "Water Intake",

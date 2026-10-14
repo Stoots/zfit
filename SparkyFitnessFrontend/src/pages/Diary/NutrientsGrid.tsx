@@ -1,3 +1,4 @@
+import { MacroChips } from '@/components/ui/macro-chips';
 import { Label } from '@/components/ui/label';
 import {
   getNutrientMetadata,
@@ -37,15 +38,19 @@ export const NutrientGrid = ({
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6">
         {visibleNutrients.map((key) => {
           if (key === 'calories') {
             return (
-              <div key="calories">
+              <div
+                key="calories"
+                className="flex items-center justify-between gap-3 border-b py-3"
+              >
                 <Label className="text-sm">
-                  Calories ({getEnergyUnitString(energyUnit)})
+                  {t('nutrition.calories', 'Calories')} (
+                  {getEnergyUnitString(energyUnit)})
                 </Label>
-                <div className="text-lg font-medium">
+                <div className="text-base font-medium tabular-nums">
                   {Math.round(
                     convertEnergy(nutrition.calories, 'kcal', energyUnit)
                   )}
@@ -58,11 +63,14 @@ export const NutrientGrid = ({
           if (customNutrient) {
             const value = nutrition.custom_nutrients?.[key] || 0;
             return (
-              <div key={key}>
+              <div
+                key={key}
+                className="flex items-center justify-between gap-3 border-b py-3"
+              >
                 <Label className="text-sm">
                   {customNutrient.name} ({customNutrient.unit})
                 </Label>
-                <div className="text-lg font-medium">
+                <div className="text-base font-medium tabular-nums">
                   {formatNutrientValue(key, value, customNutrients)}
                 </div>
               </div>
@@ -73,12 +81,15 @@ export const NutrientGrid = ({
             const meta = getNutrientMetadata(key, customNutrients);
             const value = nutrition[key as keyof CalculatedNutrition] as number;
             return (
-              <div key={key}>
+              <div
+                key={key}
+                className="flex items-center justify-between gap-3 border-b py-3"
+              >
                 <Label className="text-sm">
                   {t(meta.label, { defaultValue: meta.defaultLabel })} (
                   {meta.unit})
                 </Label>
-                <div className="text-lg font-medium">
+                <div className="text-base font-medium tabular-nums">
                   {formatNutrientValue(key, value, customNutrients)}
                 </div>
               </div>
@@ -92,18 +103,22 @@ export const NutrientGrid = ({
       {baseVariant && (
         <div className="bg-muted p-4 rounded-lg mt-4">
           <h4 className="font-medium mb-2">
-            Base Values (per {formatServingLabel(baseVariant)}):
+            {t('diary.baseValues', 'Base values (per {{serving}})', {
+              serving: formatServingLabel(baseVariant),
+            })}
           </h4>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 text-sm">
             <div>
               {Math.round(
                 convertEnergy(baseVariant.calories || 0, 'kcal', energyUnit)
               )}{' '}
               {getEnergyUnitString(energyUnit)}
             </div>
-            <div>{baseVariant.protein || 0}g protein</div>
-            <div>{baseVariant.carbs || 0}g carbs</div>
-            <div>{baseVariant.fat || 0}g fat</div>
+            <MacroChips
+              protein={baseVariant.protein || 0}
+              carbs={baseVariant.carbs || 0}
+              fat={baseVariant.fat || 0}
+            />
           </div>
         </div>
       )}

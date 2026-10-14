@@ -5,7 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Coffee, Moon, Clock, AlertTriangle, Info } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useActiveCaffeineQuery } from '@/hooks/Diary/useCaffeineKinetics';
-import { useTheme } from '@/contexts/ThemeContext';
+import { trendChartTheme } from '@/components/ui/trend-chart';
 import {
   Area,
   AreaChart,
@@ -38,8 +38,6 @@ interface CaffeineCardProps {
 
 export const CaffeineCard = ({ date, userId }: CaffeineCardProps) => {
   const { t } = useTranslation();
-  const { resolvedTheme } = useTheme();
-  const isDark = resolvedTheme === 'dark';
   const { data, isLoading } = useActiveCaffeineQuery(date, userId);
   const [nowMs, setNowMs] = useState<number>(() => Date.now());
 
@@ -237,30 +235,21 @@ export const CaffeineCard = ({ date, userId }: CaffeineCardProps) => {
   const getBedtimeBadge = (bedtimeMg: number) => {
     if (bedtimeMg < 25) {
       return (
-        <Badge
-          variant="secondary"
-          className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
-        >
+        <Badge variant="secondary" className="bg-success/10 text-success">
           {t('diary.caffeine.sleepImpactMinimal', 'Minimal sleep impact')}
         </Badge>
       );
     }
     if (bedtimeMg < 50) {
       return (
-        <Badge
-          variant="secondary"
-          className="bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300"
-        >
+        <Badge variant="secondary" className="bg-primary/10 text-primary">
           {t('diary.caffeine.sleepImpactLow', 'Low sleep impact')}
         </Badge>
       );
     }
     if (bedtimeMg < 100) {
       return (
-        <Badge
-          variant="secondary"
-          className="bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300"
-        >
+        <Badge variant="secondary" className="bg-warning/10 text-warning">
           {t('diary.caffeine.sleepImpactModerate', 'Moderate sleep impact')}
         </Badge>
       );
@@ -277,7 +266,7 @@ export const CaffeineCard = ({ date, userId }: CaffeineCardProps) => {
     <Card className="overflow-hidden">
       <CardHeader className="pb-3 flex flex-row items-center justify-between space-y-0">
         <div className="flex items-center space-x-2">
-          <Coffee className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+          <Coffee className="w-5 h-5 text-warning" />
           <CardTitle className="text-base font-medium">
             {t('diary.caffeine.activeCaffeine', 'Active Caffeine')}
           </CardTitle>
@@ -285,7 +274,7 @@ export const CaffeineCard = ({ date, userId }: CaffeineCardProps) => {
         {has_estimated_times && (
           <Badge
             variant="outline"
-            className="text-[11px] text-muted-foreground flex items-center gap-1"
+            className="text-xs text-muted-foreground flex items-center gap-1"
           >
             <Info className="w-3 h-3" />
             {t('diary.caffeine.estimatedTimes', 'Estimated times')}
@@ -294,19 +283,19 @@ export const CaffeineCard = ({ date, userId }: CaffeineCardProps) => {
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Main Stats Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <div className="divide-y divide-border">
           {/* Active Now */}
-          <div className="flex flex-col p-3 rounded-lg bg-amber-50/50 dark:bg-amber-950/20 border border-amber-200/50 dark:border-amber-900/40">
+          <div className="flex flex-wrap items-baseline justify-between gap-2 py-3">
             <span className="text-xs text-muted-foreground">
               {t('diary.caffeine.activeNow', 'Active Now')}
             </span>
             <div className="flex items-baseline gap-1 mt-1">
-              <span className="text-2xl font-bold text-amber-700 dark:text-amber-300">
+              <span className="text-xl font-numeral font-bold text-warning">
                 {Math.round(currentActiveMg)}
               </span>
               <span className="text-xs text-muted-foreground">mg</span>
             </div>
-            <span className="text-[10px] text-muted-foreground mt-0.5">
+            <span className="text-xs text-muted-foreground mt-0.5">
               {t('diary.caffeine.halfLifeLabel', '{{hours}}h half-life', {
                 hours: half_life_hours,
               })}
@@ -314,15 +303,15 @@ export const CaffeineCard = ({ date, userId }: CaffeineCardProps) => {
           </div>
 
           {/* At Bedtime */}
-          <div className="flex flex-col p-3 rounded-lg bg-muted/40 border">
+          <div className="flex flex-wrap items-baseline justify-between gap-2 py-3">
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground flex items-center gap-1">
-                <Moon className="w-3 h-3 text-indigo-500" />
+                <Moon className="w-3 h-3 text-primary" />
                 {t('diary.caffeine.atBedtime', 'At Bedtime')} ({target_bedtime})
               </span>
             </div>
             <div className="flex items-baseline gap-1 mt-1">
-              <span className="text-2xl font-bold">
+              <span className="text-xl font-numeral font-bold">
                 {Math.round(at_bedtime_mg)}
               </span>
               <span className="text-xs text-muted-foreground">mg</span>
@@ -331,22 +320,22 @@ export const CaffeineCard = ({ date, userId }: CaffeineCardProps) => {
           </div>
 
           {/* Bedtime Cutoff */}
-          <div className="flex flex-col p-3 rounded-lg bg-muted/40 border col-span-2 sm:col-span-1">
+          <div className="flex flex-wrap items-baseline justify-between gap-2 py-3">
             <span className="text-xs text-muted-foreground flex items-center gap-1">
-              <Clock className="w-3 h-3 text-emerald-500" />
+              <Clock className="w-3 h-3 text-success" />
               {t('diary.caffeine.bedtimeCutoff', 'Last Coffee By')}
             </span>
             <div className="mt-1">
               {cutoff_state === 'by' && latest_safe_dose_time ? (
-                <span className="text-xl font-bold text-emerald-600 dark:text-emerald-400">
+                <span className="text-xl font-numeral font-bold text-success">
                   {latest_safe_dose_time}
                 </span>
               ) : cutoff_state === 'passed' ? (
-                <span className="text-sm font-medium text-amber-600 dark:text-amber-400">
+                <span className="text-sm font-medium text-warning">
                   {t('diary.caffeine.cutoffPassed', 'Too late for another')}
                 </span>
               ) : cutoff_state === 'over' ? (
-                <span className="text-sm font-medium text-red-600 dark:text-red-400">
+                <span className="text-sm font-medium text-destructive">
                   {t('diary.caffeine.cutoffOver', 'Already over for tonight')}
                 </span>
               ) : (
@@ -355,7 +344,7 @@ export const CaffeineCard = ({ date, userId }: CaffeineCardProps) => {
                 </span>
               )}
             </div>
-            <span className="text-[10px] text-muted-foreground mt-0.5">
+            <span className="text-xs text-muted-foreground mt-0.5">
               {cutoff_state === 'over'
                 ? t('diary.caffeine.cutoffOverDesc', {
                     defaultValue: 'Already past {{threshold}}mg at bedtime',
@@ -380,13 +369,21 @@ export const CaffeineCard = ({ date, userId }: CaffeineCardProps) => {
             >
               <defs>
                 <linearGradient id="caffeineFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#d97706" stopOpacity={0.35} />
-                  <stop offset="100%" stopColor="#d97706" stopOpacity={0.02} />
+                  <stop
+                    offset="0%"
+                    stopColor="hsl(var(--warning))"
+                    stopOpacity={0.35}
+                  />
+                  <stop
+                    offset="100%"
+                    stopColor="hsl(var(--warning))"
+                    stopOpacity={0.02}
+                  />
                 </linearGradient>
               </defs>
               <CartesianGrid
                 strokeDasharray="3 3"
-                stroke={isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)'}
+                stroke={trendChartTheme.grid.stroke}
                 vertical={false}
               />
               <XAxis
@@ -400,23 +397,18 @@ export const CaffeineCard = ({ date, userId }: CaffeineCardProps) => {
                 }
                 ticks={ticks}
                 tickFormatter={clockLabel}
-                stroke={isDark ? '#888' : '#666'}
+                stroke={trendChartTheme.axis.fill}
                 fontSize={11}
                 minTickGap={30}
               />
               <YAxis
                 domain={[0, Math.ceil(yMax)]}
-                stroke={isDark ? '#888' : '#666'}
+                stroke={trendChartTheme.axis.fill}
                 fontSize={11}
                 width={38}
               />
               <Tooltip
-                contentStyle={{
-                  backgroundColor: isDark ? '#1e1e1e' : '#fff',
-                  border: `1px solid ${isDark ? '#333' : '#ddd'}`,
-                  borderRadius: 8,
-                  fontSize: 12,
-                }}
+                contentStyle={trendChartTheme.tooltip}
                 labelFormatter={(value) => clockLabel(Number(value))}
                 formatter={(
                   value:
@@ -429,7 +421,7 @@ export const CaffeineCard = ({ date, userId }: CaffeineCardProps) => {
               <Area
                 type="monotone"
                 dataKey="mg"
-                stroke="#d97706"
+                stroke="hsl(var(--warning))"
                 strokeWidth={2}
                 fill="url(#caffeineFill)"
                 isAnimationActive={false}
@@ -437,18 +429,18 @@ export const CaffeineCard = ({ date, userId }: CaffeineCardProps) => {
               />
               <ReferenceLine
                 y={threshold_mg}
-                stroke={isDark ? '#f87171' : '#dc2626'}
+                stroke={'hsl(var(--destructive))'}
                 strokeDasharray="4 4"
               />
               <ReferenceLine
                 x={bedtimeMs}
-                stroke={isDark ? '#818cf8' : '#6366f1'}
+                stroke={'hsl(var(--primary))'}
                 strokeDasharray="2 4"
               />
               {nowIsInWindow && (
                 <ReferenceLine
                   x={nowMs}
-                  stroke={isDark ? '#94a3b8' : '#475569'}
+                  stroke={'hsl(var(--muted-foreground))'}
                   strokeWidth={1}
                 />
               )}
@@ -458,7 +450,7 @@ export const CaffeineCard = ({ date, userId }: CaffeineCardProps) => {
               {cutoffInWindow && cutoffMs !== null && (
                 <ReferenceLine
                   x={cutoffMs}
-                  stroke={isDark ? '#34d399' : '#059669'}
+                  stroke={'hsl(var(--success))'}
                   strokeDasharray="3 3"
                   ifOverflow="hidden"
                 />
@@ -483,8 +475,12 @@ export const CaffeineCard = ({ date, userId }: CaffeineCardProps) => {
                       x={doseMs}
                       y={activeCaffeineAt(doses, doseMs, half_life_hours)}
                       r={4}
-                      fill={dose.is_estimated ? 'transparent' : '#d97706'}
-                      stroke="#d97706"
+                      fill={
+                        dose.is_estimated
+                          ? 'transparent'
+                          : 'hsl(var(--warning))'
+                      }
+                      stroke="hsl(var(--warning))"
                       strokeWidth={dose.is_estimated ? 1.5 : 1}
                       strokeDasharray={dose.is_estimated ? '2 2' : '0'}
                       ifOverflow="hidden"
@@ -496,32 +492,32 @@ export const CaffeineCard = ({ date, userId }: CaffeineCardProps) => {
           {/* Every mark on the plot is named here rather than labelled in
               place: in-plot labels were clipped by the top margin, and the
               "now" line had no label at all. */}
-          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground pt-1">
+          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-xs text-muted-foreground pt-1">
             <span className="flex items-center gap-1">
-              <span className="h-[2px] w-4 rounded bg-amber-600" />
+              <span className="h-[2px] w-4 rounded bg-warning/10" />
               {t('diary.caffeine.legendCurve', 'Active caffeine')}
             </span>
             <span className="flex items-center gap-1">
-              <span className="h-0 w-4 border-t-2 border-dashed border-red-600 dark:border-red-400" />
+              <span className="h-0 w-4 border-t-2 border-dashed border-destructive/30" />
               {t('diary.caffeine.legendThreshold', {
                 defaultValue: '{{threshold}}mg sleep threshold',
                 threshold: threshold_mg,
               })}
             </span>
             <span className="flex items-center gap-1">
-              <span className="h-3 w-0 border-l-2 border-dashed border-indigo-500 dark:border-indigo-400" />
+              <span className="h-3 w-0 border-l-2 border-dashed border-primary/30" />
               {t('diary.caffeine.legendBedtime', {
                 defaultValue: 'Bedtime {{time}}',
                 time: target_bedtime,
               })}
             </span>
             <span className="flex items-center gap-1">
-              <span className="h-3 w-0 border-l-2 border-slate-600 dark:border-slate-400" />
+              <span className="h-3 w-0 border-l-2 border-border" />
               {t('diary.caffeine.legendNow', 'Now')}
             </span>
             {cutoffInWindow && cutoffMs !== null && (
               <span className="flex items-center gap-1">
-                <span className="h-3 w-0 border-l-2 border-dashed border-emerald-600 dark:border-emerald-400" />
+                <span className="h-3 w-0 border-l-2 border-dashed border-success/30" />
                 {t('diary.caffeine.legendCutoff', {
                   defaultValue: 'Last {{dose}}mg dose {{time}}',
                   dose: Math.round(cutoff_dose_mg),
@@ -530,18 +526,18 @@ export const CaffeineCard = ({ date, userId }: CaffeineCardProps) => {
               </span>
             )}
             <span className="flex items-center gap-1">
-              <span className="h-2 w-2 rounded-full bg-amber-600" />
+              <span className="h-2 w-2 rounded-full bg-warning/10" />
               {t('diary.caffeine.legendDose', 'Logged dose')}
             </span>
             {has_estimated_times && (
               <span className="flex items-center gap-1">
-                <span className="h-2 w-2 rounded-full border border-dashed border-amber-600" />
+                <span className="h-2 w-2 rounded-full border border-dashed border-warning/30" />
                 {t('diary.caffeine.legendEstimated', 'Assumed time')}
               </span>
             )}
           </div>
 
-          <p className="text-[11px] text-muted-foreground text-center">
+          <p className="text-xs text-muted-foreground text-center">
             {crossingAt
               ? t('diary.caffeine.crossingNote', {
                   defaultValue: 'Back under {{threshold}}mg from {{time}}',
@@ -564,11 +560,11 @@ export const CaffeineCard = ({ date, userId }: CaffeineCardProps) => {
             {doses.map((dose, idx) => (
               <div
                 key={`${dose.at}-${idx}`}
-                className="text-xs px-2 py-1 rounded bg-muted flex items-center gap-1.5"
+                className="text-xs px-3 py-1.5 rounded-full border flex items-center gap-1.5"
               >
                 <span className="font-medium">{dose.name || 'Dose'}:</span>
                 <span>{dose.mg}mg</span>
-                <span className="text-[10px] text-muted-foreground">
+                <span className="text-xs text-muted-foreground">
                   (
                   {new Date(dose.at).toLocaleTimeString([], {
                     hour: '2-digit',

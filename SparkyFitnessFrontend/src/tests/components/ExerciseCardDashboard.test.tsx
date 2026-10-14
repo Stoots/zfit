@@ -96,8 +96,10 @@ const makePlan = (
 const programLinkedTo = (planId: string): TrainingProgram =>
   ({
     id: 'program-1',
+    name: 'Strength block',
     phases: [
       {
+        name: 'Foundation',
         weeks: [
           {
             sessions: [
@@ -118,11 +120,14 @@ const programLinkedTo = (planId: string): TrainingProgram =>
     ],
   }) as unknown as TrainingProgram;
 
-const renderCard = () =>
+const renderCard = (selectedDate = '2026-10-12') =>
   render(
     <QueryClientProvider client={new QueryClient()}>
       <MemoryRouter>
-        <ExerciseCard selectedDate="2026-10-12" onExercisesLogged={jest.fn()} />
+        <ExerciseCard
+          selectedDate={selectedDate}
+          onExercisesLogged={jest.fn()}
+        />
       </MemoryRouter>
     </QueryClientProvider>
   );
@@ -145,11 +150,23 @@ describe('ExerciseCard dashboard plans', () => {
     renderCard();
 
     expect(screen.getByText('Push')).toBeInTheDocument();
+    expect(screen.getByText("Today's session")).toBeInTheDocument();
+    expect(
+      screen.getByText('Strength block · Foundation · Week 1 · 2026-10-12')
+    ).toBeInTheDocument();
     expect(screen.getByText('Sequential plan: Program plan')).toBeVisible();
     expect(screen.queryByRole('button', { name: 'Push' })).toBeNull();
     expect(
       screen.getByRole('button', { name: /^Start Workout: Push/ })
     ).toBeInTheDocument();
+  });
+
+  it('labels a future Program workout as the next session', () => {
+    mockState.plans = [makePlan('7', 'Program plan', ['Push', 'Pull'])];
+    mockState.programs = { data: [programLinkedTo('7')], isError: false };
+    renderCard('2026-10-11');
+    expect(screen.getByText('Next session')).toBeInTheDocument();
+    expect(screen.queryByText("Today's session")).not.toBeInTheDocument();
   });
 
   it('offers a session picker for a standalone multi-session plan', () => {

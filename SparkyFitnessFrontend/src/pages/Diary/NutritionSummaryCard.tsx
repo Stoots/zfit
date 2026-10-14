@@ -108,18 +108,22 @@ const NutritionSummaryCard = ({
   return (
     <Card className="h-full">
       <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg dark:text-slate-300">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <CardTitle className="text-lg">
             {t('diary.nutritionSummary', 'Nutrition Summary')}
           </CardTitle>
           <div className="flex items-center gap-2">
             <Button
+              variant="ghost"
+              size="icon"
               onClick={() => setIsCopyDialogOpen(true)}
               title={t('diary.copyAllToDate', 'Copy entire day to date')}
             >
               <ClipboardCopy className="h-4 w-4" />
             </Button>
             <Button
+              variant="ghost"
+              size="icon"
               onClick={handleCopyAllFromYesterday}
               title={t('diary.copyAllFromYesterday', 'Copy all from yesterday')}
             >
@@ -130,12 +134,7 @@ const NutritionSummaryCard = ({
         </div>
       </CardHeader>
       <CardContent className="pb-4">
-        <div
-          className="grid gap-x-4 gap-y-6"
-          style={{
-            gridTemplateColumns: `repeat(auto-fit, minmax(${isMobile ? '80px' : '120px'}, 1fr))`,
-          }}
-        >
+        <div className="divide-y divide-border">
           {visibleNutrients.map((nutrient) => {
             const metadata = getNutrientMetadata(
               nutrient,
@@ -199,16 +198,20 @@ const NutritionSummaryCard = ({
               metadata.targetMax !== undefined;
 
             const colorClass = isOverLimit
-              ? 'text-red-600'
+              ? 'text-destructive'
               : isTargetType && !inTargetRange
-                ? 'text-amber-600'
-                : metadata.color;
+                ? 'text-warning'
+                : 'text-foreground';
 
             const barColor = isOverLimit
-              ? '#ef4444' // red-500
+              ? 'hsl(var(--destructive))'
               : isTargetType && !inTargetRange
-                ? '#f59e0b' // amber-500
-                : metadata.chartColor;
+                ? 'hsl(var(--warning))'
+                : nutrient === 'protein' ||
+                    nutrient === 'carbs' ||
+                    nutrient === 'fat'
+                  ? `var(--${nutrient})`
+                  : 'hsl(var(--nutrition))';
 
             const targetMinVal =
               nutrient === 'calories' && metadata.targetMin !== undefined
@@ -238,28 +241,26 @@ const NutritionSummaryCard = ({
               (isTargetType && inTargetRange);
 
             return (
-              <div key={nutrient} className="text-center">
+              <div
+                key={nutrient}
+                className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-1 py-3"
+              >
+                <div className="row-span-2 text-sm">{label}</div>
                 <div
-                  className={`text-lg sm:text-xl font-bold ${colorClass} flex items-center justify-center gap-1`}
+                  className={`text-base font-semibold tabular-nums ${colorClass} flex items-center justify-end gap-1`}
                 >
                   {displayTotal}
                   {unit}
                   {showCheck && (
-                    <CheckCircle2 className="h-4 w-4 text-green-600" />
+                    <CheckCircle2 className="h-4 w-4 text-success" />
                   )}
                 </div>
-                <div className="text-xs text-gray-500 leading-tight">
+                <div className="text-xs text-muted-foreground text-right leading-tight">
                   {subLine}
                 </div>
-                <div
-                  className="text-xs text-gray-500 truncate w-full"
-                  title={label}
-                >
-                  {label}
-                </div>
-                <div className="w-full bg-gray-200 rounded-full h-1.5 mt-1">
+                <div className="col-span-2 w-full bg-muted rounded-full h-0.5 mt-1">
                   <div
-                    className="h-1.5 rounded-full"
+                    className="h-0.5 rounded-full"
                     style={{
                       width: `${percentage}%`,
                       backgroundColor: barColor,
@@ -272,6 +273,7 @@ const NutritionSummaryCard = ({
         </div>
         <MiniNutritionTrends
           selectedDate={selectedDate}
+          goals={goals}
           customNutrients={customNutrients}
         />
       </CardContent>
