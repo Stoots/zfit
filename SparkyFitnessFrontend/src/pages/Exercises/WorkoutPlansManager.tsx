@@ -221,13 +221,14 @@ const WorkoutPlansManager = () => {
       {
         accessorKey: 'schedule_type',
         header: t('workoutPlansManager.scheduleType', 'Mode'),
+        meta: { colSpan: 2 },
         cell: ({ row }) => {
           const plan = row.original;
           const isSequential = plan.schedule_type === 'sequential';
           return (
             <Badge
               variant="outline"
-              className="font-normal text-[10px] gap-1 py-0.5"
+              className="font-normal text-xs gap-1 py-0.5"
             >
               {isSequential ? (
                 <>
@@ -255,12 +256,14 @@ const WorkoutPlansManager = () => {
       {
         accessorKey: 'is_active',
         header: t('workoutPlansManager.status', 'Status'),
+        meta: { colSpan: 2 },
         cell: ({ row }) => {
           const plan = row.original;
           return (
-            <Badge
-              variant={plan.is_active ? 'default' : 'secondary'}
-              className="font-normal text-[10px] cursor-pointer hover:opacity-80 transition-opacity"
+            <Button
+              variant={plan.is_active ? 'secondary' : 'ghost'}
+              className="min-h-11 text-sm font-normal"
+              aria-pressed={plan.is_active}
               onClick={(e) => {
                 e.stopPropagation();
                 handleTogglePlanActive(plan.id, !plan.is_active);
@@ -269,7 +272,7 @@ const WorkoutPlansManager = () => {
               {plan.is_active
                 ? t('workoutPlansManager.activeStatus')
                 : t('workoutPlansManager.inactiveStatus')}
-            </Badge>
+            </Button>
           );
         },
       },
@@ -279,7 +282,7 @@ const WorkoutPlansManager = () => {
         cell: ({ row }) => {
           const plan = row.original;
           return (
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-1.5 text-sm text-muted-foreground">
               <CalendarDays className="h-3 w-3" />
               <span>{new Date(plan.start_date!).toLocaleDateString()}</span>
               <span>-</span>
@@ -291,7 +294,7 @@ const WorkoutPlansManager = () => {
             </div>
           );
         },
-        meta: { colSpan: 2 },
+        meta: { colSpan: 4 },
       },
       {
         id: 'actions',
@@ -301,7 +304,7 @@ const WorkoutPlansManager = () => {
           return (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="h-8 w-8 p-0">
+                <Button variant="ghost" className="h-11 w-11 p-0">
                   <span className="sr-only">Open menu</span>
                   <MoreHorizontal className="h-4 w-4" />
                 </Button>
@@ -358,9 +361,9 @@ const WorkoutPlansManager = () => {
   return (
     <div className="space-y-6">
       {activePlan && activePlan.next_session && (
-        <div className="p-4 rounded-xl border border-primary/30 bg-primary/5 flex items-center justify-between shadow-xs">
+        <div className="min-w-0 rounded-lg border bg-card p-4">
           <div className="space-y-1">
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               <Badge variant="default" className="text-xs font-semibold gap-1">
                 {activePlan.schedule_type === 'sequential' ? (
                   <>
@@ -407,7 +410,7 @@ const WorkoutPlansManager = () => {
       )}
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-3 space-y-0 px-4 pb-4 sm:px-6">
           <CardTitle className="text-xl sm:text-2xl font-bold tracking-tight">
             {t(
               'exercise.databaseManager.workoutPlansCardTitle',
@@ -421,7 +424,7 @@ const WorkoutPlansManager = () => {
               onClick={toggleEditMode}
               className={`shrink-0 ${
                 isEditMode
-                  ? 'bg-blue-50 border-blue-200 text-blue-600 dark:bg-blue-900/30 dark:border-blue-800 dark:text-blue-400'
+                  ? 'bg-accent border-primary text-accent-foreground'
                   : ''
               }`}
               title={
@@ -457,9 +460,9 @@ const WorkoutPlansManager = () => {
             </Button>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="min-w-0 px-4 sm:px-6">
           {plans.length === 0 ? (
-            <p className="text-center text-gray-400 py-10 italic">
+            <p className="py-10 text-muted-foreground">
               {t(
                 'workoutPlansManager.noPlansFound',
                 'No workout plans found. Create one to get started!'

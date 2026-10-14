@@ -1,5 +1,8 @@
 {
   "trainingPrograms": {
+    "weekProgress": "Week {{current}} of {{total}}",
+    "currentProgram": "Current program",
+    "schedule": "Schedule",
     "optional": "Optional",
     "optionalHelp": "Unfinished optional sessions become Omitted after their scheduled day, without moving required workouts.",
     "omittedAfterDay": "Automatically omitted after its effective scheduled day in your timezone.",

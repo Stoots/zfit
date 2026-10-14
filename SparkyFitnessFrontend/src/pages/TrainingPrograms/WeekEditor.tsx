@@ -39,7 +39,7 @@ export default function WeekEditor({
   const isRecorded = (session: SessionDraft) =>
     !!session.id && recordedIds.has(session.id);
   return (
-    <fieldset className="min-w-0 space-y-4 rounded-md bg-muted/30 p-4">
+    <fieldset className="min-w-0 space-y-4 border-t py-4 sm:pl-5">
       <legend className="font-semibold">
         {t('trainingPrograms.weekNumber', {
           number: w + 1,
@@ -54,8 +54,8 @@ export default function WeekEditor({
         onRemove={onRemove}
         preserveHistory={week.sessions.some(isRecorded)}
       />
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div>
+      <div className="min-w-0">
+        <div className="min-w-0 grid gap-2 border-b py-3 sm:grid-cols-[10rem_minmax(0,1fr)] sm:items-start sm:gap-4">
           <Label htmlFor={`week-${p}-${w}-start`}>
             {t('trainingPrograms.weekStart', 'Week start date')}
           </Label>
@@ -73,7 +73,7 @@ export default function WeekEditor({
             }
           />
         </div>
-        <div>
+        <div className="min-w-0 grid gap-2 border-b py-3 sm:grid-cols-[10rem_minmax(0,1fr)] sm:items-start sm:gap-4">
           <Label htmlFor={`week-${p}-${w}-end`}>
             {t('trainingPrograms.weekEnd', 'Week end date')}
           </Label>

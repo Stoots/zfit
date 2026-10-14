@@ -17,6 +17,8 @@ import type {
   ExerciseSessionResponse,
 } from '@workspace/shared';
 import { trainingProgramSchema } from '@workspace/shared';
+import ProgramSchedule from '@/pages/TrainingPrograms/ProgramSchedule';
+import { programProgress } from '@/pages/TrainingPrograms/programProgress';
 import TrainingPrograms from '@/pages/TrainingPrograms/TrainingPrograms';
 import * as api from '@/api/TrainingPrograms/trainingPrograms';
 import { getWorkoutPlanTemplates } from '@/api/Exercises/workoutPlanTemplates';
@@ -34,6 +36,9 @@ jest.mock('@/api/Exercises/exerciseService');
 jest.mock('@/i18n', () => ({
   __esModule: true,
   default: { t: (key: string, fallback?: string) => fallback || key },
+}));
+jest.mock('@/contexts/PreferencesContext', () => ({
+  usePreferences: () => ({ timezone: 'Australia/Sydney' }),
 }));
 const mockActor = { delegated: false };
 jest.mock('@/hooks/useAuth', () => ({
@@ -823,4 +828,110 @@ it('does not offer a missed outcome for a planned optional session', async () =>
   expect(
     within(sessionRow('Strength')).getByRole('button', { name: 'Mark missed' })
   ).toBeInTheDocument();
+});
+
+it('counts calendar weeks through shifted schedule dates without advancing future programs', () => {
+  const program = serverResponse({
+    name: 'Summer',
+    goal: 'Train',
+    start_date: '2026-10-01',
+    end_date: '2026-10-14',
+    phases: [],
+  });
+  expect(programProgress(program, '2026-09-30')).toEqual({
+    current: 0,
+    total: 2,
+    active: false,
+  });
+  expect(programProgress(program, '2026-10-08')).toEqual({
+    current: 2,
+    total: 2,
+    active: true,
+  });
+  expect(programProgress(program, '2026-10-15')).toEqual({
+    current: 2,
+    total: 2,
+    active: false,
+  });
+  program.schedule_end_date = '2026-10-16';
+  expect(programProgress(program, '2026-10-15')).toEqual({
+    current: 3,
+    total: 3,
+    active: true,
+  });
+});
+
+it('places shifted sessions on effective calendar days and links each exact session', () => {
+  const program = serverResponse({
+    name: 'Summer',
+    goal: 'Train',
+    start_date: '2026-10-01',
+    end_date: '2026-10-07',
+    phases: [
+      {
+        name: 'Build',
+        goal: 'Train',
+        weeks: [
+          {
+            start_date: '2026-10-01',
+            end_date: '2026-10-07',
+            sessions: [
+              {
+                name: 'Run',
+                scheduled_date: '2026-10-07',
+                workout_session_id: workoutSessionId,
+              },
+              {
+                name: 'Lift',
+                scheduled_date: '2026-10-07',
+                workout_session_id: laterWorkoutSessionId,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+  program.schedule_end_date = '2026-10-08';
+  const [run, lift] = program.phases[0]!.weeks[0]!.sessions;
+  run!.effective_date = '2026-10-08';
+  lift!.status = 'completed';
+  render(
+    <I18nextProvider i18n={i18n}>
+      <ProgramSchedule program={program} today="2026-10-08" />
+    </I18nextProvider>
+  );
+  const link = screen.getByText(/Run ·/).closest('a')!;
+  expect(link).toHaveAttribute('href', `#program-session-${run!.id}`);
+  const cell = link.closest('[aria-current="date"]')!;
+  expect(cell.querySelector('time')).toHaveAttribute('dateTime', '2026-10-08');
+  expect(screen.getByText('Completed')).toBeInTheDocument();
+  expect(screen.getByText('Week 2')).toBeInTheDocument();
+});
+
+it('places a current program before inactive programs without mutating the query list', async () => {
+  const past = serverResponse({
+    name: 'Past block',
+    goal: 'Train',
+    start_date: '2000-01-01',
+    end_date: '2000-01-14',
+    phases: [],
+  });
+  const active = serverResponse({
+    name: 'Current block',
+    goal: 'Train',
+    start_date: '2020-01-01',
+    end_date: '2099-01-14',
+    phases: [],
+  });
+  const programs = [past, active];
+  jest.mocked(api.getTrainingPrograms).mockResolvedValue(programs);
+  mount();
+  await screen.findByRole('link', { name: 'View Current block' });
+  expect(
+    screen
+      .getAllByRole('link', { name: /^View / })
+      .map((link) => link.getAttribute('aria-label'))
+  ).toEqual(['View Current block', 'View Past block']);
+  expect(programs).toEqual([past, active]);
 });
