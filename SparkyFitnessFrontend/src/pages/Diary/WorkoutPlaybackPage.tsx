@@ -192,6 +192,7 @@ const WorkoutPlaybackPage = () => {
   );
   const draftRef = useRef<WorkoutPlaybackDraft | null>(draft);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [completionConflict, setCompletionConflict] = useState(false);
   const [elapsedTickMs, setElapsedTickMs] = useState(() => Date.now());
   const [setNotesVisibility, setSetNotesVisibility] = useState<
     Record<string, boolean>
@@ -1020,84 +1021,110 @@ const WorkoutPlaybackPage = () => {
     navigate(returnPath);
   }, [draft, navigate, returnPath]);
 
-  const handleFinishWorkout = useCallback(async () => {
-    if (!draft || finishInFlight.current) return;
+  const handleFinishWorkout = useCallback(
+    async (saveSeparately = false) => {
+      if (
+        !draft ||
+        finishInFlight.current ||
+        (completionConflict && !saveSeparately)
+      )
+        return;
 
-    const payload = buildPresetSessionCreateRequestFromDraft(draft, timezone);
-    if (!payload.exercises || payload.exercises.length === 0) {
-      setSaveError(
-        t(
-          'exercise.workoutPlaybackDialog.completeAtLeastOneSet',
-          'Complete at least one set before finishing.'
-        )
-      );
-      return;
-    }
+      const payload = buildPresetSessionCreateRequestFromDraft(draft, timezone);
+      if (!payload.exercises || payload.exercises.length === 0) {
+        setSaveError(
+          t(
+            'exercise.workoutPlaybackDialog.completeAtLeastOneSet',
+            'Complete at least one set before finishing.'
+          )
+        );
+        return;
+      }
 
-    finishInFlight.current = true;
-    try {
-      const program = draft.training_program;
-      const savedProgram = program
-        ? await completeProgramSession.mutateAsync({
-            programId: program.program_id,
-            sessionId: program.session_id,
-            input: {
-              entry_date: draft.entry_date,
-              performed_exercises: payload.exercises,
-            },
-          })
-        : null;
-      const saved = program ? null : await createPresetSession(payload);
-      const programWorkout = savedProgram?.phases
-        .flatMap((phase) => phase.weeks)
-        .flatMap((week) => week.sessions)
-        .find(
-          (session) => session.id === program?.session_id
-        )?.completed_workout;
-      const diary = programWorkout
-        ? await getGroupedWorkoutSession(programWorkout.id).catch(() => null)
-        : saved;
-      const finalStats = getWorkoutPlaybackStats(draft);
-      clearWorkoutPlaybackDraftFromStorage(draft.entry_date);
-      // The summary stays up over the cleared player; closing it returns to
-      // the diary the way finishing always has.
-      setFinishSummary({
-        name: draft.name,
-        durationSeconds: elapsedSeconds,
-        caloriesKcal: (diary?.exercises ?? []).reduce(
-          (sum, exercise) => sum + (Number(exercise.calories_burned) || 0),
-          0
-        ),
-        completedSets: finalStats.completedSets,
-        totalSets: finalStats.totalSets,
-        volume: totalVolume,
-        sessionId: diary?.id ?? programWorkout?.id,
-        exercises: (diary?.exercises ?? []).map((exercise) => ({
-          id: exercise.id,
-          name: exercise.exercise_snapshot?.name ?? '',
-        })),
-      });
-      setDraft(null);
-      setSaveError(null);
-    } catch {
-      setSaveError(
-        t(
-          'exercise.workoutPlaybackDialog.finishError',
-          'Failed to save workout. Your local progress is still preserved, and you can retry.'
-        )
-      );
-    } finally {
-      finishInFlight.current = false;
-    }
-  }, [
-    completeProgramSession,
-    createPresetSession,
-    draft,
-    elapsedSeconds,
-    t,
-    timezone,
-    totalVolume,
-  ]);
+      finishInFlight.current = true;
+      try {
+        const program = saveSeparately ? null : draft.training_program;
+        const savedProgram = program
+          ? await completeProgramSession.mutateAsync({
+              programId: program.program_id,
+              sessionId: program.session_id,
+              input: {
+                entry_date: draft.entry_date,
+                performed_exercises: payload.exercises,
+              },
+            })
+          : null;
+        const saved = program ? null : await createPresetSession(payload);
+        const programWorkout = savedProgram?.phases
+          .flatMap((phase) => phase.weeks)
+          .flatMap((week) => week.sessions)
+          .find(
+            (session) => session.id === program?.session_id
+          )?.completed_workout;
+        const diary = programWorkout
+          ? await getGroupedWorkoutSession(programWorkout.id).catch(() => null)
+          : saved;
+        const finalStats = getWorkoutPlaybackStats(draft);
+        clearWorkoutPlaybackDraftFromStorage(draft.entry_date);
+        // The summary stays up over the cleared player; closing it returns to
+        // the diary the way finishing always has.
+        setFinishSummary({
+          name: draft.name,
+          durationSeconds: elapsedSeconds,
+          caloriesKcal: (diary?.exercises ?? []).reduce(
+            (sum, exercise) => sum + (Number(exercise.calories_burned) || 0),
+            0
+          ),
+          completedSets: finalStats.completedSets,
+          totalSets: finalStats.totalSets,
+          volume: totalVolume,
+          sessionId: diary?.id ?? programWorkout?.id,
+          exercises: (diary?.exercises ?? []).map((exercise) => ({
+            id: exercise.id,
+            name: exercise.exercise_snapshot?.name ?? '',
+          })),
+        });
+        setDraft(null);
+        setSaveError(null);
+      } catch (error) {
+        if (
+          error &&
+          typeof error === 'object' &&
+          'status' in error &&
+          error.status === 409 &&
+          'code' in error &&
+          error.code === 'PROGRAM_COMPLETION_CONFLICT'
+        ) {
+          setCompletionConflict(true);
+          setSaveError(
+            t(
+              'exercise.workoutPlaybackDialog.completionConflict',
+              'This Planned Session was already completed with a different workout. Save your performed sets as a separate workout or Discard this draft.'
+            )
+          );
+        } else {
+          setSaveError(
+            t(
+              'exercise.workoutPlaybackDialog.finishError',
+              'Failed to save workout. Your local progress is still preserved, and you can retry.'
+            )
+          );
+        }
+      } finally {
+        finishInFlight.current = false;
+      }
+    },
+    [
+      completeProgramSession,
+      completionConflict,
+      createPresetSession,
+      draft,
+      elapsedSeconds,
+      t,
+      timezone,
+      totalVolume,
+    ]
+  );
 
   const handleCloseFinishSummary = useCallback(() => {
     setFinishSummary(null);
@@ -1165,11 +1192,13 @@ const WorkoutPlaybackPage = () => {
         restRemaining={restRemaining}
         isRestActive={!!isRestActive}
         saveError={saveError}
+        completionConflict={completionConflict}
         isSaving={isSaving}
         timezone={timezone}
         onCloseKeepDraft={handleCloseKeepDraft}
         onDiscard={handleDiscard}
-        onFinishWorkout={handleFinishWorkout}
+        onFinishWorkout={() => void handleFinishWorkout()}
+        onSaveSeparate={() => void handleFinishWorkout(true)}
         onPauseResumeRest={handlePauseResumeRest}
         onSkipRest={handleSkipRest}
         onSessionNotesChange={handleSessionNotesChange}

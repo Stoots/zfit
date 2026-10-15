@@ -21,6 +21,19 @@ export class HttpError extends Error {
   }
 }
 
+export class TrainingProgramCompletionConflict extends HttpError {
+  readonly code = 'PROGRAM_COMPLETION_CONFLICT';
+
+  constructor(
+    readonly completion: import('@workspace/shared').TrainingProgram
+  ) {
+    super(
+      'This Planned Session was already completed with a different workout.',
+      409
+    );
+  }
+}
+
 // A thrown value only has to be renderable, not an Error, and `error.message`
 // on its own is not always enough to diagnose one. Node's Happy Eyeballs
 // connector rejects with an `AggregateError` whose `message` is the empty

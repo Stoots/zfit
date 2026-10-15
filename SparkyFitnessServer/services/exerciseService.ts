@@ -2672,7 +2672,10 @@ async function logWorkoutPlanSession(
   entryDate: string,
   transactionClient?: PoolClient,
   assignmentIds?: ReadonlySet<number>,
-  performedExercises?: PresetSessionExerciseRequest[]
+  completion?: {
+    programSessionId: string;
+    performedExercises?: PresetSessionExerciseRequest[];
+  }
 ) {
   const client = transactionClient ?? (await getClient(userId, actingUserId));
   try {
@@ -2732,6 +2735,17 @@ async function logWorkoutPlanSession(
         workout_plan_assignment_id: assignment.id,
       }));
     });
+    const performedExercises = completion?.performedExercises;
+    if (
+      completion &&
+      !performedExercises &&
+      !exercises.some((exercise) => exercise.sets.length > 0)
+    ) {
+      throw createServiceError(
+        409,
+        'Sessions with no prescribed sets must link an existing workout.'
+      );
+    }
     // A player may submit only exercises from this frozen session. Match each
     // occurrence so repeated exercises cannot claim an unrelated assignment.
     const remaining = [...exercises];
@@ -2779,6 +2793,15 @@ async function logWorkoutPlanSession(
               assignments,
             },
           },
+          ...(completion
+            ? [
+                {
+                  provider_name: 'SparkyFitness',
+                  detail_type: 'training_program_completion',
+                  detail_data: { session_id: completion.programSessionId },
+                },
+              ]
+            : []),
         ],
       },
       client,

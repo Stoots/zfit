@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import WorkoutPlaybackPage from '@/pages/Diary/WorkoutPlaybackPage';
+import { HttpApiError } from '@/api/api';
 import type { WorkoutPreset } from '@/types/workout';
 import {
   buildPresetSessionCreateRequestFromDraft,
@@ -198,6 +199,56 @@ describe('WorkoutPlaybackPage', () => {
       expect(mockCompleteProgramSession).toHaveBeenCalledTimes(2)
     );
     expect(mockCreatePresetSession).not.toHaveBeenCalled();
+  });
+
+  it('keeps a conflicting Program draft and offers a separate unlinked save or discard', async () => {
+    const draft = createWorkoutPlaybackDraftFromPreset(
+      presetFixture,
+      '2026-04-27'
+    );
+    draft.training_program = {
+      program_id: 'program-1',
+      session_id: 'planned-1',
+    };
+    draft.exercises[0]!.workout_plan_assignment_id = 17;
+    mockLocationState = { returnTo: '/?date=2026-04-27', draft };
+    mockCompleteProgramSession.mockRejectedValue(
+      new HttpApiError(
+        'Already completed with a different workout',
+        409,
+        'PROGRAM_COMPLETION_CONFLICT'
+      )
+    );
+    mockCreatePresetSession.mockResolvedValue({
+      id: 'separate-1',
+      exercises: [],
+    });
+    render(<WorkoutPlaybackPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'Log set' }));
+    await waitFor(() =>
+      expect(loadWorkoutPlaybackDraftFromStorage('2026-04-27')).not.toBeNull()
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Finish Workout' }));
+    await waitFor(() =>
+      expect(
+        screen.getByText(/already completed with a different workout/i)
+      ).toBeInTheDocument()
+    );
+    expect(
+      screen.getByRole('button', { name: 'Save as a separate workout' })
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Discard' })).toBeInTheDocument();
+    expect(loadWorkoutPlaybackDraftFromStorage('2026-04-27')).not.toBeNull();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Save as a separate workout' })
+    );
+    await waitFor(() =>
+      expect(mockCreatePresetSession).toHaveBeenCalledTimes(1)
+    );
+    expect(mockCompleteProgramSession).toHaveBeenCalledTimes(1);
+    expect(mockCreatePresetSession.mock.calls[0]![0]).not.toHaveProperty(
+      'training_program'
+    );
   });
 
   it('keeps the standalone playback save path', async () => {

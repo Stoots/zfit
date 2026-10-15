@@ -1,4 +1,5 @@
 import express from 'express';
+import { TrainingProgramCompletionConflict } from '../utils/errors.js';
 import { authenticate } from '../middleware/authMiddleware.js';
 import onBehalfOfMiddleware from '../middleware/onBehalfOfMiddleware.js';
 import { requireSelfActor } from '../middleware/requireSelfMiddleware.js';
@@ -310,7 +311,7 @@ router.post('/:id/sessions/:sessionId/outcome', async (req, res, next) => {
  * /training-programs/{id}/sessions/{sessionId}/complete:
  *   post:
  *     summary: Atomically log the exact bound Workout Session and record completion
- *     description: Owner-only. Creates one grouped diary workout on entry_date and links it to the Planned Session in one transaction. A completed session returns its existing Program without another diary workout. Late optional completions are allowed; recorded misses remain final.
+ *     description: Owner-only. Creates one grouped diary workout on entry_date and links it to the Planned Session in one transaction. Identical player retries return the existing Program; conflicting performed sets return 409 with the existing completion. Zero-set prescriptions require explicit linking. Late optional completions are allowed; recorded misses remain final.
  *     tags: [Training Programs]
  *     parameters:
  *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
@@ -325,6 +326,7 @@ router.post('/:id/sessions/:sessionId/outcome', async (req, res, next) => {
  *             required: [entry_date]
  *             properties:
  *               entry_date: { type: string, format: date }
+ *               performed_exercises: { type: array, description: Performed exercises and sets from playback. }
  *     responses:
  *       200:
  *         description: Persisted Program with the completion and diary workout snapshot.
@@ -335,7 +337,7 @@ router.post('/:id/sessions/:sessionId/outcome', async (req, res, next) => {
  *       401: { description: Authentication required. }
  *       403: { description: Delegated context forbidden. }
  *       404: { description: Program, session or bound Workout Session not found or not owned. }
- *       409: { description: Session already has a different final outcome. }
+ *       409: { description: Session has a different completion, a final outcome, or no prescribed sets. A performed-set conflict includes the existing Program in completion. }
  */
 router.post('/:id/sessions/:sessionId/complete', async (req, res, next) => {
   try {
@@ -348,6 +350,14 @@ router.post('/:id/sessions/:sessionId/complete', async (req, res, next) => {
       )
     );
   } catch (error) {
+    if (error instanceof TrainingProgramCompletionConflict) {
+      res.status(409).json({
+        error: error.message,
+        code: error.code,
+        completion: error.completion,
+      });
+      return;
+    }
     next(error);
   }
 });
