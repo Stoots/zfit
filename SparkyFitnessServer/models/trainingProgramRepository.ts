@@ -777,6 +777,11 @@ export async function completeTrainingProgramSession(
       !(session.status === 'omitted' && session.is_optional)
     )
       throw new HttpError('This session already has a recorded outcome.', 409);
+    if (!session.workout_session_id)
+      throw new HttpError(
+        'This Planned Session has no bound Workout Session.',
+        409
+      );
 
     const created = await logWorkoutPlanSession(
       userId,

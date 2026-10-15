@@ -1504,6 +1504,18 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
       expect(sessions(await reload())[0]!.status).toBe('planned');
     });
 
+    it('rejects direct workout completion of a Cardio Test session', async () => {
+      const edit = editable(program);
+      edit.phases[0]!.weeks[0]!.sessions[0]!.workout_session_id = null;
+      edit.phases[0]!.weeks[0]!.sessions[0]!.cardio_test_type = 'cooper_run';
+      const updated = await update(edit);
+      expect(updated.status).toBe(200);
+      program = trainingProgramSchema.parse(updated.body);
+      const result = await complete(sessions(program)[0]!.id);
+      expect(result.status).toBe(409);
+      expect(sessions(await reload())[0]!.status).toBe('planned');
+    });
+
     it('rejects performed exercises outside the bound session', async () => {
       const { session, assignmentId } = await completableSession();
       const otherExercise = await seedExercise('Unbound');
