@@ -11,16 +11,12 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import type {
   CooperRunAttempt,
   CooperRunAttemptInput,
-  CardioTestAttempt,
-  CardioTestAttemptInput,
 } from '@workspace/shared';
 import CooperRunTestsScreen from '../../src/screens/CooperRunTestsScreen';
 import { initializeI18n } from '../../src/localization/i18n';
 import {
   createCooperRunAttempt,
   updateCooperRunAttempt,
-  fetchProtocolAttempts,
-  saveProtocolAttempt,
 } from '../../src/services/api/cardioTestsApi';
 
 function deferred<T>() {
@@ -32,30 +28,8 @@ function deferred<T>() {
 }
 
 let mockRecords: CooperRunAttempt[] = [];
-let mockProtocolRecords: CardioTestAttempt[] = [];
-let mockServerId = 'server-one';
-jest.mock('../../src/hooks/useProfile', () => ({
-  useProfile: () => ({ profile: { id: 'user-one' } }),
-}));
-jest.mock('../../src/hooks/useServerConfigs', () => ({
-  useServerConfigs: () => ({ activeConfig: { id: mockServerId } }),
-}));
 
 jest.mock('../../src/services/api/cardioTestsApi', () => ({
-  fetchProtocolAttempts: jest.fn(async (protocol: string) =>
-    mockProtocolRecords.filter((attempt) => attempt.test_type === protocol)
-  ),
-  saveProtocolAttempt: jest.fn(async (input: CardioTestAttemptInput) => {
-    const saved = {
-      ...input,
-      id: `00000000-0000-4000-a000-0000000000${mockProtocolRecords.length + 20}`,
-      user_id: '00000000-0000-4000-a000-000000000001',
-      created_at: '2026-10-01T12:00:00Z',
-      updated_at: '2026-10-01T12:00:00Z',
-    } as CardioTestAttempt;
-    mockProtocolRecords = [...mockProtocolRecords, saved];
-    return saved;
-  }),
   fetchCooperRunAttempts: jest.fn(async () => mockRecords),
   createCooperRunAttempt: jest.fn(async (input: CooperRunAttemptInput) => {
     const timestamp = '2026-10-09T12:00:00.000Z';
@@ -213,9 +187,9 @@ jest.mock('@shopify/react-native-skia', () => {
 function expectTrend(distances: number[]) {
   expect(screen.getByText('Sep 20')).toBeTruthy();
   expect(screen.getByText('Sep 22')).toBeTruthy();
-  const path: string = screen.getAllByRole('image', {
+  const path: string = screen.getByRole('image', {
     name: 'Plotted distance line',
-  })[0]!.props.path;
+  }).props.path;
   const coordinates = Array.from(path.matchAll(/[ML](-?[\d.]+),(-?[\d.]+)/g));
   expect(coordinates).toHaveLength(2);
   coordinates.forEach((point, index) => {
@@ -236,15 +210,13 @@ function renderScreen() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  const screenTree = () => (
+  return render(
     <QueryClientProvider client={queryClient}>
       <SafeAreaProvider initialMetrics={initialMetrics}>
         <CooperRunTestsScreen />
       </SafeAreaProvider>
     </QueryClientProvider>
   );
-  const result = render(screenTree());
-  return { ...result, rerenderScreen: () => result.rerender(screenTree()) };
 }
 
 describe('CooperRunTestsScreen', () => {
@@ -254,111 +226,7 @@ describe('CooperRunTestsScreen', () => {
 
   beforeEach(() => {
     mockRecords = [];
-    mockProtocolRecords = [];
-    mockServerId = 'server-one';
     jest.clearAllMocks();
-  });
-
-  it('records sprint and 30-second efforts and shows dated history with trend graphs', async () => {
-    renderScreen();
-    [900, 800, 700, 600, 500].forEach((value, index) =>
-      fireEvent.changeText(
-        screen.getAllByLabelText(`Effort ${index + 1} peak (W)`)[0]!,
-        String(value)
-      )
-    );
-    await act(async () =>
-      fireEvent.press(screen.getByRole('button', { name: 'Record Sprint' }))
-    );
-    await waitFor(() =>
-      expect(saveProtocolAttempt).toHaveBeenCalledWith(
-        {
-          test_type: 'sprint_6s',
-          attempt_date: '2026-09-27',
-          results: { peak_watts: [900, 800, 700, 600, 500] },
-        },
-        undefined
-      )
-    );
-    expect(await screen.findByText(/Drop-off 400 W \(44\.4%\)/)).toBeTruthy();
-    expect(screen.getByTestId('sprint_6s-trend-chart')).toBeTruthy();
-
-    [
-      'Effort 1 peak (W)',
-      'Effort 1 average (W)',
-      'Effort 2 peak (W)',
-      'Effort 2 average (W)',
-    ].forEach((label, index) =>
-      fireEvent.changeText(
-        screen.getAllByLabelText(label)[label.includes('peak') ? 1 : 0]!,
-        String([700, 450, 650, 425][index])
-      )
-    );
-    await act(async () =>
-      fireEvent.press(
-        screen.getByRole('button', { name: 'Record 30-second Power' })
-      )
-    );
-    await waitFor(() =>
-      expect(saveProtocolAttempt).toHaveBeenCalledWith(
-        {
-          test_type: 'power_30s',
-          attempt_date: '2026-09-27',
-          results: {
-            efforts: [
-              { peak_watts: 700, average_watts: 450 },
-              { peak_watts: 650, average_watts: 425 },
-            ],
-          },
-        },
-        undefined
-      )
-    );
-    expect(await screen.findByText('700/450 W · 650/425 W')).toBeTruthy();
-    expect(screen.getByTestId('power_30s-trend-chart')).toBeTruthy();
-    const displayedDate = new Date('2026-09-27T12:00:00').toLocaleDateString(
-      'en'
-    );
-    expect(screen.getAllByText(displayedDate)).toHaveLength(2);
-    expect(
-      screen.getByRole('button', {
-        name: `Edit sprint attempt on ${displayedDate}`,
-      })
-    ).toBeTruthy();
-    expect(fetchProtocolAttempts).toHaveBeenCalledWith('sprint_6s');
-    expect(fetchProtocolAttempts).toHaveBeenCalledWith('power_30s');
-  });
-
-  it('accepts decimal commas in mobile watt fields', async () => {
-    renderScreen();
-    ['900,5', '800', '700', '600', '500'].forEach((value, index) =>
-      fireEvent.changeText(
-        screen.getAllByLabelText(`Effort ${index + 1} peak (W)`)[0]!,
-        value
-      )
-    );
-    await act(async () =>
-      fireEvent.press(screen.getByRole('button', { name: 'Record Sprint' }))
-    );
-    expect(saveProtocolAttempt).toHaveBeenCalledWith(
-      expect.objectContaining({
-        results: { peak_watts: [900.5, 800, 700, 600, 500] },
-      }),
-      undefined
-    );
-  });
-
-  it('discards a power draft when the active server changes', () => {
-    const view = renderScreen();
-    fireEvent.changeText(
-      screen.getAllByLabelText('Effort 1 peak (W)')[0]!,
-      '900'
-    );
-    mockServerId = 'server-two';
-    act(() => view.rerenderScreen());
-    expect(screen.getAllByLabelText('Effort 1 peak (W)')[0]!.props.value).toBe(
-      ''
-    );
   });
 
   it('records a dated 12-minute distance, shows the graph and history, and edits it', async () => {
@@ -374,8 +242,8 @@ describe('CooperRunTestsScreen', () => {
       },
     ];
     renderScreen();
-    fireEvent.press(screen.getAllByText('2026-09-27')[0]!);
-    fireEvent.press(screen.getAllByText('Select test date').at(-1)!);
+    fireEvent.press(screen.getByText('2026-09-27'));
+    fireEvent.press(screen.getByText('Select test date'));
     fireEvent.changeText(
       screen.getByLabelText('Distance covered in 12 minutes in meters'),
       '2512'
@@ -454,7 +322,7 @@ describe('CooperRunTestsScreen', () => {
       );
       expect(edit.props.accessibilityState?.disabled).toBe(true);
       fireEvent.press(edit);
-      fireEvent.press(screen.getAllByText('Select test date').at(-1)!);
+      fireEvent.press(screen.getByText('Select test date'));
       expect(
         screen.getByLabelText('Distance covered in 12 minutes in meters').props
           .value
