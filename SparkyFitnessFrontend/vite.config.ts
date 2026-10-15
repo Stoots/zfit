@@ -66,6 +66,9 @@ export default defineConfig(({ mode }) => {
             short_name: 'SparkyFitness',
             description: 'Your personal fitness companion',
             theme_color: '#000000',
+            display: 'standalone',
+            start_url: '/',
+            scope: '/',
             icons: [
               {
                 src: 'images/icons/icon-192x192.png',
