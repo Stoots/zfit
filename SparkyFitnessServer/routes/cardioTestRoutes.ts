@@ -48,11 +48,12 @@ router.get('/cooper-run/attempts', async (req, res, next) => {
  *             properties:
  *               attempt_date: { type: string, format: date }
  *               distance_meters: { type: number, exclusiveMinimum: 0 }
+ *               planned_session_id: { type: string, format: uuid, nullable: true, description: Optional owner-only Planned Session link; omit or null for standalone attempts. }
  *     responses:
  *       201: { description: The persisted Test Attempt. }
  *       400: { description: Invalid date or distance. }
  *       401: { description: Authentication required. }
- *       403: { description: Diary write access required. }
+ *       403: { description: Diary write access required; Program linking requires the owner. }
  */
 router.post('/cooper-run/attempts', async (req, res, next) => {
   try {
@@ -92,6 +93,7 @@ router.post('/cooper-run/attempts', async (req, res, next) => {
  *             properties:
  *               attempt_date: { type: string, format: date }
  *               distance_meters: { type: number, exclusiveMinimum: 0 }
+ *               planned_session_id: { type: string, format: uuid, nullable: true, description: Omit to retain the current link, or null to make the attempt standalone. }
  *     responses:
  *       200: { description: The updated Test Attempt. }
  *       400: { description: Invalid identifier, date or distance. }
@@ -138,6 +140,8 @@ router.put('/cooper-run/attempts/:id', async (req, res, next) => {
  *           schema:
  *             type: object
  *             required: [test_type, attempt_date, results]
+ *             properties:
+ *               planned_session_id: { type: string, format: uuid, nullable: true, description: Optional owner-only Planned Session link; omit or null for standalone attempts. }
  *     responses:
  *       201: { description: The persisted Test Attempt. }
  *       400: { description: Invalid protocol, date, or results. }
@@ -178,6 +182,7 @@ router.post('/:protocol/attempts', async (req, res, next) => {
  *   put:
  *     summary: Edit a dated Test Attempt within its original protocol
  *     tags: [Cardio Tests]
+ *     description: Omit planned_session_id to retain the current Program link, or send null to make the attempt standalone. Program links are owner-only.
  *     responses:
  *       200: { description: The updated Test Attempt. }
  *       400: { description: Invalid identifier, protocol, date, or results. }

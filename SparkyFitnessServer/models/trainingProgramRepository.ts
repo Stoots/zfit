@@ -6,6 +6,7 @@ import {
   isValidTimeZone,
   instantToDay,
   dayToUtcRange,
+  cardioTestTypeSchema,
   type TrainingProgram,
   type TrainingProgramInput,
   type TrainingProgramOutcomeInput,
@@ -79,12 +80,14 @@ async function queryProgramRows(
     [userId, ids]
   );
   const sessions = await client.query<SessionRow>(
-    `SELECT s.id, s.program_id, s.week_id, s.name, s.scheduled_date::text, s.effective_date::text, s.status, s.is_optional, s.outcome_at, s.completed_workout, s.workout_session_id, s.sort_order,
+    `SELECT s.id, s.program_id, s.week_id, s.name, s.scheduled_date::text, s.effective_date::text, s.status, s.is_optional, s.outcome_at, s.completed_workout, s.workout_session_id, s.cardio_test_type, s.sort_order,
        ws.template_id AS workout_plan_id, COALESCE(s.workout_plan_name_snapshot, p.plan_name) AS workout_plan_name,
-       COALESCE(s.workout_session_name_snapshot, ws.name) AS workout_session_name
+       COALESCE(s.workout_session_name_snapshot, ws.name) AS workout_session_name,
+       CASE WHEN a.id IS NULL THEN NULL ELSE jsonb_build_object('id', a.id, 'test_type', a.test_type, 'attempt_date', a.attempt_date::text, 'results', a.results) END AS completed_test_attempt
      FROM training_program_sessions s
-     JOIN workout_plan_sessions ws ON ws.id = s.workout_session_id AND ws.user_id = s.user_id
-     JOIN workout_plan_templates p ON p.id = ws.template_id AND p.user_id = ws.user_id
+     LEFT JOIN workout_plan_sessions ws ON ws.id = s.workout_session_id AND ws.user_id = s.user_id
+     LEFT JOIN workout_plan_templates p ON p.id = ws.template_id AND p.user_id = ws.user_id
+     LEFT JOIN cardio_test_attempts a ON a.planned_session_id = s.id AND a.user_id = s.user_id
      WHERE s.user_id = $1 AND s.program_id = ANY($2::uuid[]) ORDER BY s.sort_order, s.id`,
     [userId, ids]
   );
@@ -222,11 +225,12 @@ function validateRecordedSessions(
           !edited ||
           edited.name !== session.name ||
           edited.scheduled_date !== session.scheduled_date ||
-          edited.workout_session_id !== session.workout_session_id ||
+          (edited.workout_session_id ?? null) !== session.workout_session_id ||
+          (edited.cardio_test_type ?? null) !== session.cardio_test_type ||
           (edited.is_optional ?? session.is_optional) !== session.is_optional
         ) {
           throw new HttpError(
-            'Recorded sessions cannot be removed or rewritten. Keep their IDs, names, authored dates and exact Workout Sessions.',
+            'Recorded sessions cannot be removed or rewritten. Keep their IDs, names, authored dates and session binding.',
             409
           );
         }
@@ -301,8 +305,8 @@ async function upsertProgramStructure(
         const sessionId = session.id ?? randomUUID();
         ids.sessionIds.push(sessionId);
         await client.query(
-          `INSERT INTO training_program_sessions (id, program_id, week_id, user_id, name, scheduled_date, effective_date, workout_session_id, is_optional, sort_order) VALUES ($1,$2,$3,$4,$5,$6,$6,$7,$8,$9)
-            ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, effective_date = CASE WHEN training_program_sessions.scheduled_date = EXCLUDED.scheduled_date THEN training_program_sessions.effective_date ELSE EXCLUDED.scheduled_date END, scheduled_date = EXCLUDED.scheduled_date, workout_session_id = EXCLUDED.workout_session_id, is_optional = EXCLUDED.is_optional, sort_order = EXCLUDED.sort_order, updated_at = now()`,
+          `INSERT INTO training_program_sessions (id, program_id, week_id, user_id, name, scheduled_date, effective_date, workout_session_id, cardio_test_type, is_optional, sort_order) VALUES ($1,$2,$3,$4,$5,$6,$6,$7,$8,$9,$10)
+            ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, effective_date = CASE WHEN training_program_sessions.scheduled_date = EXCLUDED.scheduled_date THEN training_program_sessions.effective_date ELSE EXCLUDED.scheduled_date END, scheduled_date = EXCLUDED.scheduled_date, workout_session_id = EXCLUDED.workout_session_id, cardio_test_type = EXCLUDED.cardio_test_type, is_optional = EXCLUDED.is_optional, sort_order = EXCLUDED.sort_order, updated_at = now()`,
           [
             sessionId,
             programId,
@@ -310,10 +314,13 @@ async function upsertProgramStructure(
             userId,
             session.name,
             session.scheduled_date,
-            session.workout_session_id,
+            session.workout_session_id ?? null,
+            session.cardio_test_type ?? null,
             session.is_optional ??
               existingOptionalById.get(sessionId) ??
-              optionalBySession.get(session.workout_session_id) ??
+              (session.workout_session_id
+                ? optionalBySession.get(session.workout_session_id)
+                : undefined) ??
               false,
             s,
           ]
@@ -372,12 +379,27 @@ export async function saveTrainingProgram(
       ...new Set(
         input.phases.flatMap((phase) =>
           phase.weeks.flatMap((week) =>
-            week.sessions.map((session) => session.workout_session_id)
+            week.sessions.flatMap((session) =>
+              session.workout_session_id ? [session.workout_session_id] : []
+            )
           )
         )
       ),
     ];
     const optionalBySession = new Map<string, boolean>();
+    const testTypes = [
+      ...new Set(
+        input.phases.flatMap((phase) =>
+          phase.weeks.flatMap((week) =>
+            week.sessions.flatMap((session) =>
+              session.cardio_test_type ? [session.cardio_test_type] : []
+            )
+          )
+        )
+      ),
+    ];
+    if (testTypes.some((type) => !cardioTestTypeSchema.safeParse(type).success))
+      throw new HttpError('Unsupported Cardio Test protocol.', 400);
     if (workoutSessionIds.length) {
       const workouts = await client.query<{ id: string; is_optional: boolean }>(
         `SELECT ws.id, ws.is_optional FROM workout_plan_sessions ws JOIN workout_plan_templates p
@@ -592,6 +614,11 @@ export async function recordTrainingProgramOutcome(
     }
     let workout: Session['completed_workout'] = null;
     if (input.status === 'completed') {
+      if (session.cardio_test_type)
+        throw new HttpError(
+          'Record a Test Attempt to complete this assessment.',
+          400
+        );
       workout = await lookupDiaryWorkout(client, userId, input.workout);
     } else {
       if (session.is_optional)

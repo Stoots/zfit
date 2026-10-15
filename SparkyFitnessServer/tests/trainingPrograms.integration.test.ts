@@ -1418,11 +1418,11 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
       workout_plan_id: plan.id,
     });
     const laterStart = await startSession(
-      later.workout_session_id,
+      later.workout_session_id!,
       later.effective_date
     );
     const firstStart = await startSession(
-      first.workout_session_id,
+      first.workout_session_id!,
       first.effective_date
     );
     expect(laterStart.status).toBe(201);
@@ -3813,7 +3813,7 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
       );
       const first = sessions(program)[0]!;
       const started = await startSession(
-        first.workout_session_id,
+        first.workout_session_id!,
         first.effective_date
       );
       expect(started.status).toBe(201);

@@ -50,7 +50,7 @@ export default function TrainingProgramEditor({
           t('trainingPrograms.planRequired', {
             ...where,
             defaultValue:
-              'Phase {{phase}}, week {{week}}, session {{session}}: choose a Workout Plan.',
+              'Phase {{phase}}, week {{week}}, session {{session}}: choose a Workout Session or Cardio Test.',
           })
         )
       );
@@ -182,7 +182,7 @@ export default function TrainingProgramEditor({
           <p className="text-muted-foreground">
             {t(
               'trainingPrograms.noPlans',
-              'Create a Workout Plan with Workout Sessions on the Exercises page before adding Planned Sessions. You can still save your Program structure.'
+              'You can schedule Cardio Tests now. Create a Workout Plan on the Exercises page to schedule workouts.'
             )}
           </p>
         )}

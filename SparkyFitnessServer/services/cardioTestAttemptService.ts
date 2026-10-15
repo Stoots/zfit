@@ -45,6 +45,7 @@ function response(attempt: CardioTestAttempts): CooperRunAttempt {
     test_type: normalized.test_type,
     attempt_date: normalized.attempt_date,
     distance_meters: normalized.results.distance_meters,
+    planned_session_id: normalized.planned_session_id,
     created_at: normalized.created_at.toISOString(),
     updated_at: normalized.updated_at.toISOString(),
   };

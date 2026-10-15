@@ -122,10 +122,10 @@ Quick reference of all tables by domain and purpose. For detailed security tier,
 | `training_programs`             | Goal and inclusive fixed date range for a multi-week Program            |
 | `training_program_phases`       | Ordered goal-bearing Program Phases                                    |
 | `training_program_weeks`        | Chronological, nonoverlapping weeks within phases                      |
-| `training_program_sessions`     | Dated Planned Sessions referencing exact existing Workout Sessions     |
+| `training_program_sessions`     | Dated Planned Sessions referencing exact Workout Sessions or Cardio Test protocols |
 | `workout_program_consolidations` | Owner-only approved consolidation manifests and repeat/recovery receipts |
 
-The four Program hierarchy tables and consolidation journal use `create_owner_policy`; composite foreign keys preserve owner identity. `training_program_sessions(workout_session_id, user_id)` references `workout_plan_sessions(id, user_id)`; a Program cannot use another user's session. The session's plan ID/name are derived display-only API fields. Removing a Program-referenced session/plan, diary-linked assignment or journal-referenced target plan is refused with HTTP 409, atomically. Program deletion cascades through its hierarchy and journal but leaves Workout Plans and their prescriptions intact.
+The four Program hierarchy tables and consolidation journal use `create_owner_policy`; composite foreign keys preserve owner identity. A Planned Session references either an exact `workout_plan_sessions` row or a Cardio Test protocol. `cardio_test_attempts.planned_session_id` is nullable for standalone attempts and has a composite foreign key with owner and protocol; only an owner can set it through the API. Program deletion clears this link and retains the attempt. The session's plan ID/name are derived display-only API fields. Removing a Program-referenced workout session/plan, diary-linked assignment or journal-referenced target plan is refused with HTTP 409, atomically. Program deletion cascades through its hierarchy and journal but leaves Workout Plans and their prescriptions intact.
 
 Migration `20261011120000_optional_workout_sessions.sql` adds required-by-default
 `is_optional` flags to the existing library and Program session tables. It does

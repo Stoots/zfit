@@ -20,19 +20,21 @@ export default function SessionRowActions({
       {(session.status === 'planned' ||
         (session.status === 'omitted' && session.is_optional)) && (
         <div className="flex flex-wrap gap-3">
-          <Button
-            className="min-h-11"
-            variant="outline"
-            disabled={disabled}
-            onClick={() =>
-              onRecord({
-                session,
-                status: 'completed',
-              })
-            }
-          >
-            {t('trainingPrograms.linkCompleted', 'Link completed workout')}
-          </Button>
+          {!session.cardio_test_type && (
+            <Button
+              className="min-h-11"
+              variant="outline"
+              disabled={disabled}
+              onClick={() =>
+                onRecord({
+                  session,
+                  status: 'completed',
+                })
+              }
+            >
+              {t('trainingPrograms.linkCompleted', 'Link completed workout')}
+            </Button>
+          )}
           {session.status === 'planned' && !session.is_optional && (
             <Button
               className="min-h-11"

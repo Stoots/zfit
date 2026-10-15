@@ -19,7 +19,8 @@ export function getWorkoutPlanCandidates(
     for (const phase of program.phases) {
       for (const week of phase.weeks) {
         for (const planned of week.sessions) {
-          ownerBySession.set(planned.workout_session_id, program.user_id);
+          if (planned.workout_session_id)
+            ownerBySession.set(planned.workout_session_id, program.user_id);
         }
       }
     }

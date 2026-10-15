@@ -13,6 +13,7 @@ import type {
   CooperRunAttemptInput,
   CardioTestAttempt,
   CardioTestAttemptInput,
+  TrainingProgram,
 } from '@workspace/shared';
 import CooperRunTests from '@/pages/CardioTests/CooperRunTests';
 import {
@@ -21,6 +22,7 @@ import {
   getProtocolAttempts,
   saveProtocolAttempt,
 } from '@/api/CardioTests/cardioTests';
+import { getTrainingPrograms } from '@/api/TrainingPrograms/trainingPrograms';
 
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -70,6 +72,7 @@ jest.mock('@/api/CardioTests/cardioTests', () => ({
       id: '00000000-0000-4000-a000-000000000010',
       user_id: '00000000-0000-4000-a000-000000000001',
       test_type: 'cooper_run',
+      planned_session_id: null,
       ...input,
       created_at: timestamp,
       updated_at: timestamp,
@@ -95,6 +98,9 @@ jest.mock('@/api/CardioTests/cardioTests', () => ({
       return saved;
     }
   ),
+}));
+jest.mock('@/api/TrainingPrograms/trainingPrograms', () => ({
+  getTrainingPrograms: jest.fn(async () => []),
 }));
 
 // jsdom has no layout; only supply dimensions. Axes, marks and scales stay real.
@@ -149,13 +155,330 @@ function expectTrend(dates: string[], distances: number[]) {
   });
 }
 
+function scheduledProgram(
+  protocol: 'cooper_run' | 'sprint_6s' | 'power_30s',
+  sessionId: string
+): TrainingProgram {
+  return {
+    id: '00000000-0000-4000-a000-000000000090',
+    user_id: mockActiveUserId,
+    name: 'Autumn base',
+    goal: 'Run farther',
+    start_date: '2026-09-20',
+    end_date: '2026-10-10',
+    schedule_end_date: '2026-10-10',
+    schedule_type: 'fixed',
+    auto_shift: false,
+    created_at: '2026-09-20T12:00:00Z',
+    updated_at: '2026-09-20T12:00:00Z',
+    phases: [
+      {
+        id: '00000000-0000-4000-a000-000000000091',
+        name: 'Baseline',
+        goal: 'Assess',
+        sort_order: 0,
+        weeks: [
+          {
+            id: '00000000-0000-4000-a000-000000000092',
+            start_date: '2026-09-27',
+            end_date: '2026-10-03',
+            sort_order: 0,
+            sessions: [
+              {
+                id: sessionId,
+                name: 'Baseline test',
+                scheduled_date: '2026-09-27',
+                effective_date: '2026-09-27',
+                sort_order: 0,
+                status: 'planned',
+                is_optional: false,
+                outcome_at: null,
+                workout_session_id: null,
+                workout_session_name: null,
+                workout_plan_id: null,
+                workout_plan_name: null,
+                cardio_test_type: protocol,
+                completed_workout: null,
+                completed_test_attempt: null,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+}
+
 describe('Cooper run Test Attempts', () => {
   beforeEach(() => {
+    window.history.replaceState({}, '', '/');
     mockServer.records = [];
     mockProtocolRecords = [];
     jest.clearAllMocks();
     mockActiveUserId = '00000000-0000-4000-a000-000000000001';
+    jest.mocked(getTrainingPrograms).mockResolvedValue([]);
   });
+
+  it('records a standalone Cooper attempt when planned assessments fail to load', async () => {
+    const sessionId = '00000000-0000-4000-a000-000000000099';
+    window.history.replaceState(
+      {},
+      '',
+      `/cardio-tests?planned_session_id=${sessionId}`
+    );
+    jest
+      .mocked(getTrainingPrograms)
+      .mockRejectedValueOnce(new Error('Unavailable'));
+    renderWithClient(<CooperRunTests />);
+    const selection = screen.getByLabelText('Planned assessment', {
+      selector: '#cooper-planned-session',
+    });
+    await waitFor(() => expect(selection).toHaveValue(''));
+    fireEvent.change(
+      screen.getByLabelText('Date', { selector: '#cooper-attempt-date' }),
+      {
+        target: { value: '2026-10-14' },
+      }
+    );
+    fireEvent.change(screen.getByLabelText('12-minute distance (m)'), {
+      target: { value: '2512' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Record Test' }));
+    await waitFor(() =>
+      expect(createCooperRunAttempt).toHaveBeenCalledWith({
+        attempt_date: '2026-10-14',
+        distance_meters: 2512,
+        planned_session_id: null,
+      })
+    );
+  });
+
+  it('does not unlink an edited Cooper attempt when planned assessments fail to load', async () => {
+    mockServer.records = [
+      {
+        id: '00000000-0000-4000-a000-000000000010',
+        user_id: mockActiveUserId,
+        test_type: 'cooper_run',
+        planned_session_id: '00000000-0000-4000-a000-000000000099',
+        attempt_date: '2026-10-14',
+        distance_meters: 2400,
+        created_at: '2026-10-14T12:00:00Z',
+        updated_at: '2026-10-14T12:00:00Z',
+      },
+    ];
+    jest
+      .mocked(getTrainingPrograms)
+      .mockRejectedValueOnce(new Error('Unavailable'));
+    renderWithClient(<CooperRunTests />);
+    fireEvent.click(
+      within((await screen.findByText('2,400 m')).closest('li')!).getByRole(
+        'button',
+        {
+          name: 'Edit',
+        }
+      )
+    );
+    const save = screen.getByRole('button', { name: 'Save' });
+    await waitFor(() =>
+      expect(
+        within(save.closest('form')!).getByRole('alert')
+      ).toHaveTextContent('Planned assessments could not be loaded.')
+    );
+    expect(save).toBeDisabled();
+    expect(updateCooperRunAttempt).not.toHaveBeenCalled();
+  });
+
+  it('records a Test Attempt against a scheduled assessment', async () => {
+    const sessionId = '00000000-0000-4000-a000-000000000099';
+    window.history.replaceState(
+      {},
+      '',
+      `/cardio-tests?planned_session_id=${sessionId}`
+    );
+    const program = scheduledProgram('cooper_run', sessionId);
+    jest.mocked(getTrainingPrograms).mockResolvedValue([program]);
+    renderWithClient(<CooperRunTests />);
+    const selection = await screen.findByRole('option', {
+      name: /Autumn base · Baseline · Baseline test/,
+    });
+    expect(selection).toBeInTheDocument();
+    expect(
+      screen.getByLabelText('Planned assessment', {
+        selector: '#cooper-planned-session',
+      })
+    ).toHaveValue(sessionId);
+    await waitFor(() =>
+      expect(
+        screen.getByLabelText('Date', {
+          selector: '#cooper-attempt-date',
+        })
+      ).toHaveValue('2026-09-27')
+    );
+    fireEvent.change(screen.getByLabelText('12-minute distance (m)'), {
+      target: { value: '2512' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Record Test' }));
+    await waitFor(() =>
+      expect(createCooperRunAttempt).toHaveBeenCalledWith({
+        attempt_date: '2026-09-27',
+        distance_meters: 2512,
+        planned_session_id: sessionId,
+      })
+    );
+  });
+
+  it('records a standalone sprint attempt when planned assessments fail to load', async () => {
+    const sessionId = '00000000-0000-4000-a000-000000000099';
+    window.history.replaceState(
+      {},
+      '',
+      `/cardio-tests?planned_session_id=${sessionId}&protocol=sprint_6s`
+    );
+    jest
+      .mocked(getTrainingPrograms)
+      .mockRejectedValueOnce(new Error('Unavailable'));
+    renderWithClient(<CooperRunTests />);
+    const form = screen.getByRole('region', {
+      name: '5 × 6-second sprint (54-second rests)',
+    });
+    const selection = within(form).getByLabelText('Planned assessment');
+    await waitFor(() => expect(selection).toHaveValue(''));
+    fireEvent.change(within(form).getByLabelText('Date'), {
+      target: { value: '2026-10-14' },
+    });
+    [900, 800, 700, 600, 500].forEach((value, index) =>
+      fireEvent.change(
+        within(form).getByLabelText(`Effort ${index + 1} peak (W)`),
+        {
+          target: { value: String(value) },
+        }
+      )
+    );
+    fireEvent.click(
+      within(form).getByRole('button', { name: 'Record Sprint' })
+    );
+    await waitFor(() =>
+      expect(saveProtocolAttempt).toHaveBeenCalledWith(
+        {
+          test_type: 'sprint_6s',
+          attempt_date: '2026-10-14',
+          results: { peak_watts: [900, 800, 700, 600, 500] },
+        },
+        undefined
+      )
+    );
+  });
+
+  it('does not unlink an edited sprint attempt when planned assessments fail to load', async () => {
+    mockProtocolRecords = [
+      {
+        id: '00000000-0000-4000-a000-000000000010',
+        user_id: mockActiveUserId,
+        test_type: 'sprint_6s',
+        planned_session_id: '00000000-0000-4000-a000-000000000099',
+        attempt_date: '2026-10-14',
+        results: { peak_watts: [900, 800, 700, 600, 500] },
+        created_at: '2026-10-14T12:00:00Z',
+        updated_at: '2026-10-14T12:00:00Z',
+      },
+    ];
+    jest
+      .mocked(getTrainingPrograms)
+      .mockRejectedValueOnce(new Error('Unavailable'));
+    renderWithClient(<CooperRunTests />);
+    const sprint = screen.getByRole('region', {
+      name: '5 × 6-second sprint (54-second rests)',
+    });
+    fireEvent.click(
+      await within(sprint).findByRole('button', { name: 'Edit' })
+    );
+    await waitFor(() =>
+      expect(within(sprint).getByRole('alert')).toHaveTextContent(
+        'Planned assessments could not be loaded.'
+      )
+    );
+    expect(within(sprint).getByRole('button', { name: 'Save' })).toBeDisabled();
+    expect(saveProtocolAttempt).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    {
+      protocol: 'sprint_6s' as const,
+      title: '5 × 6-second sprint (54-second rests)',
+      button: 'Record Sprint',
+      labels: [
+        'Effort 1 peak (W)',
+        'Effort 2 peak (W)',
+        'Effort 3 peak (W)',
+        'Effort 4 peak (W)',
+        'Effort 5 peak (W)',
+      ],
+      values: [900, 800, 700, 600, 500],
+      results: { peak_watts: [900, 800, 700, 600, 500] },
+    },
+    {
+      protocol: 'power_30s' as const,
+      title: '2 × 30-second power (60-second rest)',
+      button: 'Record 30-second Power',
+      labels: [
+        'Effort 1 peak (W)',
+        'Effort 1 average (W)',
+        'Effort 2 peak (W)',
+        'Effort 2 average (W)',
+      ],
+      values: [700, 450, 650, 425],
+      results: {
+        efforts: [
+          { peak_watts: 700, average_watts: 450 },
+          { peak_watts: 650, average_watts: 425 },
+        ],
+      },
+    },
+  ])(
+    'records a scheduled $protocol attempt from its Program link',
+    async (test) => {
+      const sessionId = '00000000-0000-4000-a000-000000000099';
+      window.history.replaceState(
+        {},
+        '',
+        `/cardio-tests?planned_session_id=${sessionId}&protocol=${test.protocol}`
+      );
+      jest
+        .mocked(getTrainingPrograms)
+        .mockResolvedValue([scheduledProgram(test.protocol, sessionId)]);
+      renderWithClient(<CooperRunTests />);
+      const form = screen.getByRole('region', { name: test.title });
+      expect(
+        screen.queryByRole('heading', { name: 'Cooper Run Test' })
+      ).toBeNull();
+      await within(form).findByRole('option', {
+        name: /Autumn base · Baseline · Baseline test/,
+      });
+      expect(within(form).getByLabelText('Planned assessment')).toHaveValue(
+        sessionId
+      );
+      await waitFor(() =>
+        expect(within(form).getByLabelText('Date')).toHaveValue('2026-09-27')
+      );
+      test.labels.forEach((label, index) =>
+        fireEvent.change(within(form).getByLabelText(label), {
+          target: { value: String(test.values[index]) },
+        })
+      );
+      fireEvent.click(within(form).getByRole('button', { name: test.button }));
+      await waitFor(() =>
+        expect(saveProtocolAttempt).toHaveBeenCalledWith(
+          {
+            test_type: test.protocol,
+            attempt_date: '2026-09-27',
+            results: test.results,
+            planned_session_id: sessionId,
+          },
+          undefined
+        )
+      );
+    }
+  );
 
   it('records both power protocols and shows their dated graph and results', async () => {
     renderWithClient(<CooperRunTests />);
@@ -307,6 +630,7 @@ describe('Cooper run Test Attempts', () => {
         id: 'earlier',
         user_id: mockActiveUserId,
         test_type: 'cooper_run',
+        planned_session_id: null,
         attempt_date: '2026-09-20',
         distance_meters: 2400,
         created_at: '2026-09-20T12:00:00Z',
@@ -326,6 +650,7 @@ describe('Cooper run Test Attempts', () => {
         expect(createCooperRunAttempt).toHaveBeenCalledWith({
           attempt_date: '2026-09-22',
           distance_meters: 2512,
+          planned_session_id: null,
         })
       );
     });
@@ -351,7 +676,11 @@ describe('Cooper run Test Attempts', () => {
     await waitFor(() =>
       expect(updateCooperRunAttempt).toHaveBeenCalledWith(
         '00000000-0000-4000-a000-000000000010',
-        { attempt_date: '2026-09-23', distance_meters: 2600 }
+        {
+          attempt_date: '2026-09-23',
+          distance_meters: 2600,
+          planned_session_id: null,
+        }
       )
     );
     expect(
@@ -371,6 +700,7 @@ describe('Cooper run Test Attempts', () => {
         id: 'old-attempt',
         user_id: mockActiveUserId,
         test_type: 'cooper_run',
+        planned_session_id: null,
         attempt_date: '2026-09-22',
         distance_meters: 2512,
         created_at: '2026-09-22T12:00:00Z',
@@ -412,6 +742,7 @@ describe('Cooper run Test Attempts', () => {
           id: 'old-attempt',
           user_id: 'old-user',
           test_type: 'cooper_run',
+          planned_session_id: null,
           attempt_date: '2026-09-22',
           distance_meters: 2512,
           created_at: '2026-09-22T12:00:00Z',
@@ -431,6 +762,7 @@ describe('Cooper run Test Attempts', () => {
         id: 'existing',
         user_id: mockActiveUserId,
         test_type: 'cooper_run',
+        planned_session_id: null,
         attempt_date: '2026-09-20',
         distance_meters: 2400,
         created_at: '2026-09-20T12:00:00Z',

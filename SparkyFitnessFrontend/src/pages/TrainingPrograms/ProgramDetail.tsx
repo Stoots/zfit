@@ -10,6 +10,16 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import SessionRowActions from './SessionRowActions';
 import type { ProgramSession, OutcomeStatus } from './programTypes';
+import { cardioTestTitle } from './cardioTestTitle';
+
+const recordableTests = new Set(['cooper_run', 'sprint_6s', 'power_30s']);
+
+function recordTestPath(session: ProgramSession): string {
+  const params = new URLSearchParams({ planned_session_id: session.id });
+  if (session.cardio_test_type !== 'cooper_run')
+    params.set('protocol', session.cardio_test_type!);
+  return `/cardio-tests?${params}`;
+}
 
 export default function ProgramDetail({
   selected,
@@ -205,9 +215,35 @@ export default function ProgramDetail({
                           {session.name}
                         </p>
                         <p className="break-words text-muted-foreground">
-                          {session.workout_plan_name} ·{' '}
-                          {session.workout_session_name}
+                          {session.cardio_test_type
+                            ? cardioTestTitle(session.cardio_test_type, t)
+                            : `${session.workout_plan_name} · ${session.workout_session_name}`}
                         </p>
+                        {session.completed_test_attempt && (
+                          <p className="break-words text-sm">
+                            {t(
+                              'trainingPrograms.linkedAttempt',
+                              'Linked Test Attempt:'
+                            )}{' '}
+                            {session.completed_test_attempt.test_type ===
+                            'cooper_run' ? (
+                              <Link
+                                className="underline underline-offset-4"
+                                to="/cardio-tests"
+                              >
+                                {session.completed_test_attempt.attempt_date} ·{' '}
+                                {String(
+                                  session.completed_test_attempt.results[
+                                    'distance_meters'
+                                  ]
+                                )}{' '}
+                                {t('cardioTests.unit.meters', 'm')}
+                              </Link>
+                            ) : (
+                              session.completed_test_attempt.attempt_date
+                            )}
+                          </p>
+                        )}
                         {session.completed_workout && (
                           <p className="break-words text-sm">
                             {t(
@@ -231,20 +267,34 @@ export default function ProgramDetail({
                             </time>
                           </p>
                         )}
-                        {session.status === 'planned' && (
-                          <Button
-                            className="min-h-11"
-                            disabled={startingSessionId === session.id}
-                            onClick={() => onStartSession(session)}
-                          >
-                            {startingSessionId === session.id
-                              ? t('common.loading', 'Starting…')
-                              : t(
-                                  'trainingPrograms.startWorkout',
-                                  'Start Workout'
+                        {recordableTests.has(session.cardio_test_type ?? '') &&
+                          (session.status === 'planned' ||
+                            (session.status === 'omitted' &&
+                              session.is_optional)) && (
+                            <Button asChild className="min-h-11">
+                              <Link to={recordTestPath(session)}>
+                                {t(
+                                  'trainingPrograms.recordTest',
+                                  'Record Test Attempt'
                                 )}
-                          </Button>
-                        )}
+                              </Link>
+                            </Button>
+                          )}
+                        {!session.cardio_test_type &&
+                          session.status === 'planned' && (
+                            <Button
+                              className="min-h-11"
+                              disabled={startingSessionId === session.id}
+                              onClick={() => onStartSession(session)}
+                            >
+                              {startingSessionId === session.id
+                                ? t('common.loading', 'Starting…')
+                                : t(
+                                    'trainingPrograms.startWorkout',
+                                    'Start Workout'
+                                  )}
+                            </Button>
+                          )}
                         <SessionRowActions
                           session={session}
                           disabled={outcomePending}

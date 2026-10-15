@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { cardioTestTypeSchema } from "../database/CardioTestAttempts.zod.ts";
 
 const title = z.string().trim().min(1).max(200);
 const goal = z.string().trim().min(1).max(2000);
@@ -10,13 +11,23 @@ const day = z.iso
   );
 const childId = z.uuid().optional();
 
-const sessionInput = z.strictObject({
+const sessionFields = {
   id: childId,
   name: title,
   scheduled_date: day,
-  workout_session_id: z.uuid(),
   is_optional: z.boolean().optional(),
-});
+};
+const sessionInput = z
+  .strictObject({
+    ...sessionFields,
+    workout_session_id: z.uuid().nullable().optional(),
+    cardio_test_type: cardioTestTypeSchema.nullable().optional(),
+  })
+  .refine(
+    (value) =>
+      Boolean(value.workout_session_id) !== Boolean(value.cardio_test_type),
+    "Choose either an exact Workout Session or a Cardio Test protocol.",
+  );
 const weekInput = z.strictObject({
   id: childId,
   start_date: day,
@@ -126,18 +137,32 @@ export type TrainingProgramOutcomeInput = z.infer<
   typeof trainingProgramOutcomeInputSchema
 >;
 
-const session = sessionInput
-  .extend({
-    id: z.uuid(),
-    is_optional: z.boolean(),
-    sort_order: z.number().int().nonnegative(),
-    workout_session_name: z.string(),
-    workout_plan_id: z.number().int().positive(),
-    workout_plan_name: z.string(),
-    effective_date: day,
-    status: z.enum(["planned", "completed", "missed", "omitted"]),
-    outcome_at: z.iso.datetime().nullable(),
+const sessionCommon = {
+  id: z.uuid(),
+  is_optional: z.boolean(),
+  sort_order: z.number().int().nonnegative(),
+  effective_date: day,
+  status: z.enum(["planned", "completed", "missed", "omitted"]),
+  outcome_at: z.iso.datetime().nullable(),
+};
+const session = z
+  .object({
+    ...sessionFields,
+    ...sessionCommon,
+    workout_session_id: z.uuid().nullable(),
+    workout_session_name: z.string().nullable(),
+    workout_plan_id: z.number().int().positive().nullable(),
+    workout_plan_name: z.string().nullable(),
+    cardio_test_type: z.string().min(1).nullable(),
     completed_workout: trainingProgramWorkoutSchema.nullable(),
+    completed_test_attempt: z
+      .object({
+        id: z.uuid(),
+        test_type: z.string(),
+        attempt_date: day,
+        results: z.record(z.string(), z.unknown()),
+      })
+      .nullable(),
   })
   .strip();
 const week = weekInput

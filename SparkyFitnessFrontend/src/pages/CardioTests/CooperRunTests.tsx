@@ -1,15 +1,19 @@
-import { useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowRight } from 'lucide-react';
 import { Numeral } from '@/components/ui/numeral';
 import { TrendChart } from '@/components/ui/trend-chart';
-import type { CooperRunAttempt } from '@workspace/shared';
+import {
+  selectProgramCardioAssessmentChoices,
+  type CooperRunAttempt,
+} from '@workspace/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useActiveUser } from '@/contexts/ActiveUserContext';
 import { useCooperRunAttempts } from '@/hooks/CardioTests/useCooperRunAttempts';
 import PowerTests from './PowerTests';
+import { useTrainingProgramsList } from '@/hooks/TrainingPrograms/useTrainingPrograms';
 
 export default function CooperRunTests() {
   const { activeUserId } = useActiveUser();
@@ -18,19 +22,48 @@ export default function CooperRunTests() {
 
 function ProfileCooperRunTests() {
   const { t } = useTranslation();
-  const { activeUserId, hasPermission, hasWritePermission } = useActiveUser();
+  const { activeUserId, hasPermission, hasWritePermission, isActingOnBehalf } =
+    useActiveUser();
   const canRead = hasPermission('diary');
   const canWrite = hasWritePermission('diary');
+  const requestedProtocol = new URLSearchParams(window.location.search).get(
+    'protocol'
+  );
+  const focusedPowerProtocol =
+    requestedProtocol === 'sprint_6s' || requestedProtocol === 'power_30s';
   const { attempts, create, update } = useCooperRunAttempts(
     activeUserId ?? '',
     canRead
+  );
+  const programs = useTrainingProgramsList(
+    activeUserId ?? '',
+    canRead && !isActingOnBehalf
   );
   const [editing, setEditing] = useState<CooperRunAttempt | null>(null);
   const [attemptDate, setAttemptDate] = useState('');
   const [distance, setDistance] = useState('');
   const latest = attempts.data?.at(-1);
+  const [plannedSessionId, setPlannedSessionId] = useState(
+    () =>
+      new URLSearchParams(window.location.search).get('planned_session_id') ??
+      ''
+  );
+  const selectedPlannedSessionId = programs.isError ? '' : plannedSessionId;
+  const assessments = selectProgramCardioAssessmentChoices(
+    programs.data ?? [],
+    'cooper_run',
+    selectedPlannedSessionId
+  );
+  useEffect(() => {
+    if (editing || attemptDate || !selectedPlannedSessionId) return;
+    const chosen = assessments.find(
+      (item) => item.session.id === selectedPlannedSessionId
+    );
+    if (chosen) setAttemptDate(chosen.session.effective_date);
+  }, [assessments, attemptDate, editing, selectedPlannedSessionId]);
   const mutation = editing ? update : create;
   const pending = create.isPending || update.isPending;
+  const linkedEditBlocked = programs.isError && !!editing?.planned_session_id;
   const savingRef = useRef(false);
 
   const selectAttempt = (attempt: CooperRunAttempt) => {
@@ -38,15 +71,17 @@ function ProfileCooperRunTests() {
     setEditing(attempt);
     setAttemptDate(attempt.attempt_date);
     setDistance(String(attempt.distance_meters));
+    setPlannedSessionId(attempt.planned_session_id ?? '');
   };
   const clearForm = () => {
     setEditing(null);
     setAttemptDate('');
     setDistance('');
+    setPlannedSessionId('');
   };
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (savingRef.current || pending) return;
+    if (savingRef.current || pending || linkedEditBlocked) return;
     const distanceMeters = Number(distance);
     if (!attemptDate || !Number.isFinite(distanceMeters) || distanceMeters <= 0)
       return;
@@ -55,6 +90,7 @@ function ProfileCooperRunTests() {
       const input = {
         attempt_date: attemptDate,
         distance_meters: distanceMeters,
+        planned_session_id: selectedPlannedSessionId || null,
       };
       if (editing) await update.mutateAsync({ id: editing.id, input });
       else await create.mutateAsync(input);
@@ -87,7 +123,7 @@ function ProfileCooperRunTests() {
             'You do not have access to these attempts.'
           )}
         </p>
-      ) : (
+      ) : !focusedPowerProtocol ? (
         <>
           {latest && !attempts.isError && (
             <section className="rounded-3xl border bg-card p-5 sm:p-6">
@@ -116,6 +152,46 @@ function ProfileCooperRunTests() {
                   : t('cardioTests.add', 'Record Test Attempt')}
               </h2>
               <div className="grid gap-4 sm:grid-cols-2">
+                {!isActingOnBehalf && (
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label htmlFor="cooper-planned-session">
+                      {t('cardioTests.plannedSession', 'Planned assessment')}
+                    </Label>
+                    <select
+                      id="cooper-planned-session"
+                      value={selectedPlannedSessionId}
+                      disabled={pending || programs.isPending}
+                      onChange={(event) => {
+                        const id = event.target.value;
+                        setPlannedSessionId(id);
+                        const chosen = assessments.find(
+                          (item) => item.session.id === id
+                        );
+                        if (chosen && !editing)
+                          setAttemptDate(chosen.session.effective_date);
+                      }}
+                      className="flex h-11 w-full min-w-0 rounded-md border border-input bg-background px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <option value="">
+                        {t('cardioTests.standalone', 'Standalone Test Attempt')}
+                      </option>
+                      {assessments.map(({ program, phase, session }) => (
+                        <option key={session.id} value={session.id}>
+                          {program.name} · {phase.name} · {session.name} ·{' '}
+                          {session.effective_date}
+                        </option>
+                      ))}
+                    </select>
+                    {programs.isError && (
+                      <p role="alert" className="text-sm text-destructive">
+                        {t(
+                          'cardioTests.plannedAssessmentsUnavailable',
+                          'Planned assessments could not be loaded. New attempts will be standalone; linked attempts cannot be edited.'
+                        )}
+                      </p>
+                    )}
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="cooper-attempt-date">
                     {t('cardioTests.date', 'Date')}
@@ -151,7 +227,7 @@ function ProfileCooperRunTests() {
                 </div>
               </div>
               <div className="flex flex-wrap gap-2 border-t pt-4">
-                <Button type="submit" disabled={pending}>
+                <Button type="submit" disabled={pending || linkedEditBlocked}>
                   {pending
                     ? t('common.saving', 'Saving…')
                     : editing
@@ -231,6 +307,11 @@ function ProfileCooperRunTests() {
                         <p className="font-medium tabular-nums">
                           {attempt.distance_meters.toLocaleString()} m
                         </p>
+                        {attempt.planned_session_id && (
+                          <p className="text-sm text-muted-foreground">
+                            {t('cardioTests.scheduled', 'Scheduled assessment')}
+                          </p>
+                        )}
                       </div>
                       {canWrite ? (
                         <Button
@@ -249,7 +330,7 @@ function ProfileCooperRunTests() {
             )}
           </section>
         </>
-      )}
+      ) : null}
       <PowerTests />
     </main>
   );

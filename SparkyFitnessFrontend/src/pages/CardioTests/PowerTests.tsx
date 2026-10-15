@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   CartesianGrid,
@@ -15,11 +15,13 @@ import {
   sprintPowerResults,
   powerTestInput,
   powerTestValues,
+  selectProgramCardioAssessmentChoices,
   toNumber,
   type CardioTestAttempt,
 } from '@workspace/shared';
 import { usePowerTestAttempts } from '@/hooks/CardioTests/useCooperRunAttempts';
 import { useActiveUser } from '@/contexts/ActiveUserContext';
+import { useTrainingProgramsList } from '@/hooks/TrainingPrograms/useTrainingPrograms';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -59,20 +61,27 @@ const config = {
 export default function PowerTests() {
   const { activeUserId, hasPermission, hasWritePermission } = useActiveUser();
   if (!activeUserId || !hasPermission('diary')) return null;
+  const requestedProtocol = new URLSearchParams(window.location.search).get(
+    'protocol'
+  );
   return (
     <div className="space-y-8">
-      <PowerProtocol
-        key={`${activeUserId}-sprint`}
-        userId={activeUserId}
-        protocol="sprint_6s"
-        canWrite={hasWritePermission('diary')}
-      />
-      <PowerProtocol
-        key={`${activeUserId}-thirty`}
-        userId={activeUserId}
-        protocol="power_30s"
-        canWrite={hasWritePermission('diary')}
-      />
+      {requestedProtocol !== 'power_30s' && (
+        <PowerProtocol
+          key={`${activeUserId}-sprint`}
+          userId={activeUserId}
+          protocol="sprint_6s"
+          canWrite={hasWritePermission('diary')}
+        />
+      )}
+      {requestedProtocol !== 'sprint_6s' && (
+        <PowerProtocol
+          key={`${activeUserId}-thirty`}
+          userId={activeUserId}
+          protocol="power_30s"
+          canWrite={hasWritePermission('diary')}
+        />
+      )}
     </div>
   );
 }
@@ -87,12 +96,34 @@ function PowerProtocol({
   canWrite: boolean;
 }) {
   const { t } = useTranslation();
+  const { isActingOnBehalf } = useActiveUser();
   const { attempts, save } = usePowerTestAttempts(userId, protocol);
+  const programs = useTrainingProgramsList(userId, !isActingOnBehalf);
   const [date, setDate] = useState('');
+  const [plannedSessionId, setPlannedSessionId] = useState(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('protocol') === protocol
+      ? (params.get('planned_session_id') ?? '')
+      : '';
+  });
+  const selectedPlannedSessionId = programs.isError ? '' : plannedSessionId;
+  const assessments = selectProgramCardioAssessmentChoices(
+    programs.data ?? [],
+    protocol,
+    selectedPlannedSessionId
+  );
+  useEffect(() => {
+    if (date || !selectedPlannedSessionId) return;
+    const chosen = assessments.find(
+      (item) => item.session.id === selectedPlannedSessionId
+    );
+    if (chosen) setDate(chosen.session.effective_date);
+  }, [assessments, date, selectedPlannedSessionId]);
   const [values, setValues] = useState<string[]>(
     config[protocol].labels.map(() => '')
   );
   const [editing, setEditing] = useState<string | null>(null);
+  const linkedEditBlocked = programs.isError && !!editing && !!plannedSessionId;
   const [validationError, setValidationError] = useState('');
   const savingRef = useRef(false);
   const title =
@@ -116,6 +147,7 @@ function PowerProtocol({
         ];
   const clear = () => {
     setDate('');
+    setPlannedSessionId('');
     setValues(labels.map(() => ''));
     setEditing(null);
     setValidationError('');
@@ -125,12 +157,16 @@ function PowerProtocol({
     if (
       savingRef.current ||
       save.isPending ||
+      linkedEditBlocked ||
       values.some((value) => value.trim() === '')
     )
       return;
-    const parsed = cardioTestAttemptInputSchema.safeParse(
-      powerTestInput(protocol, date, values.map(parseWattsInput))
-    );
+    const parsed = cardioTestAttemptInputSchema.safeParse({
+      ...powerTestInput(protocol, date, values.map(parseWattsInput)),
+      ...(editing || selectedPlannedSessionId
+        ? { planned_session_id: selectedPlannedSessionId || null }
+        : {}),
+    });
     if (!parsed.success) {
       setValidationError(
         t(
@@ -155,6 +191,7 @@ function PowerProtocol({
     setValidationError('');
     setEditing(attempt.id);
     setDate(attempt.attempt_date);
+    setPlannedSessionId(attempt.planned_session_id ?? '');
     setValues(powerTestValues(attempt).map(String));
   };
   const rows = (attempts.data ?? []).filter(
@@ -171,6 +208,46 @@ function PowerProtocol({
       <h2 className="text-xl font-semibold">{title}</h2>
       {canWrite && (
         <form onSubmit={submit} className="space-y-4 rounded-lg border p-4">
+          {!isActingOnBehalf && (
+            <div>
+              <Label htmlFor={`${protocol}-planned-session`}>
+                {t('cardioTests.plannedSession', 'Planned assessment')}
+              </Label>
+              <select
+                id={`${protocol}-planned-session`}
+                value={selectedPlannedSessionId}
+                disabled={save.isPending || programs.isPending}
+                onChange={(event) => {
+                  const id = event.target.value;
+                  setPlannedSessionId(id);
+                  const chosen = assessments.find(
+                    (item) => item.session.id === id
+                  );
+                  if (chosen && !editing)
+                    setDate(chosen.session.effective_date);
+                }}
+                className="flex h-11 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">
+                  {t('cardioTests.standalone', 'Standalone Test Attempt')}
+                </option>
+                {assessments.map(({ program, phase, session }) => (
+                  <option key={session.id} value={session.id}>
+                    {program.name} · {phase.name} · {session.name} ·{' '}
+                    {session.effective_date}
+                  </option>
+                ))}
+              </select>
+              {programs.isError && (
+                <p role="alert" className="text-sm text-destructive">
+                  {t(
+                    'cardioTests.plannedAssessmentsUnavailable',
+                    'Planned assessments could not be loaded. New attempts will be standalone; linked attempts cannot be edited.'
+                  )}
+                </p>
+              )}
+            </div>
+          )}
           <div>
             <Label htmlFor={`${protocol}-date`}>
               {t('cardioTests.date', 'Date')}
@@ -216,7 +293,10 @@ function PowerProtocol({
             ))}
           </div>
           <div className="flex gap-2">
-            <Button type="submit" disabled={save.isPending}>
+            <Button
+              type="submit"
+              disabled={save.isPending || linkedEditBlocked}
+            >
               {editing
                 ? t('common.save', 'Save')
                 : protocol === 'sprint_6s'
