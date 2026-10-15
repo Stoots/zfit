@@ -264,16 +264,17 @@ async function updatePlannedSessionLink(
   testType: CardioTestAttempts['test_type'],
   requestedLink: string | null | undefined
 ): Promise<string | null | undefined> {
-  const existing = await client.query<{ planned_session_id: string | null }>(
-    'SELECT planned_session_id FROM cardio_test_attempts WHERE id = $1 AND user_id = $2 AND test_type = $3 FOR UPDATE',
+  const observed = await client.query<{ planned_session_id: string | null }>(
+    'SELECT planned_session_id FROM cardio_test_attempts WHERE id = $1 AND user_id = $2 AND test_type = $3',
     [attemptId, userId, testType]
   );
-  if (!existing.rowCount) return undefined;
-  const oldLink = existing.rows[0]!.planned_session_id;
-  const newLink = requestedLink === undefined ? oldLink : requestedLink;
-  if ((oldLink || newLink) && userId !== authenticatedUserId)
+  if (!observed.rowCount) return undefined;
+  const observedLink = observed.rows[0]!.planned_session_id;
+  const newLink = requestedLink === undefined ? observedLink : requestedLink;
+  if (observedLink && userId !== authenticatedUserId) return undefined;
+  if (newLink && userId !== authenticatedUserId)
     throw new HttpError('Training Programs are owner-only.', 403);
-  if (newLink !== oldLink) {
+  if (newLink !== observedLink) {
     await client.query(
       `SELECT id FROM training_programs
        WHERE user_id = $1 AND id IN (
@@ -281,8 +282,24 @@ async function updatePlannedSessionLink(
          WHERE user_id = $1 AND id = ANY($2::uuid[])
        )
        ORDER BY id FOR UPDATE`,
-      [userId, [oldLink, newLink].filter(Boolean)]
+      [userId, [observedLink, newLink].filter(Boolean)]
     );
+  }
+  const existing = await client.query<{ planned_session_id: string | null }>(
+    'SELECT planned_session_id FROM cardio_test_attempts WHERE id = $1 AND user_id = $2 AND test_type = $3 FOR UPDATE',
+    [attemptId, userId, testType]
+  );
+  if (!existing.rowCount) return undefined;
+  const oldLink = existing.rows[0]!.planned_session_id;
+  if (oldLink && userId !== authenticatedUserId) return undefined;
+  if (newLink && userId !== authenticatedUserId)
+    throw new HttpError('Training Programs are owner-only.', 403);
+  if (oldLink !== observedLink)
+    throw new HttpError(
+      'This Test Attempt changed. Reload and try again.',
+      409
+    );
+  if (newLink !== oldLink) {
     if (oldLink) {
       const released = await client.query<{ program_id: string }>(
         "UPDATE training_program_sessions SET status = 'planned', outcome_at = NULL, updated_at = now() WHERE id = $1 AND user_id = $2 RETURNING program_id",

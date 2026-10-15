@@ -61,14 +61,29 @@ it('locks both Programs in ID order before moving an attempt between sessions', 
   );
 
   const calls = query.mock.calls.map(([sql]) => sql);
+  const lookup = calls.findIndex(
+    (sql) =>
+      sql.startsWith('SELECT planned_session_id FROM cardio_test_attempts') &&
+      !sql.includes('FOR UPDATE')
+  );
   const lock = calls.findIndex((sql) => sql.includes('ORDER BY id FOR UPDATE'));
+  const attemptLock = calls.findIndex(
+    (sql) =>
+      sql.startsWith('SELECT planned_session_id FROM cardio_test_attempts') &&
+      sql.includes('FOR UPDATE')
+  );
   const release = calls.findIndex((sql) =>
     sql.startsWith("UPDATE training_program_sessions SET status = 'planned'")
   );
   const claim = calls.findIndex((sql) =>
     sql.startsWith('SELECT status, cardio_test_type')
   );
+  expect(lookup).toBeGreaterThan(-1);
   expect(lock).toBeGreaterThan(-1);
+  expect(attemptLock).toBeGreaterThan(-1);
+  expect(lookup).toBeLessThan(lock);
+  expect(lock).toBeLessThan(attemptLock);
+  expect(attemptLock).toBeLessThan(release);
   expect(lock).toBeLessThan(release);
   expect(lock).toBeLessThan(claim);
   expect(query.mock.calls[lock]?.[1]).toEqual([

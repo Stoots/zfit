@@ -7,6 +7,7 @@ import cookieParser from 'cookie-parser';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   cooperRunAttemptSchema,
+  trainingProgramSchema,
   type CooperRunAttemptInput,
 } from '@workspace/shared';
 import { getSystemClient, endPool } from '../db/poolManager.js';
@@ -32,6 +33,58 @@ describe.runIf(run)('persisted authenticated Cooper Test Attempts', () => {
       .post('/api/cardio-tests/cooper-run/attempts')
       .set('Authorization', `Bearer ${token}`)
       .send(input);
+
+  async function createCooperProgram(name: string) {
+    const response = await request(app)
+      .post('/api/training-programs')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        name,
+        goal: 'Measure progress',
+        start_date: '2026-10-01',
+        end_date: '2026-10-31',
+        phases: [
+          {
+            name: 'Base',
+            goal: 'Aerobic base',
+            weeks: [
+              {
+                start_date: '2026-10-12',
+                end_date: '2026-10-18',
+                sessions: [
+                  {
+                    name: 'Cooper baseline',
+                    scheduled_date: '2026-10-14',
+                    cardio_test_type: 'cooper_run',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+    expect(response.status).toBe(201);
+    return trainingProgramSchema.parse(response.body);
+  }
+
+  async function waitForBlockedQuery(fragment: string) {
+    const observer = await getSystemClient();
+    try {
+      for (let attempt = 0; attempt < 100; attempt++) {
+        const result = (await observer.query(
+          `SELECT count(*)::int AS waiting FROM pg_stat_activity
+           WHERE datname = current_database() AND pid <> pg_backend_pid()
+             AND wait_event_type = 'Lock' AND query LIKE $1`,
+          [`%${fragment}%`]
+        )) as { rows: Array<{ waiting: number }> };
+        if (result.rows[0]?.waiting) return;
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+    } finally {
+      observer.release();
+    }
+    throw new Error(`No blocked ${fragment} query appeared`);
+  }
 
   beforeAll(async () => {
     const { auth } = await import('../auth.js');
@@ -401,6 +454,141 @@ describe.runIf(run)('persisted authenticated Cooper Test Attempts', () => {
         (row: { planned_session_id: string | null }) => row.planned_session_id
       )
     ).toEqual([null, null]);
+  });
+
+  it('deletes a Program while a linked attempt is concurrently unlinked', async () => {
+    const program = await createCooperProgram('Concurrent deletion');
+    const planned = program.phases[0]!.weeks[0]!.sessions[0]!;
+    const linked = await attempt({
+      attempt_date: '2026-10-14',
+      distance_meters: 2500,
+      planned_session_id: planned.id,
+    });
+    expect(linked.status).toBe(201);
+    const blocker = await getSystemClient();
+    let unlink: Promise<{ status: number }> | undefined;
+    try {
+      await blocker.query('BEGIN');
+      await blocker.query("SET LOCAL deadlock_timeout = '100ms'");
+      await blocker.query("SET LOCAL statement_timeout = '5s'");
+      await blocker.query(
+        'SELECT id FROM training_programs WHERE id = $1 FOR UPDATE',
+        [program.id]
+      );
+      unlink = Promise.resolve(
+        request(app)
+          .put(`/api/cardio-tests/cooper-run/attempts/${linked.body.id}`)
+          .set('Authorization', `Bearer ${ownerToken}`)
+          .send({
+            attempt_date: '2026-10-14',
+            distance_meters: 2500,
+            planned_session_id: null,
+          })
+      ) as Promise<{ status: number }>;
+      await waitForBlockedQuery('training_programs');
+      await blocker.query('DELETE FROM training_programs WHERE id = $1', [
+        program.id,
+      ]);
+      await blocker.query('COMMIT');
+      const response = await unlink;
+      expect(response?.status).toBe(409);
+      const retained = await request(app)
+        .get('/api/cardio-tests/cooper-run/attempts')
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(retained.body[0].planned_session_id).toBeNull();
+    } finally {
+      await blocker.query('ROLLBACK').catch(() => {});
+      blocker.release();
+      await unlink;
+    }
+  });
+
+  it('saves a Program while its attempt moves to another Program', async () => {
+    const source = await createCooperProgram('Concurrent relink source');
+    const target = await createCooperProgram('Concurrent relink target');
+    const sourceSession = source.phases[0]!.weeks[0]!.sessions[0]!;
+    const targetSession = target.phases[0]!.weeks[0]!.sessions[0]!;
+    const linked = await attempt({
+      attempt_date: '2026-10-14',
+      distance_meters: 2500,
+      planned_session_id: sourceSession.id,
+    });
+    expect(linked.status).toBe(201);
+    const blocker = await getSystemClient();
+    let save: Promise<{ status: number }> | undefined;
+    let relink:
+      | Promise<{ status: number; body: { planned_session_id: string } }>
+      | undefined;
+    try {
+      await blocker.query('BEGIN');
+      await blocker.query(
+        'SELECT id FROM training_program_sessions WHERE id = $1 FOR UPDATE',
+        [sourceSession.id]
+      );
+      save = Promise.resolve(
+        request(app)
+          .put(`/api/training-programs/${source.id}`)
+          .set('Authorization', `Bearer ${ownerToken}`)
+          .send({
+            name: 'Concurrent relink source updated',
+            goal: source.goal,
+            start_date: source.start_date,
+            end_date: source.end_date,
+            schedule_type: source.schedule_type,
+            auto_shift: source.auto_shift,
+            phases: source.phases.map((phase) => ({
+              id: phase.id,
+              name: phase.name,
+              goal: phase.goal,
+              weeks: phase.weeks.map((week) => ({
+                id: week.id,
+                start_date: week.start_date,
+                end_date: week.end_date,
+                sessions: week.sessions.map((session) => ({
+                  id: session.id,
+                  name: session.name,
+                  scheduled_date: session.scheduled_date,
+                  cardio_test_type: session.cardio_test_type,
+                  is_optional: session.is_optional,
+                })),
+              })),
+            })),
+          })
+      ) as Promise<{ status: number }>;
+      await waitForBlockedQuery('training_program_sessions');
+      relink = Promise.resolve(
+        request(app)
+          .put(`/api/cardio-tests/cooper-run/attempts/${linked.body.id}`)
+          .set('Authorization', `Bearer ${ownerToken}`)
+          .send({
+            attempt_date: '2026-10-14',
+            distance_meters: 2500,
+            planned_session_id: targetSession.id,
+          })
+      ) as Promise<{ status: number; body: { planned_session_id: string } }>;
+      await waitForBlockedQuery('training_programs');
+      await blocker.query('COMMIT');
+      const [saved, moved] = await Promise.all([save, relink]);
+      expect(saved?.status).toBe(200);
+      expect(moved?.status).toBe(200);
+      expect(moved?.body.planned_session_id).toBe(targetSession.id);
+      const previous = await request(app)
+        .get(`/api/training-programs/${source.id}`)
+        .set('Authorization', `Bearer ${ownerToken}`);
+      const current = await request(app)
+        .get(`/api/training-programs/${target.id}`)
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(previous.body.phases[0].weeks[0].sessions[0].status).toBe(
+        'planned'
+      );
+      expect(current.body.phases[0].weeks[0].sessions[0].status).toBe(
+        'completed'
+      );
+    } finally {
+      await blocker.query('ROLLBACK').catch(() => {});
+      blocker.release();
+      await Promise.all([save, relink]);
+    }
   });
 
   it.each([
