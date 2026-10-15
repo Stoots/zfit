@@ -10,6 +10,7 @@ import {
   type TrainingProgram,
   type TrainingProgramInput,
   type TrainingProgramOutcomeInput,
+  type PresetSessionExerciseRequest,
 } from '@workspace/shared';
 import { getClient } from '../db/poolManager.js';
 import { HttpError } from '../utils/errors.js';
@@ -661,7 +662,8 @@ export async function completeTrainingProgramSession(
   userId: string,
   programId: string,
   sessionId: string,
-  entryDate: string
+  entryDate: string,
+  performedExercises?: PresetSessionExerciseRequest[]
 ): Promise<TrainingProgram> {
   const client = await getClient(userId, userId);
   try {
@@ -695,17 +697,21 @@ export async function completeTrainingProgramSession(
       userId,
       session.workout_session_id,
       entryDate,
-      client
+      client,
+      undefined,
+      performedExercises
     );
     if (!created.session)
       throw new Error('Created diary workout could not be read.');
-    await client.query(
-      `UPDATE exercise_entry_sets SET completed_at = now()
-       WHERE exercise_entry_id IN (
-         SELECT id FROM exercise_entries WHERE exercise_preset_entry_id = $1 AND user_id = $2
-       )`,
-      [created.session.id, userId]
-    );
+    if (!performedExercises) {
+      await client.query(
+        `UPDATE exercise_entry_sets SET completed_at = now()
+         WHERE exercise_entry_id IN (
+           SELECT id FROM exercise_entries WHERE exercise_preset_entry_id = $1 AND user_id = $2
+         )`,
+        [created.session.id, userId]
+      );
+    }
     const input: TrainingProgramOutcomeInput = {
       status: 'completed',
       workout: { type: 'preset', id: created.session.id },

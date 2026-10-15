@@ -6,6 +6,12 @@ import { createWorkoutPlaybackDraftFromPreset } from '@/utils/workoutPlayback';
 
 let mockLocationState: { returnTo?: string; draft?: unknown } | null = null;
 
+jest.mock('@/hooks/TrainingPrograms/useTrainingPrograms', () => ({
+  useTrainingPrograms: () => ({
+    complete: { mutateAsync: jest.fn(), isPending: false },
+  }),
+}));
+
 jest.mock('react-i18next', () =>
   jest.requireActual('@/tests/mocks/reactI18next')
 );

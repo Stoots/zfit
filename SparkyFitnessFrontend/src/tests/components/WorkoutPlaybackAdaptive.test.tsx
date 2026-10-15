@@ -14,6 +14,12 @@ import type { ExerciseCoachingSignal } from '@workspace/shared';
 let mockLocationState: { returnTo?: string; draft?: unknown } | null = null;
 const mockFetchSignals = jest.fn();
 
+jest.mock('@/hooks/TrainingPrograms/useTrainingPrograms', () => ({
+  useTrainingPrograms: () => ({
+    complete: { mutateAsync: jest.fn(), isPending: false },
+  }),
+}));
+
 jest.mock('react-i18next', () =>
   jest.requireActual('@/tests/mocks/reactI18next')
 );

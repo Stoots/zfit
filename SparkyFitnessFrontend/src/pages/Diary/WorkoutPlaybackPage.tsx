@@ -13,6 +13,8 @@ import { ArrowLeft, ArrowRight, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardHeader } from '@/components/ui/card';
 import { useCreatePresetSessionMutation } from '@/hooks/Exercises/useExerciseEntries';
+import { getGroupedWorkoutSession } from '@/hooks/Exercises/useExerciseEntries';
+import { useTrainingPrograms } from '@/hooks/TrainingPrograms/useTrainingPrograms';
 import { usePreferences } from '@/contexts/PreferencesContext';
 import {
   distributeProgressionReps,
@@ -203,8 +205,11 @@ const WorkoutPlaybackPage = () => {
     useState<WorkoutFinishSummary | null>(null);
   const getDraft = useCallback(() => draftRef.current, []);
 
-  const { mutateAsync: createPresetSession, isPending: isSaving } =
+  const { mutateAsync: createPresetSession, isPending: isSavingPreset } =
     useCreatePresetSessionMutation();
+  const { complete: completeProgramSession } = useTrainingPrograms('', false);
+  const finishInFlight = useRef(false);
+  const isSaving = isSavingPreset || completeProgramSession.isPending;
   // Auto-evaluate progression overload and the per-set ramp for uncompleted
   // exercises, once per workout: a reopened draft keeps what the lifter
   // typed (and a heavier set 1 never re-seeds the ramp).
@@ -1016,7 +1021,7 @@ const WorkoutPlaybackPage = () => {
   }, [draft, navigate, returnPath]);
 
   const handleFinishWorkout = useCallback(async () => {
-    if (!draft) return;
+    if (!draft || finishInFlight.current) return;
 
     const payload = buildPresetSessionCreateRequestFromDraft(draft, timezone);
     if (!payload.exercises || payload.exercises.length === 0) {
@@ -1029,8 +1034,29 @@ const WorkoutPlaybackPage = () => {
       return;
     }
 
+    finishInFlight.current = true;
     try {
-      const saved = await createPresetSession(payload);
+      const program = draft.training_program;
+      const savedProgram = program
+        ? await completeProgramSession.mutateAsync({
+            programId: program.program_id,
+            sessionId: program.session_id,
+            input: {
+              entry_date: draft.entry_date,
+              performed_exercises: payload.exercises,
+            },
+          })
+        : null;
+      const saved = program ? null : await createPresetSession(payload);
+      const programWorkout = savedProgram?.phases
+        .flatMap((phase) => phase.weeks)
+        .flatMap((week) => week.sessions)
+        .find(
+          (session) => session.id === program?.session_id
+        )?.completed_workout;
+      const diary = programWorkout
+        ? await getGroupedWorkoutSession(programWorkout.id).catch(() => null)
+        : saved;
       const finalStats = getWorkoutPlaybackStats(draft);
       clearWorkoutPlaybackDraftFromStorage(draft.entry_date);
       // The summary stays up over the cleared player; closing it returns to
@@ -1038,15 +1064,15 @@ const WorkoutPlaybackPage = () => {
       setFinishSummary({
         name: draft.name,
         durationSeconds: elapsedSeconds,
-        caloriesKcal: (saved?.exercises ?? []).reduce(
+        caloriesKcal: (diary?.exercises ?? []).reduce(
           (sum, exercise) => sum + (Number(exercise.calories_burned) || 0),
           0
         ),
         completedSets: finalStats.completedSets,
         totalSets: finalStats.totalSets,
         volume: totalVolume,
-        sessionId: saved?.id,
-        exercises: (saved?.exercises ?? []).map((exercise) => ({
+        sessionId: diary?.id ?? programWorkout?.id,
+        exercises: (diary?.exercises ?? []).map((exercise) => ({
           id: exercise.id,
           name: exercise.exercise_snapshot?.name ?? '',
         })),
@@ -1060,8 +1086,18 @@ const WorkoutPlaybackPage = () => {
           'Failed to save workout. Your local progress is still preserved, and you can retry.'
         )
       );
+    } finally {
+      finishInFlight.current = false;
     }
-  }, [createPresetSession, draft, elapsedSeconds, t, timezone, totalVolume]);
+  }, [
+    completeProgramSession,
+    createPresetSession,
+    draft,
+    elapsedSeconds,
+    t,
+    timezone,
+    totalVolume,
+  ]);
 
   const handleCloseFinishSummary = useCallback(() => {
     setFinishSummary(null);

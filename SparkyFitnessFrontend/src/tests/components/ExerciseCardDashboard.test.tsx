@@ -8,6 +8,11 @@ import type { GroupedExerciseEntry } from '@/types/exercises';
 import ExerciseCard from '@/pages/Diary/ExerciseCard';
 import type { WorkoutPlanTemplate } from '@/types/workout';
 
+const mockNavigate = jest.fn();
+jest.mock('react-router-dom', () => ({
+  ...jest.requireActual('react-router-dom'),
+  useNavigate: () => mockNavigate,
+}));
 jest.mock('react-i18next', () =>
   jest.requireActual('@/tests/mocks/reactI18next')
 );
@@ -175,6 +180,7 @@ const pickerFor = (sessionName: string) =>
 describe('ExerciseCard dashboard plans', () => {
   beforeEach(() => {
     localStorage.clear();
+    mockNavigate.mockReset();
     mockComplete.mockReset().mockResolvedValue({});
     mockOutcome.mockReset().mockResolvedValue({});
     mockState.actingOnBehalf = false;
@@ -412,6 +418,21 @@ describe('ExerciseCard dashboard plans', () => {
     expect(
       screen.getByRole('button', { name: /^Start Workout: Push/ })
     ).toBeInTheDocument();
+  });
+
+  it('carries the Planned Session into a real playback draft', async () => {
+    mockState.plans = [makePlan('7', 'Program plan', ['Push'])];
+    mockState.programs = { data: [programLinkedTo('7')], isError: false };
+    renderCard();
+    fireEvent.click(
+      screen.getByRole('button', { name: /^Start Workout: Push/ })
+    );
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalled());
+    const [, options] = mockNavigate.mock.calls[0]!;
+    expect(options.state.draft.training_program).toEqual({
+      program_id: 'program-1',
+      session_id: 'planned-session-1',
+    });
   });
 
   it('labels a future Program workout as the next session', () => {

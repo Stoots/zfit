@@ -222,3 +222,5 @@ export const exerciseDetailsOptions = (exerciseId: string) => ({
   },
 });
 export { fetchExerciseProgressionStats };
+
+export { getGroupedWorkoutSession } from '@/api/Exercises/exerciseEntryService';

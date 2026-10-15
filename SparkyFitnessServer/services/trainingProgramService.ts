@@ -92,6 +92,7 @@ export async function completeProgramSession(
     userId,
     programId(id),
     session.data,
-    parsed.data.entry_date
+    parsed.data.entry_date,
+    parsed.data.performed_exercises
   );
 }

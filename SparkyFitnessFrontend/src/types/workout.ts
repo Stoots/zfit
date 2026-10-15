@@ -40,6 +40,7 @@ export interface WorkoutPreset {
   id: number | string;
   /** Present only when executing an exact, frozen plan session. */
   workout_session_id?: string;
+  training_program?: { program_id: string; session_id: string };
   user_id: string;
   name: string;
   description?: string;
