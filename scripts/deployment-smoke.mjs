@@ -98,26 +98,28 @@ export function expectedWorkoutCards(
       plan.sessions.map((session) => [session.id, { plan, session }]),
     ),
   );
-  // Choose the whole earliest day before filtering logged prescriptions, just
-  // as the dashboard does; never promote a later day when today's cards are logged.
+  // Program outcomes, not today's diary assignments, decide whether a future
+  // occurrence of the same reusable Workout Session is still scheduled.
   const pending = plannedSessions
-    .filter((session) => {
-      const candidate = byId.get(session.workout_session_id);
-      return (
-        session.status === "planned" &&
-        candidate &&
-        String(candidate.plan.id) === String(session.workout_plan_id)
-      );
-    })
+    .filter((session) => session.status === "planned")
     .sort((left, right) =>
       left.effective_date.localeCompare(right.effective_date),
     );
   const expected = [];
-  const nextDate = pending[0]?.effective_date;
+  let selected = 0;
   for (const planned of pending) {
-    if (planned.effective_date !== nextDate) break;
-    const { plan, session } = byId.get(planned.workout_session_id);
-    if (eligible(session)) expected.push(card(plan, session, planned));
+    if (selected >= 3) break;
+    const candidate = byId.get(planned.workout_session_id);
+    if (
+      !candidate ||
+      String(candidate.plan.id) !== String(planned.workout_plan_id)
+    ) {
+      if (selected === 0) break;
+      continue;
+    }
+    selected++;
+    const { plan, session } = candidate;
+    expected.push(card(plan, session, planned));
   }
   for (const plan of plans) {
     const session = plan.next_session;
@@ -218,7 +220,7 @@ async function main() {
 
 Use a dedicated Chrome profile, signed in to the public-origin Diary in English.
 Run warm BEFORE deployment and verify AFTER deployment, with the same browser and output directory.
-Verify compares the loaded entry asset with the running container and checks exact session UUIDs and prescriptions for every earliest-day Program workout plus unrelated active standalone plans.
+Verify compares the loaded entry asset with the running container and checks exact session UUIDs and prescriptions for the next three Program workouts plus unrelated active standalone plans.
 Inactive owner plans bound by a Program remain eligible; shared or unbound inactive plans do not become standalone previews.
 Caching remains enabled. Stale builds trigger a normal service-worker update and one reload.
 The browser stays open. Reports and screenshots contain private workout data, but no cookies.`);

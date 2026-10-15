@@ -30,10 +30,28 @@ export function selectDashboardWorkoutPlans<T extends CandidatePlan>(
   eligiblePlans: readonly T[],
   programs: readonly TrainingProgram[],
 ): DashboardWorkoutPlans<T> {
+  const selected = selectUpcomingDashboardWorkoutPlans(
+    eligiblePlans,
+    programs,
+    1,
+  );
+  return {
+    programPlan: selected.programPlans[0],
+    standalonePlans: selected.standalonePlans,
+  };
+}
+
+/** List upcoming Program sessions while preserving the single-preview selector
+ * used by mobile and other callers. */
+export function selectUpcomingDashboardWorkoutPlans<T extends CandidatePlan>(
+  eligiblePlans: readonly T[],
+  programs: readonly TrainingProgram[],
+  limit: number,
+): { programPlans: ProgramPreview<T>[]; standalonePlans: T[] } {
   const byId = new Map(eligiblePlans.map((plan) => [String(plan.id), plan]));
   const linkedIds = new Set<string>();
-  let programPlan: ProgramPreview<T> | undefined;
-  let nextDate: string | undefined;
+  const pending: TrainingProgram["phases"][number]["weeks"][number]["sessions"][number][] =
+    [];
   for (const program of programs) {
     for (const phase of program.phases) {
       for (const week of phase.weeks) {
@@ -42,29 +60,33 @@ export function selectDashboardWorkoutPlans<T extends CandidatePlan>(
             continue;
           const planId = String(planned.workout_plan_id);
           linkedIds.add(planId);
-          const plan = byId.get(planId);
-          const session = plan?.sessions.find(
-            (item) => item.id === planned.workout_session_id,
-          );
-          if (planned.status !== "planned") continue;
-          if (nextDate !== undefined && planned.effective_date >= nextDate)
-            continue;
-          nextDate = planned.effective_date;
-          programPlan = undefined;
-          if (!plan || !session) continue;
-          programPlan = {
-            ...plan,
-            training_program_session_id: planned.id,
-            next_session: session,
-            next_assignments: session.assignments,
-            sequence_position: null,
-          };
+          if (planned.status === "planned") pending.push(planned);
         }
       }
     }
   }
+  pending.sort((a, b) => a.effective_date.localeCompare(b.effective_date));
+  const programPlans: ProgramPreview<T>[] = [];
+  for (const planned of pending) {
+    if (programPlans.length >= limit) break;
+    const plan = byId.get(String(planned.workout_plan_id));
+    const session = plan?.sessions.find(
+      (item) => item.id === planned.workout_session_id,
+    );
+    if (!plan || !session) {
+      if (programPlans.length === 0) break;
+      continue;
+    }
+    programPlans.push({
+      ...plan,
+      training_program_session_id: planned.id,
+      next_session: session,
+      next_assignments: session.assignments,
+      sequence_position: null,
+    });
+  }
   return {
-    programPlan,
+    programPlans,
     standalonePlans: eligiblePlans.filter(
       (plan) => !linkedIds.has(String(plan.id)),
     ),

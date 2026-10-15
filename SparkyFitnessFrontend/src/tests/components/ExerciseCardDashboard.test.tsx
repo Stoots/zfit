@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
@@ -21,15 +21,11 @@ jest.mock('@/contexts/ActiveUserContext', () => ({
 jest.mock('@/contexts/PreferencesContext', () => ({
   usePreferences: () => ({
     loggingLevel: 'SILENT',
+    timezone: 'Australia/Sydney',
     energyUnit: 'kcal',
     convertEnergy: (value: number) => value,
     getEnergyUnitString: () => 'kcal',
   }),
-}));
-jest.mock('@/hooks/Exercises/useExerciseEntries', () => ({
-  useExerciseEntries: () => ({ data: [], isLoading: false }),
-  useDeleteExerciseEntryMutation: () => ({ mutateAsync: jest.fn() }),
-  useDeleteExercisePresetEntryMutation: () => ({ mutateAsync: jest.fn() }),
 }));
 jest.mock('@/hooks/Exercises/useWorkoutPlans', () => ({
   useActiveWorkoutPlans: () => ({ data: mockState.plans }),
@@ -44,7 +40,38 @@ jest.mock('@/hooks/Exercises/useExercises', () => ({
 }));
 jest.mock('@/hooks/TrainingPrograms/useTrainingPrograms', () => ({
   useTrainingProgramsList: () => mockState.programs,
+  useTrainingPrograms: () => ({
+    outcome: { mutateAsync: mockOutcome, isPending: false },
+  }),
 }));
+jest.mock('@/hooks/Exercises/useExerciseEntries', () => ({
+  useExerciseEntries: () => ({ data: [], isLoading: false }),
+  useDeleteExerciseEntryMutation: () => ({ mutateAsync: jest.fn() }),
+  useDeleteExercisePresetEntryMutation: () => ({ mutateAsync: jest.fn() }),
+  useCreatePresetSessionMutation: () => ({
+    mutateAsync: mockCreate,
+    isPending: false,
+  }),
+}));
+jest.mock('@/utils/workoutPlanSession', () => ({
+  buildWorkoutPlanSessionPreset: () =>
+    Promise.resolve({
+      id: 'plan-7-session-7-s1',
+      user_id: 'athlete',
+      name: 'Push',
+      workout_session_id: '7-s1',
+      exercises: [
+        {
+          exercise_id: 'exercise',
+          exercise_name: 'Push',
+          workout_plan_assignment_id: 71,
+          sets: [{ set_number: 1, reps: 8 }],
+        },
+      ],
+    }),
+}));
+const mockCreate = jest.fn();
+const mockOutcome = jest.fn();
 jest.mock('@/pages/Exercises/AddExerciseDialog', () => () => null);
 jest.mock('@/pages/Diary/LogExerciseEntryDialog', () => () => null);
 jest.mock('@/pages/Diary/EditExerciseEntryDialog', () => () => null);
@@ -139,9 +166,87 @@ const pickerFor = (sessionName: string) =>
 
 describe('ExerciseCard dashboard plans', () => {
   beforeEach(() => {
+    localStorage.clear();
+    mockCreate.mockReset().mockResolvedValue({ id: 'diary-workout-1' });
+    mockOutcome.mockReset().mockResolvedValue({});
     mockState.actingOnBehalf = false;
     mockState.programs = { data: [], isError: false };
     mockState.plans = [];
+  });
+
+  it('confirms before logging prescribed sets and recording the Program outcome', async () => {
+    mockState.plans = [makePlan('7', 'Program plan', ['Push'])];
+    mockState.programs = { data: [programLinkedTo('7')], isError: false };
+    renderCard();
+
+    fireEvent.click(screen.getByRole('button', { name: /mark complete/i }));
+    expect(mockCreate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(mockCreate).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: /mark complete/i }));
+    fireEvent.click(
+      screen.getByRole('button', { name: /confirm completion/i })
+    );
+    await waitFor(() =>
+      expect(mockOutcome).toHaveBeenCalledWith({
+        programId: 'program-1',
+        sessionId: 'planned-session-1',
+        input: {
+          status: 'completed',
+          workout: { type: 'preset', id: 'diary-workout-1' },
+        },
+      })
+    );
+    expect(mockCreate.mock.calls[0]?.[0].exercises[0].sets[0].reps).toBe(8);
+  });
+
+  it('shows three Program cards in schedule order and no fourth card', () => {
+    mockState.plans = ['7', '8', '9', '10'].map((id) =>
+      makePlan(id, `Plan ${id}`, [`Workout ${id}`])
+    );
+    const linked = programLinkedTo('7');
+    const week = linked.phases[0]!.weeks[0]!;
+    const baseSession = week.sessions[0]!;
+    week.sessions = ['10', '8', '7', '9'].map((id, index) => ({
+      ...baseSession,
+      id: `planned-${id}`,
+      workout_plan_id: Number(id),
+      workout_session_id: `${id}-s1`,
+      effective_date: `2026-10-${String([18, 16, 15, 17][index])}`,
+    }));
+    mockState.programs = { data: [linked], isError: false };
+    renderCard();
+
+    expect(
+      screen.getAllByRole('button', { name: 'Mark complete' })
+    ).toHaveLength(3);
+    expect(
+      screen
+        .getAllByTestId(/dashboard-plan-/)
+        .slice(0, 3)
+        .map((item) => item.getAttribute('data-workout-plan-id'))
+    ).toEqual(['7', '8', '9']);
+    expect(screen.queryByText('Workout 10')).not.toBeInTheDocument();
+  });
+
+  it('retries outcome linking without logging the workout twice', async () => {
+    mockState.plans = [makePlan('7', 'Program plan', ['Push'])];
+    mockState.programs = { data: [programLinkedTo('7')], isError: false };
+    mockOutcome.mockRejectedValueOnce(new Error('Could not link workout'));
+    renderCard();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mark complete' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm completion' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Could not link workout'
+    );
+    expect(screen.getByText(/already logged/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mark complete' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm completion' }));
+    await waitFor(() => expect(mockOutcome).toHaveBeenCalledTimes(2));
+    expect(mockCreate).toHaveBeenCalledTimes(1);
   });
 
   it('shows the next Program workout as a preview without a session picker', () => {

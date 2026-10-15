@@ -19,6 +19,7 @@ interface DashboardPlanCardProps {
   allowSessionPicker: boolean;
   startingSessionId: string | null;
   onStart: (plan: WorkoutPlanTemplate, session: WorkoutPlanSession) => void;
+  onComplete?: () => void;
 }
 
 interface DistinctSession {
@@ -33,6 +34,7 @@ const DashboardPlanCard = ({
   allowSessionPicker,
   startingSessionId,
   onStart,
+  onComplete,
 }: DashboardPlanCardProps) => {
   const { t } = useTranslation();
   const [selectedSessionId, setSelectedSessionId] = useState<string>();
@@ -69,6 +71,12 @@ const DashboardPlanCard = ({
     <div
       className="border-b pb-3 mb-3 md:pb-5 md:mb-4 flex flex-col items-start justify-between gap-3 md:gap-4"
       data-testid={`dashboard-plan-${plan.id}`}
+      data-workout-session-id={currentSession.id}
+      data-workout-plan-id={plan.id}
+      data-training-program-session-id={plan.training_program_session_id}
+      data-workout-session-prescription={JSON.stringify(
+        currentSession.assignments
+      )}
     >
       <div className="min-w-0 space-y-2">
         {programContext && (
@@ -149,7 +157,7 @@ const DashboardPlanCard = ({
               })}
         </p>
       </div>
-      <div className="flex items-center shrink-0">
+      <div className="flex flex-wrap items-center gap-2 shrink-0">
         <Button
           variant="default"
           aria-label={t('exerciseCard.startExactSession', {
@@ -167,6 +175,11 @@ const DashboardPlanCard = ({
             : t('exerciseCard.startWorkoutButton', 'Start Workout')}
           <ArrowRight aria-hidden="true" className="size-4" />
         </Button>
+        {onComplete && (
+          <Button variant="outline" onClick={onComplete} className="min-h-11">
+            {t('exerciseCard.markComplete', 'Mark complete')}
+          </Button>
+        )}
       </div>
     </div>
   );

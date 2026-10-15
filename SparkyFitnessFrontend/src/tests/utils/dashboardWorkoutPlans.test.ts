@@ -1,5 +1,6 @@
 import {
   selectDashboardWorkoutPlans,
+  selectUpcomingDashboardWorkoutPlans,
   type TrainingProgram,
 } from '@workspace/shared';
 import type { WorkoutPlanTemplate } from '@/types/workout';
@@ -82,6 +83,25 @@ const program = (sessions: Session[]): TrainingProgram =>
   }) as TrainingProgram;
 
 describe('dashboard next workout selection', () => {
+  it('lists up to three pending sessions by effective date and authored order', () => {
+    const selected = selectUpcomingDashboardWorkoutPlans(
+      ['1', '2', '3', '4'].map(plan),
+      [
+        program([
+          session(1, '2026-10-16'),
+          session(2, '2026-10-15'),
+          session(3, '2026-10-15'),
+          session(4, '2026-10-17'),
+        ]),
+      ],
+      3
+    );
+    expect(selected.programPlans.map((item) => item.id)).toEqual([
+      '2',
+      '3',
+      '1',
+    ]);
+  });
   it('shows only the earliest program workout, not all plans or creation order', () => {
     const plans = ['1', '3', '5', '2', '4', '6'].map(plan);
     const programs = [
