@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -68,6 +68,8 @@ import {
   createWorkoutPlaybackRouteStateFromExercise,
 } from '@/utils/workoutPlayback';
 import { buildWorkoutPlanSessionPreset } from '@/utils/workoutPlanSession';
+import ProgramSessionOutcome from '@/pages/TrainingPrograms/ProgramSessionOutcome';
+import type { TrainingProgram } from '@workspace/shared';
 import {
   buildPresetSessionCreateRequestFromDraft,
   createWorkoutPlaybackDraftFromPreset,
@@ -91,6 +93,41 @@ interface ExerciseCardProps {
   initialExercisesToLog?: PresetExercise[];
   onExercisesLogged: () => void;
 }
+
+type PlannedSession =
+  TrainingProgram['phases'][number]['weeks'][number]['sessions'][number];
+
+const matchingDiaryWorkout = (
+  entries: GroupedExerciseEntry[],
+  plan: WorkoutPlanTemplate,
+  date: string
+) => {
+  const assignmentIds = new Set(
+    plan.next_session?.assignments.flatMap((assignment) =>
+      assignment.id == null ? [] : [String(assignment.id)]
+    )
+  );
+  const belongsToSession = (id: string | number | null | undefined) =>
+    id != null && assignmentIds.has(String(id));
+  return entries.find(
+    (entry) =>
+      entry.entry_date === date &&
+      (entry.type === 'preset'
+        ? entry.exercises.some((exercise) =>
+            belongsToSession(exercise.workout_plan_assignment_id)
+          )
+        : belongsToSession(entry.workout_plan_assignment_id))
+  );
+};
+
+const hasPrescribedSets = (session: WorkoutPlanSession) =>
+  session.assignments.some(
+    (assignment) =>
+      assignment.sets.length > 0 ||
+      assignment.preset_snapshot?.exercises.some(
+        (exercise) => exercise.sets.length > 0
+      )
+  );
 
 const ExerciseCard = ({
   selectedDate,
@@ -157,17 +194,32 @@ const ExerciseCard = ({
   const [completionTarget, setCompletionTarget] = useState<{
     plan: WorkoutPlanTemplate;
     programId: string;
+    session: PlannedSession;
+    mode: 'checking' | 'log' | 'link';
+    initialWorkout?: { type: GroupedExerciseEntry['type']; id: string };
+    notice?: string;
     savedWorkoutId?: string;
   } | null>(null);
   const [completionError, setCompletionError] = useState('');
   const [completing, setCompleting] = useState(false);
+  const completionInFlight = useRef(false);
 
   const { data: allPlans } = useWorkoutPlanTemplates(currentUserId);
 
-  const { data: exerciseEntries, isLoading: loading } = useExerciseEntries(
-    selectedDate,
-    currentUserId
-  );
+  const {
+    data: exerciseEntries,
+    isLoading: loading,
+    refetch: refetchExerciseEntries,
+  } = useExerciseEntries(selectedDate, currentUserId);
+
+  const loadDiaryWorkouts = async () => {
+    const { data } = await refetchExerciseEntries({ throwOnError: true });
+    if (!data)
+      throw new Error(
+        t('exerciseCard.loadDiaryError', 'Could not load diary workouts.')
+      );
+    return data;
+  };
 
   const [startingSession, setStartingSession] = useState<string | null>(null);
   const handleStartPlanSession = async (
@@ -208,61 +260,117 @@ const ExerciseCard = ({
   };
 
   const handleConfirmCompletion = async () => {
-    if (!completionTarget?.plan.next_session || !currentUserId) return;
-    const storageKey = `dashboard-completion:${completionTarget.plan.training_program_session_id}`;
+    if (
+      completionInFlight.current ||
+      !completionTarget?.plan.next_session ||
+      !currentUserId
+    )
+      return;
+    const nextSession = completionTarget.plan.next_session;
+    completionInFlight.current = true;
     setCompleting(true);
     setCompletionError('');
     try {
-      let savedWorkoutId = completionTarget.savedWorkoutId;
-      if (!savedWorkoutId) {
-        const preset = await buildWorkoutPlanSessionPreset(
-          completionTarget.plan,
-          completionTarget.plan.next_session.id,
-          currentUserId,
-          (id) => queryClient.fetchQuery(exerciseByIdOptions(id))
-        );
-        const draft = createWorkoutPlaybackDraftFromPreset(
-          preset,
-          selectedDate
-        );
-        const completedAt = new Date().toISOString();
-        const completedDraft = {
-          ...draft,
-          exercises: draft.exercises.map((exercise) => ({
-            ...exercise,
-            sets: exercise.sets.map((set) => ({
-              ...set,
-              completed: true,
-              completed_at: completedAt,
-            })),
-          })),
-        };
-        const payload = buildPresetSessionCreateRequestFromDraft(
-          completedDraft,
-          timezone
-        );
-        if (!payload.exercises?.length)
-          throw new Error(
-            t(
-              'exerciseCard.noPrescribedSets',
-              'This session has no prescribed sets to log.'
-            )
-          );
-        const saved = await createPresetSession(payload);
-        savedWorkoutId = saved.id;
-        localStorage.setItem(storageKey, savedWorkoutId);
-        setCompletionTarget({ ...completionTarget, savedWorkoutId });
+      if (!navigator.locks) {
+        setCompletionTarget({
+          ...completionTarget,
+          mode: 'link',
+          notice: t(
+            'exerciseCard.linkWithoutLock',
+            'This browser cannot safely log this workout here. Use Start Workout to save it, then link the diary workout.'
+          ),
+        });
+        return;
       }
-      await outcome.mutateAsync({
-        programId: completionTarget.programId,
-        sessionId: completionTarget.plan.training_program_session_id!,
-        input: {
-          status: 'completed',
-          workout: { type: 'preset', id: savedWorkoutId },
-        },
-      });
-      localStorage.removeItem(storageKey);
-      setCompletionTarget(null);
+      await navigator.locks.request(
+        `dashboard-completion:${currentUserId}:${nextSession.id}:${selectedDate}`,
+        async () => {
+          let savedWorkoutId = completionTarget.savedWorkoutId;
+          if (!savedWorkoutId) {
+            const diary = await loadDiaryWorkouts();
+            const match = matchingDiaryWorkout(
+              diary,
+              completionTarget.plan,
+              selectedDate
+            );
+            if (match) {
+              setCompletionTarget({
+                ...completionTarget,
+                mode: 'link',
+                initialWorkout: { type: match.type, id: match.id },
+              });
+              return;
+            }
+            const preset = await buildWorkoutPlanSessionPreset(
+              completionTarget.plan,
+              nextSession.id,
+              currentUserId,
+              (id) => queryClient.fetchQuery(exerciseByIdOptions(id))
+            );
+            const draft = createWorkoutPlaybackDraftFromPreset(
+              preset,
+              selectedDate
+            );
+            const completedAt = new Date().toISOString();
+            const completedDraft = {
+              ...draft,
+              exercises: draft.exercises.map((exercise) => ({
+                ...exercise,
+                sets: exercise.sets.map((set) => ({
+                  ...set,
+                  completed: true,
+                  completed_at: completedAt,
+                })),
+              })),
+            };
+            const payload = buildPresetSessionCreateRequestFromDraft(
+              completedDraft,
+              timezone
+            );
+            if (!payload.exercises?.length)
+              throw new Error(
+                t(
+                  'exerciseCard.noPrescribedSets',
+                  'This session has no prescribed sets to log.'
+                )
+              );
+            let saved;
+            try {
+              saved = await createPresetSession(payload);
+            } catch {
+              const freshDiary = await loadDiaryWorkouts().catch(() => null);
+              const recovered = matchingDiaryWorkout(
+                freshDiary ?? [],
+                completionTarget.plan,
+                selectedDate
+              );
+              setCompletionTarget({
+                ...completionTarget,
+                mode: 'link',
+                initialWorkout: recovered
+                  ? { type: recovered.type, id: recovered.id }
+                  : undefined,
+                notice: t(
+                  'exerciseCard.saveUncertain',
+                  'The save response was unclear. Check the diary workout before linking it; this action will not log another copy.'
+                ),
+              });
+              return;
+            }
+            savedWorkoutId = saved.id;
+            setCompletionTarget({ ...completionTarget, savedWorkoutId });
+          }
+          await outcome.mutateAsync({
+            programId: completionTarget.programId,
+            sessionId: completionTarget.plan.training_program_session_id!,
+            input: {
+              status: 'completed',
+              workout: { type: 'preset', id: savedWorkoutId },
+            },
+          });
+          setCompletionTarget(null);
+        }
+      );
     } catch (failure) {
       setCompletionError(
         failure instanceof Error
@@ -270,7 +378,50 @@ const ExerciseCard = ({
           : t('trainingPrograms.outcomeError', 'Could not record this outcome.')
       );
     } finally {
+      completionInFlight.current = false;
       setCompleting(false);
+    }
+  };
+
+  const handleOpenCompletion = async (
+    plan: WorkoutPlanTemplate,
+    programId: string,
+    session: PlannedSession
+  ) => {
+    if (!currentUserId) return;
+    setCompletionError('');
+    setCompletionTarget({ plan, programId, session, mode: 'checking' });
+    try {
+      const diary = await loadDiaryWorkouts();
+      const match = matchingDiaryWorkout(diary, plan, selectedDate);
+      const canLog =
+        plan.next_session &&
+        hasPrescribedSets(plan.next_session) &&
+        navigator.locks;
+      setCompletionTarget((target) =>
+        target?.session.id === session.id
+          ? {
+              ...target,
+              mode: match || !canLog ? 'link' : 'log',
+              initialWorkout: match
+                ? { type: match.type, id: match.id }
+                : undefined,
+              notice:
+                !match && !navigator.locks
+                  ? t(
+                      'exerciseCard.linkWithoutLock',
+                      'This browser cannot safely log this workout here. Use Start Workout to save it, then link the diary workout.'
+                    )
+                  : undefined,
+            }
+          : target
+      );
+    } catch (failure) {
+      setCompletionError(
+        failure instanceof Error
+          ? failure.message
+          : t('exerciseCard.loadDiaryError', 'Could not load diary workouts.')
+      );
     }
   };
 
@@ -675,6 +826,7 @@ const ExerciseCard = ({
             )
             .map((session) => ({
               programId: program.id,
+              session,
               label: `${program.name} · ${phase.name} · ${t('trainingPrograms.weekNumber', 'Week {{number}}', { number: weekIndex + 1 })} · ${session.effective_date}`,
               date: session.effective_date,
             }))
@@ -758,17 +910,12 @@ const ExerciseCard = ({
             onStart={handleStartPlanSession}
             onComplete={
               context
-                ? () => {
-                    setCompletionError('');
-                    setCompletionTarget({
+                ? () =>
+                    void handleOpenCompletion(
                       plan,
-                      programId: context.programId,
-                      savedWorkoutId:
-                        localStorage.getItem(
-                          `dashboard-completion:${plan.training_program_session_id}`
-                        ) ?? undefined,
-                    });
-                  }
+                      context.programId,
+                      context.session
+                    )
                 : undefined
             }
           />
@@ -934,7 +1081,7 @@ const ExerciseCard = ({
         getEnergyUnitString={getEnergyUnitString}
       />
       <AlertDialog
-        open={!!completionTarget}
+        open={!!completionTarget && completionTarget.mode !== 'link'}
         onOpenChange={(open) => {
           if (!open && !completing) setCompletionTarget(null);
         }}
@@ -955,6 +1102,11 @@ const ExerciseCard = ({
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {completionTarget?.mode === 'checking' && !completionError && (
+            <p role="status">
+              {t('trainingPrograms.loadingWorkouts', 'Loading diary workouts…')}
+            </p>
+          )}
           {completionError && (
             <p role="alert" className="text-sm text-destructive">
               {completionError}
@@ -975,7 +1127,7 @@ const ExerciseCard = ({
                 : t('common.cancel', 'Cancel')}
             </AlertDialogCancel>
             <AlertDialogAction
-              disabled={completing}
+              disabled={completing || completionTarget?.mode !== 'log'}
               onClick={(event) => {
                 event.preventDefault();
                 void handleConfirmCompletion();
@@ -988,6 +1140,27 @@ const ExerciseCard = ({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {completionTarget?.mode === 'link' && currentUserId && (
+        <ProgramSessionOutcome
+          session={completionTarget.session}
+          status="completed"
+          autoShift={false}
+          userId={currentUserId}
+          pending={outcome.isPending}
+          initialDate={selectedDate}
+          initialWorkout={completionTarget.initialWorkout}
+          notice={completionTarget.notice}
+          onClose={() => setCompletionTarget(null)}
+          onSave={async (input) => {
+            await outcome.mutateAsync({
+              programId: completionTarget.programId,
+              sessionId: completionTarget.session.id,
+              input,
+            });
+            setCompletionTarget(null);
+          }}
+        />
+      )}
     </Card>
   );
 };

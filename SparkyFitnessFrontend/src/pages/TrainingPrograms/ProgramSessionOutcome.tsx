@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { isDayString } from '@workspace/shared';
 import type {
@@ -28,6 +28,9 @@ export default function ProgramSessionOutcome({
   autoShift,
   userId,
   pending,
+  initialDate,
+  initialWorkout,
+  notice,
   onClose,
   onSave,
 }: {
@@ -36,13 +39,19 @@ export default function ProgramSessionOutcome({
   autoShift: boolean;
   userId: string;
   pending: boolean;
+  initialDate?: string;
+  initialWorkout?: { type: 'preset' | 'individual'; id: string };
+  notice?: string;
   onClose: () => void;
   onSave: (input: TrainingProgramOutcomeInput) => Promise<void>;
 }) {
   const { t } = useTranslation();
-  const [date, setDate] = useState(session.effective_date);
-  const [selected, setSelected] = useState('');
+  const [date, setDate] = useState(initialDate ?? session.effective_date);
+  const [selected, setSelected] = useState(
+    initialWorkout ? `${initialWorkout.type}:${initialWorkout.id}` : ''
+  );
   const [error, setError] = useState('');
+  const submitting = useRef(false);
   const diary = useExerciseEntries(
     status === 'completed' && isDayString(date) ? date : '',
     userId
@@ -51,6 +60,8 @@ export default function ProgramSessionOutcome({
     (item) => `${item.type}:${item.id}` === selected
   );
   const submit = async () => {
+    if (submitting.current) return;
+    submitting.current = true;
     setError('');
     try {
       if (status === 'missed') await onSave({ status });
@@ -65,6 +76,8 @@ export default function ProgramSessionOutcome({
           ? failure.message
           : t('trainingPrograms.outcomeError', 'Could not record this outcome.')
       );
+    } finally {
+      submitting.current = false;
     }
   };
   return (
@@ -124,6 +137,9 @@ export default function ProgramSessionOutcome({
                 'Choose a workout you actually completed from your diary. Linking records a permanent completion; it does not log a new workout or move any dates.'
               )}
             </p>
+            {notice && (
+              <p className="text-sm text-muted-foreground">{notice}</p>
+            )}
             <div>
               <Label htmlFor="completed-workout-date">
                 {t('trainingPrograms.workoutDate', 'Diary workout date')}
