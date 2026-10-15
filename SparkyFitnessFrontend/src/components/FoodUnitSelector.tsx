@@ -574,6 +574,19 @@ const FoodUnitSelector = ({
           ? formatQuantityServingLabel(quantity, selectedVariant)
           : `${quantity} ${displayUnit}`.trim();
 
+  const addDisabled =
+    createFoodVariantMutation.isPending ||
+    (!isConverting && !selectedVariant) ||
+    (isConverting &&
+      (!pendingUnit.trim() ||
+        (autoConversionFactor === null &&
+          (!conversionFactor || conversionFactor <= 0))));
+  const addLabel = createFoodVariantMutation.isPending
+    ? t('common.saving', 'Saving...')
+    : initialQuantity
+      ? t('foodUnitSelector.updateFood', 'Update Food')
+      : t('foodUnitSelector.addToMeal', 'Add to Meal');
+
   return (
     <Dialog
       open={open && (showUnitSelector ?? true)}
@@ -618,6 +631,11 @@ const FoodUnitSelector = ({
         ) : (
           <form onSubmit={handleSubmit}>
             <div className="space-y-4">
+              <div className="flex justify-end">
+                <Button type="submit" disabled={addDisabled}>
+                  {addLabel}
+                </Button>
+              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="quantity">
@@ -1060,22 +1078,8 @@ const FoodUnitSelector = ({
                 >
                   {t('common.cancel', 'Cancel')}
                 </Button>
-                <Button
-                  type="submit"
-                  disabled={
-                    createFoodVariantMutation.isPending ||
-                    (!isConverting && !selectedVariant) ||
-                    (isConverting &&
-                      (!pendingUnit.trim() ||
-                        (autoConversionFactor === null &&
-                          (!conversionFactor || conversionFactor <= 0))))
-                  }
-                >
-                  {createFoodVariantMutation.isPending
-                    ? t('common.saving', 'Saving...')
-                    : initialQuantity
-                      ? t('foodUnitSelector.updateFood', 'Update Food')
-                      : t('foodUnitSelector.addToMeal', 'Add to Meal')}
+                <Button type="submit" disabled={addDisabled}>
+                  {addLabel}
                 </Button>
               </div>
             </div>

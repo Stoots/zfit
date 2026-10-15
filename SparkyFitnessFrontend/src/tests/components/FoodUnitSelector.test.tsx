@@ -181,6 +181,24 @@ describe('FoodUnitSelector', () => {
     jest.clearAllMocks();
   });
 
+  it('offers the same enabled Add action at the top and bottom of the form', async () => {
+    const onSelect = jest.fn();
+    mockFetchQuery.mockResolvedValue([]);
+    await renderSelector(
+      createFood(
+        createVariant({ id: 'v1', serving_size: 1, serving_unit: 'g' })
+      ),
+      { onSelect }
+    );
+
+    const addButtons = screen.getAllByRole('button', { name: /Add to Meal/i });
+    expect(addButtons).toHaveLength(2);
+    expect(addButtons[0]).toBeEnabled();
+    expect(addButtons[1]).toBeEnabled();
+    fireEvent.click(addButtons[0]!);
+    expect(onSelect).toHaveBeenCalledTimes(1);
+  });
+
   it('clears the entry note when reopened for another food', async () => {
     // Diary never clears `selectedFood`, so this dialog stays mounted between
     // foods. A note typed for one food must not be sitting there for the next.
@@ -252,7 +270,9 @@ describe('FoodUnitSelector', () => {
     expect(
       screen.queryByText(/Nutrition for .* tsp:/i)
     ).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Add to Meal/i })).toBeDisabled();
+    screen
+      .getAllByRole('button', { name: /Add to Meal/i })
+      .forEach((button) => expect(button).toBeDisabled());
   });
 
   it('does not derive another incompatible unit before the first manual unit is saved', async () => {
@@ -278,7 +298,9 @@ describe('FoodUnitSelector', () => {
     expect(
       screen.queryByText(/Nutrition for .* tbsp:/i)
     ).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Add to Meal/i })).toBeDisabled();
+    screen
+      .getAllByRole('button', { name: /Add to Meal/i })
+      .forEach((button) => expect(button).toBeDisabled());
   });
 
   it('uses a saved compatible variant immediately after reopen-style loading', async () => {
@@ -312,7 +334,9 @@ describe('FoodUnitSelector', () => {
     });
 
     expect(screen.queryByText(/These units can/i)).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Add to Meal/i })).toBeEnabled();
+    screen
+      .getAllByRole('button', { name: /Add to Meal/i })
+      .forEach((button) => expect(button).toBeEnabled());
   });
 
   it('shows provider serving descriptions with gram or milliliter amounts', async () => {
@@ -378,7 +402,9 @@ describe('FoodUnitSelector', () => {
     fireEvent.change(quantityInput, { target: { value: '0.25' } });
     expect(quantityInput).toHaveValue(0.25);
 
-    fireEvent.click(screen.getByRole('button', { name: /Add to Meal/i }));
+    fireEvent.click(
+      screen.getAllByRole('button', { name: /Add to Meal/i })[0]!
+    );
 
     await waitFor(() => {
       expect(onSelect).toHaveBeenCalledTimes(1);

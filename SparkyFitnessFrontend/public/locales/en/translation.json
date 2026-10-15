@@ -3041,6 +3041,7 @@
     "previousDay": "Previous day",
     "nextDay": "Next day",
     "energyBudget": "of {{goal}} · {{eaten}} eaten",
+    "logFood": "Log food",
     "todaysSession": "Today's session",
     "mealActions": "Meal actions",
     "foodEntryActions": "Actions for {{name}}",

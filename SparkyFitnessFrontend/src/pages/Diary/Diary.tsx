@@ -58,7 +58,12 @@ import {
   useFoodEntries,
   useFoodEntryMeals,
 } from '@/hooks/Diary/useFoodEntries';
-import { todayInZone, prefillEntryTime } from '@workspace/shared';
+import {
+  todayInZone,
+  prefillEntryTime,
+  defaultMealTypeForTime,
+  userHourMinute,
+} from '@workspace/shared';
 import { useDailySummary } from '@/hooks/Diary/useDailyProgress';
 
 const Diary = () => {
@@ -351,6 +356,15 @@ const Diary = () => {
     [availableMealTypes]
   );
 
+  const handleLogFood = () => {
+    const today = todayInZone(timezone);
+    setSelectedDate(today);
+    setSearchParams({ date: today });
+    setOpenFoodSearchForMealType(
+      defaultMealTypeForTime(visibleMealTypes, userHourMinute(timezone))
+    );
+  };
+
   // Some Garmin sync fields (e.g. lactate_threshold, fitness_age) can create a
   // daily_health_metrics row for a date even when none of the metrics this
   // card actually displays came back populated (no real wearable, FIT-only
@@ -376,7 +390,12 @@ const Diary = () => {
         title: t('diary.dailyEnergyGoal', 'Daily Energy Goal'),
         icon: Flame,
         render: () => (
-          <DailyProgress selectedDate={selectedDate} dayTotals={dayTotals} />
+          <DailyProgress
+            selectedDate={selectedDate}
+            dayTotals={dayTotals}
+            onLogFood={handleLogFood}
+            canLogFood={visibleMealTypes.length > 0}
+          />
         ),
       },
       {
@@ -486,6 +505,7 @@ const Diary = () => {
   }, [
     effectiveGoals,
     visibleMealTypes,
+    timezone,
     selectedDate,
     dayTotals,
     foodEntries,

@@ -59,9 +59,13 @@ import { useNutrientGoalPreferences } from '@/hooks/Settings/useNutrientGoalPref
 const DailyProgress = ({
   selectedDate,
   dayTotals,
+  onLogFood,
+  canLogFood,
 }: {
   selectedDate: string;
   dayTotals?: DayTotals;
+  onLogFood: () => void;
+  canLogFood: boolean;
 }) => {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -387,6 +391,15 @@ const DailyProgress = ({
                 : undefined
             }
           />
+          <Button
+            type="button"
+            onClick={onLogFood}
+            disabled={!canLogFood}
+            className="w-full sm:w-auto"
+          >
+            <Utensils className="size-4" aria-hidden="true" />
+            {t('diary.logFood', 'Log food')}
+          </Button>
           {dayTotals && (
             <MacroChips
               className="max-md:gap-1 max-md:[&>li]:gap-1 max-md:[&>li]:px-1.5"
