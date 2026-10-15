@@ -3,12 +3,14 @@ import { todayInZone } from '@workspace/shared';
 import {
   trainingProgramInputSchema,
   trainingProgramOutcomeInputSchema,
+  trainingProgramCompletionInputSchema,
 } from '@workspace/shared';
 import {
   getTrainingPrograms,
   saveTrainingProgram,
   deleteTrainingProgram,
   recordTrainingProgramOutcome,
+  completeTrainingProgramSession,
 } from '../models/trainingProgramRepository.js';
 import { HttpError } from '../utils/errors.js';
 import { loadUserTimezone } from '../utils/timezoneLoader.js';
@@ -72,5 +74,24 @@ export async function recordProgramOutcome(
     session.data,
     parsed.data,
     today
+  );
+}
+
+export async function completeProgramSession(
+  userId: string,
+  id: string,
+  sessionId: string,
+  body: unknown
+) {
+  const parsed = trainingProgramCompletionInputSchema.safeParse(body);
+  if (!parsed.success)
+    throw new HttpError(describeFirstIssue(parsed.error), 400);
+  const session = z.uuid().safeParse(sessionId);
+  if (!session.success) throw new HttpError('Invalid Planned Session ID.', 400);
+  return completeTrainingProgramSession(
+    userId,
+    programId(id),
+    session.data,
+    parsed.data.entry_date
   );
 }

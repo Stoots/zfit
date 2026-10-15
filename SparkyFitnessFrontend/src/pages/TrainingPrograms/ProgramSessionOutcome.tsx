@@ -6,6 +6,7 @@ import type {
   TrainingProgramOutcomeInput,
 } from '@workspace/shared';
 import { useExerciseEntries } from '@/hooks/Exercises/useExerciseEntries';
+import { useTrainingProgramsList } from '@/hooks/TrainingPrograms/useTrainingPrograms';
 import { Button } from '@/components/ui/button';
 import { StatRows } from '@/components/ui/stat-rows';
 import { Input } from '@/components/ui/input';
@@ -29,8 +30,6 @@ export default function ProgramSessionOutcome({
   userId,
   pending,
   initialDate,
-  initialWorkout,
-  notice,
   onClose,
   onSave,
 }: {
@@ -40,23 +39,36 @@ export default function ProgramSessionOutcome({
   userId: string;
   pending: boolean;
   initialDate?: string;
-  initialWorkout?: { type: 'preset' | 'individual'; id: string };
-  notice?: string;
   onClose: () => void;
   onSave: (input: TrainingProgramOutcomeInput) => Promise<void>;
 }) {
   const { t } = useTranslation();
   const [date, setDate] = useState(initialDate ?? session.effective_date);
-  const [selected, setSelected] = useState(
-    initialWorkout ? `${initialWorkout.type}:${initialWorkout.id}` : ''
-  );
+  const [selected, setSelected] = useState('');
   const [error, setError] = useState('');
   const submitting = useRef(false);
   const diary = useExerciseEntries(
     status === 'completed' && isDayString(date) ? date : '',
     userId
   );
-  const workout = diary.data?.find(
+  const programs = useTrainingProgramsList(userId);
+  const linked = new Set(
+    programs.data?.flatMap((program) =>
+      program.phases.flatMap((phase) =>
+        phase.weeks.flatMap((week) =>
+          week.sessions.flatMap((item) =>
+            item.completed_workout
+              ? [`${item.completed_workout.type}:${item.completed_workout.id}`]
+              : []
+          )
+        )
+      )
+    ) ?? []
+  );
+  const choices = programs.data
+    ? diary.data?.filter((item) => !linked.has(`${item.type}:${item.id}`))
+    : [];
+  const workout = choices?.find(
     (item) => `${item.type}:${item.id}` === selected
   );
   const submit = async () => {
@@ -137,9 +149,6 @@ export default function ProgramSessionOutcome({
                 'Choose a workout you actually completed from your diary. Linking records a permanent completion; it does not log a new workout or move any dates.'
               )}
             </p>
-            {notice && (
-              <p className="text-sm text-muted-foreground">{notice}</p>
-            )}
             <div>
               <Label htmlFor="completed-workout-date">
                 {t('trainingPrograms.workoutDate', 'Diary workout date')}
@@ -163,11 +172,18 @@ export default function ProgramSessionOutcome({
                   'Enter a valid diary date.'
                 )}
               </p>
-            ) : diary.isPending ? (
+            ) : diary.isPending || (!programs.data && !programs.isError) ? (
               <p role="status">
                 {t(
                   'trainingPrograms.loadingWorkouts',
                   'Loading diary workouts…'
+                )}
+              </p>
+            ) : programs.isError ? (
+              <p role="alert">
+                {t(
+                  'trainingPrograms.loadError',
+                  'Could not load Training Programs.'
                 )}
               </p>
             ) : diary.isError ? (
@@ -177,7 +193,7 @@ export default function ProgramSessionOutcome({
                   {t('common.retry', 'Retry')}
                 </Button>
               </div>
-            ) : diary.data?.length === 0 ? (
+            ) : choices?.length === 0 ? (
               <p role="status">
                 {t(
                   'trainingPrograms.noWorkouts',
@@ -205,7 +221,7 @@ export default function ProgramSessionOutcome({
                       'Choose a completed workout'
                     )}
                   </option>
-                  {diary.data?.map((item) => (
+                  {choices?.map((item) => (
                     <option
                       key={`${item.type}:${item.id}`}
                       value={`${item.type}:${item.id}`}

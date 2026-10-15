@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type {
   TrainingProgramInput,
   TrainingProgramOutcomeInput,
+  TrainingProgramCompletionInput,
 } from '@workspace/shared';
 import {
   getTrainingPrograms,
@@ -10,11 +11,13 @@ import {
   saveTrainingProgram,
   deleteTrainingProgram,
   recordTrainingProgramOutcome,
+  completeTrainingProgramSession,
 } from '@/api/TrainingPrograms/trainingPrograms';
 import { getWorkoutPlanTemplates } from '@/api/Exercises/workoutPlanTemplates';
 import { workoutPlanKeys } from '@/hooks/Exercises/useWorkoutPlans';
 import { exerciseEntryKeys, trainingProgramKeys } from '@/api/keys/exercises';
 import { dailyProgressKeys } from '@/api/keys/diary';
+import { useDiaryInvalidation } from '@/hooks/useInvalidateKeys';
 
 export function useTrainingProgramsList(userId?: string, enabled = true) {
   return useQuery({
@@ -34,6 +37,7 @@ export function useTrainingPrograms(
 ) {
   const { t } = useTranslation();
   const client = useQueryClient();
+  const invalidateDiary = useDiaryInvalidation();
   const invalidateDependents = () => {
     void client.invalidateQueries({ queryKey: trainingProgramKeys.all });
     void client.invalidateQueries({ queryKey: workoutPlanKeys.all });
@@ -110,5 +114,27 @@ export function useTrainingPrograms(
       ),
     },
   });
-  return { programs, program, plans, save, remove, outcome };
+  const complete = useMutation({
+    mutationFn: ({
+      programId,
+      sessionId,
+      input,
+    }: {
+      programId: string;
+      sessionId: string;
+      input: TrainingProgramCompletionInput;
+    }) => completeTrainingProgramSession(programId, sessionId, input),
+    onSuccess: (saved) => {
+      client.setQueryData(trainingProgramKeys.detail(userId, saved.id), saved);
+      invalidateDependents();
+      invalidateDiary();
+    },
+    meta: {
+      successMessage: t(
+        'trainingPrograms.outcomeSaved',
+        'Session outcome recorded.'
+      ),
+    },
+  });
+  return { programs, program, plans, save, remove, outcome, complete };
 }

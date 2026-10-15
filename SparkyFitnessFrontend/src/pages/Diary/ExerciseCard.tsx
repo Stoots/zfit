@@ -46,7 +46,6 @@ import {
   useDeleteExerciseEntryMutation,
   useDeleteExercisePresetEntryMutation,
   useExerciseEntries,
-  useCreatePresetSessionMutation,
 } from '@/hooks/Exercises/useExerciseEntries';
 import {
   useActiveWorkoutPlans,
@@ -71,10 +70,6 @@ import { buildWorkoutPlanSessionPreset } from '@/utils/workoutPlanSession';
 import ProgramSessionOutcome from '@/pages/TrainingPrograms/ProgramSessionOutcome';
 import type { TrainingProgram } from '@workspace/shared';
 import {
-  buildPresetSessionCreateRequestFromDraft,
-  createWorkoutPlaybackDraftFromPreset,
-} from '@/utils/workoutPlayback';
-import {
   Exercise,
   ExerciseEntry,
   GroupedExerciseEntry,
@@ -97,29 +92,6 @@ interface ExerciseCardProps {
 type PlannedSession =
   TrainingProgram['phases'][number]['weeks'][number]['sessions'][number];
 
-const matchingDiaryWorkout = (
-  entries: GroupedExerciseEntry[],
-  plan: WorkoutPlanTemplate,
-  date: string
-) => {
-  const assignmentIds = new Set(
-    plan.next_session?.assignments.flatMap((assignment) =>
-      assignment.id == null ? [] : [String(assignment.id)]
-    )
-  );
-  const belongsToSession = (id: string | number | null | undefined) =>
-    id != null && assignmentIds.has(String(id));
-  return entries.find(
-    (entry) =>
-      entry.entry_date === date &&
-      (entry.type === 'preset'
-        ? entry.exercises.some((exercise) =>
-            belongsToSession(exercise.workout_plan_assignment_id)
-          )
-        : belongsToSession(entry.workout_plan_assignment_id))
-  );
-};
-
 const hasPrescribedSets = (session: WorkoutPlanSession) =>
   session.assignments.some(
     (assignment) =>
@@ -138,13 +110,8 @@ const ExerciseCard = ({
   const navigate = useNavigate();
   const { user } = useAuth();
   const { activeUserId, isActingOnBehalf } = useActiveUser();
-  const {
-    loggingLevel,
-    energyUnit,
-    convertEnergy,
-    getEnergyUnitString,
-    timezone,
-  } = usePreferences();
+  const { loggingLevel, energyUnit, convertEnergy, getEnergyUnitString } =
+    usePreferences();
   debug(
     loggingLevel,
     'ExerciseCard component rendered for date:',
@@ -186,19 +153,15 @@ const ExerciseCard = ({
   );
   const { data: trainingPrograms, isError: trainingProgramsError } =
     useTrainingProgramsList(user?.id, !isActingOnBehalf);
-  const { outcome } = useTrainingPrograms(
+  const { outcome, complete } = useTrainingPrograms(
     user?.id ?? '',
     !!user && !isActingOnBehalf
   );
-  const { mutateAsync: createPresetSession } = useCreatePresetSessionMutation();
   const [completionTarget, setCompletionTarget] = useState<{
     plan: WorkoutPlanTemplate;
     programId: string;
     session: PlannedSession;
-    mode: 'checking' | 'log' | 'link';
-    initialWorkout?: { type: GroupedExerciseEntry['type']; id: string };
-    notice?: string;
-    savedWorkoutId?: string;
+    mode: 'log' | 'link';
   } | null>(null);
   const [completionError, setCompletionError] = useState('');
   const [completing, setCompleting] = useState(false);
@@ -206,20 +169,10 @@ const ExerciseCard = ({
 
   const { data: allPlans } = useWorkoutPlanTemplates(currentUserId);
 
-  const {
-    data: exerciseEntries,
-    isLoading: loading,
-    refetch: refetchExerciseEntries,
-  } = useExerciseEntries(selectedDate, currentUserId);
-
-  const loadDiaryWorkouts = async () => {
-    const { data } = await refetchExerciseEntries({ throwOnError: true });
-    if (!data)
-      throw new Error(
-        t('exerciseCard.loadDiaryError', 'Could not load diary workouts.')
-      );
-    return data;
-  };
+  const { data: exerciseEntries, isLoading: loading } = useExerciseEntries(
+    selectedDate,
+    currentUserId
+  );
 
   const [startingSession, setStartingSession] = useState<string | null>(null);
   const handleStartPlanSession = async (
@@ -266,111 +219,16 @@ const ExerciseCard = ({
       !currentUserId
     )
       return;
-    const nextSession = completionTarget.plan.next_session;
     completionInFlight.current = true;
     setCompleting(true);
     setCompletionError('');
     try {
-      if (!navigator.locks) {
-        setCompletionTarget({
-          ...completionTarget,
-          mode: 'link',
-          notice: t(
-            'exerciseCard.linkWithoutLock',
-            'This browser cannot safely log this workout here. Use Start Workout to save it, then link the diary workout.'
-          ),
-        });
-        return;
-      }
-      await navigator.locks.request(
-        `dashboard-completion:${currentUserId}:${nextSession.id}:${selectedDate}`,
-        async () => {
-          let savedWorkoutId = completionTarget.savedWorkoutId;
-          if (!savedWorkoutId) {
-            const diary = await loadDiaryWorkouts();
-            const match = matchingDiaryWorkout(
-              diary,
-              completionTarget.plan,
-              selectedDate
-            );
-            if (match) {
-              setCompletionTarget({
-                ...completionTarget,
-                mode: 'link',
-                initialWorkout: { type: match.type, id: match.id },
-              });
-              return;
-            }
-            const preset = await buildWorkoutPlanSessionPreset(
-              completionTarget.plan,
-              nextSession.id,
-              currentUserId,
-              (id) => queryClient.fetchQuery(exerciseByIdOptions(id))
-            );
-            const draft = createWorkoutPlaybackDraftFromPreset(
-              preset,
-              selectedDate
-            );
-            const completedAt = new Date().toISOString();
-            const completedDraft = {
-              ...draft,
-              exercises: draft.exercises.map((exercise) => ({
-                ...exercise,
-                sets: exercise.sets.map((set) => ({
-                  ...set,
-                  completed: true,
-                  completed_at: completedAt,
-                })),
-              })),
-            };
-            const payload = buildPresetSessionCreateRequestFromDraft(
-              completedDraft,
-              timezone
-            );
-            if (!payload.exercises?.length)
-              throw new Error(
-                t(
-                  'exerciseCard.noPrescribedSets',
-                  'This session has no prescribed sets to log.'
-                )
-              );
-            let saved;
-            try {
-              saved = await createPresetSession(payload);
-            } catch {
-              const freshDiary = await loadDiaryWorkouts().catch(() => null);
-              const recovered = matchingDiaryWorkout(
-                freshDiary ?? [],
-                completionTarget.plan,
-                selectedDate
-              );
-              setCompletionTarget({
-                ...completionTarget,
-                mode: 'link',
-                initialWorkout: recovered
-                  ? { type: recovered.type, id: recovered.id }
-                  : undefined,
-                notice: t(
-                  'exerciseCard.saveUncertain',
-                  'The save response was unclear. Check the diary workout before linking it; this action will not log another copy.'
-                ),
-              });
-              return;
-            }
-            savedWorkoutId = saved.id;
-            setCompletionTarget({ ...completionTarget, savedWorkoutId });
-          }
-          await outcome.mutateAsync({
-            programId: completionTarget.programId,
-            sessionId: completionTarget.plan.training_program_session_id!,
-            input: {
-              status: 'completed',
-              workout: { type: 'preset', id: savedWorkoutId },
-            },
-          });
-          setCompletionTarget(null);
-        }
-      );
+      await complete.mutateAsync({
+        programId: completionTarget.programId,
+        sessionId: completionTarget.session.id,
+        input: { entry_date: selectedDate },
+      });
+      setCompletionTarget(null);
     } catch (failure) {
       setCompletionError(
         failure instanceof Error
@@ -383,46 +241,22 @@ const ExerciseCard = ({
     }
   };
 
-  const handleOpenCompletion = async (
+  const handleOpenCompletion = (
     plan: WorkoutPlanTemplate,
     programId: string,
     session: PlannedSession
   ) => {
     if (!currentUserId) return;
     setCompletionError('');
-    setCompletionTarget({ plan, programId, session, mode: 'checking' });
-    try {
-      const diary = await loadDiaryWorkouts();
-      const match = matchingDiaryWorkout(diary, plan, selectedDate);
-      const canLog =
-        plan.next_session &&
-        hasPrescribedSets(plan.next_session) &&
-        navigator.locks;
-      setCompletionTarget((target) =>
-        target?.session.id === session.id
-          ? {
-              ...target,
-              mode: match || !canLog ? 'link' : 'log',
-              initialWorkout: match
-                ? { type: match.type, id: match.id }
-                : undefined,
-              notice:
-                !match && !navigator.locks
-                  ? t(
-                      'exerciseCard.linkWithoutLock',
-                      'This browser cannot safely log this workout here. Use Start Workout to save it, then link the diary workout.'
-                    )
-                  : undefined,
-            }
-          : target
-      );
-    } catch (failure) {
-      setCompletionError(
-        failure instanceof Error
-          ? failure.message
-          : t('exerciseCard.loadDiaryError', 'Could not load diary workouts.')
-      );
-    }
+    setCompletionTarget({
+      plan,
+      programId,
+      session,
+      mode:
+        plan.next_session && hasPrescribedSets(plan.next_session)
+          ? 'log'
+          : 'link',
+    });
   };
 
   // Effect to handle initialExercisesToLog prop
@@ -1102,30 +936,26 @@ const ExerciseCard = ({
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
-          {completionTarget?.mode === 'checking' && !completionError && (
-            <p role="status">
-              {t('trainingPrograms.loadingWorkouts', 'Loading diary workouts…')}
-            </p>
-          )}
           {completionError && (
             <p role="alert" className="text-sm text-destructive">
               {completionError}
             </p>
           )}
-          {completionTarget?.savedWorkoutId && (
-            <p className="text-sm text-muted-foreground">
-              {t(
-                'exerciseCard.workoutSavedLinkFailed',
-                'This workout is already logged. Confirm to link it to the Program without logging it again.'
-              )}
-            </p>
-          )}
           <AlertDialogFooter>
             <AlertDialogCancel disabled={completing}>
-              {completionTarget?.savedWorkoutId
-                ? t('common.close', 'Close')
-                : t('common.cancel', 'Cancel')}
+              {t('common.cancel', 'Cancel')}
             </AlertDialogCancel>
+            <Button
+              variant="outline"
+              disabled={completing}
+              onClick={() =>
+                setCompletionTarget((target) =>
+                  target ? { ...target, mode: 'link' } : target
+                )
+              }
+            >
+              {t('trainingPrograms.linkExisting', 'Link an existing workout')}
+            </Button>
             <AlertDialogAction
               disabled={completing || completionTarget?.mode !== 'log'}
               onClick={(event) => {
@@ -1148,8 +978,6 @@ const ExerciseCard = ({
           userId={currentUserId}
           pending={outcome.isPending}
           initialDate={selectedDate}
-          initialWorkout={completionTarget.initialWorkout}
-          notice={completionTarget.notice}
           onClose={() => setCompletionTarget(null)}
           onSave={async (input) => {
             await outcome.mutateAsync({

@@ -136,6 +136,12 @@ export const trainingProgramOutcomeInputSchema = z.discriminatedUnion(
 export type TrainingProgramOutcomeInput = z.infer<
   typeof trainingProgramOutcomeInputSchema
 >;
+export const trainingProgramCompletionInputSchema = z.strictObject({
+  entry_date: day,
+});
+export type TrainingProgramCompletionInput = z.infer<
+  typeof trainingProgramCompletionInputSchema
+>;
 
 const sessionCommon = {
   id: z.uuid(),

@@ -139,6 +139,45 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
       .post(`/api/training-programs/${id}/sessions/${sessionId}/outcome`)
       .set('Authorization', `Bearer ${token}`)
       .send(value);
+  const complete = (
+    sessionId: string,
+    entryDate = '2026-10-25',
+    token = ownerToken
+  ) =>
+    request(app)
+      .post(
+        `/api/training-programs/${program.id}/sessions/${sessionId}/complete`
+      )
+      .set('Authorization', `Bearer ${token}`)
+      .send({ entry_date: entryDate });
+  async function completableSession() {
+    const exerciseId = await seedExercise();
+    const plan = await createPlan({
+      plan_name: 'Completion prescription',
+      schedule_type: 'sequential',
+      entry_mode: 'prompt',
+      sessions: [
+        {
+          name: 'Exact session',
+          day_of_week: null,
+          sort_order: 0,
+          assignments: [
+            { exercise_id: exerciseId, sort_order: 0, sets: prescribedSets(2) },
+          ],
+        },
+      ],
+    });
+    const edit = editable(program);
+    edit.phases[0]!.weeks[0]!.sessions[0]!.workout_session_id =
+      plan.sessions[0]!.id;
+    const response = await update(edit);
+    expect(response.status).toBe(200);
+    program = trainingProgramSchema.parse(response.body);
+    return {
+      session: sessions(program)[0]!,
+      assignmentId: plan.sessions[0]!.assignments[0]!.id,
+    };
+  }
   const update = (input: TrainingProgramInput, id = program.id) =>
     request(app)
       .put(`/api/training-programs/${id}`)
@@ -215,14 +254,14 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
       })),
     };
   }
-  async function seedExercise() {
+  async function seedExercise(name = 'Dumbbell split squat') {
     const db = await getSystemClient();
     try {
       return (
         await db.query(
           `INSERT INTO exercises(name,category,user_id,is_custom,source)
-         VALUES ('Dumbbell split squat','Strength',$1,true,'custom') RETURNING id`,
-          [owner]
+         VALUES ($2,'Strength',$1,true,'custom') RETURNING id`,
+          [owner, name]
         )
       ).rows[0].id as string;
     } finally {
@@ -1237,6 +1276,167 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
       ).status
     ).toBe(409);
     expect(await reload(saved.id)).toEqual(saved);
+  });
+
+  describe('atomic Planned Session completion', () => {
+    it('logs the exact prescription once and returns the same outcome on retry', async () => {
+      const { session, assignmentId } = await completableSession();
+      const first = await complete(session.id);
+      expect(first.status).toBe(200);
+      const saved = trainingProgramSchema.parse(first.body);
+      const linked = sessions(saved)[0]!.completed_workout;
+      expect(linked).toMatchObject({
+        type: 'preset',
+        entry_date: '2026-10-25',
+      });
+      expect(await diaryPrescription(assignmentId, '2026-10-25')).toHaveLength(
+        1
+      );
+      expect(
+        (await diaryPrescription(assignmentId, '2026-10-25'))[0]!.sets
+      ).toHaveLength(2);
+      expect(
+        (await diaryPrescription(assignmentId, '2026-10-25'))[0]!.sets.every(
+          (set: { completed_at: string | null }) => set.completed_at !== null
+        )
+      ).toBe(true);
+
+      const retry = await complete(session.id, '2026-10-26');
+      expect(retry.status).toBe(200);
+      expect(
+        sessions(trainingProgramSchema.parse(retry.body))[0]!.completed_workout
+      ).toEqual(linked);
+      expect(await diaryPrescription(assignmentId, '2026-10-25')).toHaveLength(
+        1
+      );
+      expect(await diaryPrescription(assignmentId, '2026-10-26')).toHaveLength(
+        0
+      );
+    });
+
+    it('serializes concurrent completion requests into one diary workout', async () => {
+      const { session, assignmentId } = await completableSession();
+      const [first, second] = await Promise.all([
+        complete(session.id),
+        complete(session.id),
+      ]);
+      expect([first.status, second.status]).toEqual([200, 200]);
+      expect(
+        sessions(trainingProgramSchema.parse(first.body))[0]!.completed_workout
+          ?.id
+      ).toBe(
+        sessions(trainingProgramSchema.parse(second.body))[0]!.completed_workout
+          ?.id
+      );
+      expect(await diaryPrescription(assignmentId, '2026-10-25')).toHaveLength(
+        1
+      );
+    });
+
+    it('logs the later bound Workout Session rather than the plan’s first prescription', async () => {
+      const firstExercise = await seedExercise();
+      const secondExercise = await seedExercise('Heavy pull');
+      const plan = await createPlan({
+        plan_name: 'Two distinct prescriptions',
+        schedule_type: 'sequential',
+        entry_mode: 'prompt',
+        sessions: [
+          {
+            name: 'First',
+            day_of_week: null,
+            sort_order: 0,
+            assignments: [
+              {
+                exercise_id: firstExercise,
+                sort_order: 0,
+                sets: prescribedSets(1),
+              },
+            ],
+          },
+          {
+            name: 'Later',
+            day_of_week: null,
+            sort_order: 1,
+            assignments: [
+              {
+                exercise_id: secondExercise,
+                sort_order: 0,
+                sets: [{ ...prescribedSets(1)[0]!, reps: 12, weight: 40 }],
+              },
+            ],
+          },
+        ],
+      });
+      const edit = editable(program);
+      edit.phases[0]!.weeks[0]!.sessions[0]!.workout_session_id =
+        plan.sessions[0]!.id;
+      edit.phases[0]!.weeks[0]!.sessions[1]!.workout_session_id =
+        plan.sessions[1]!.id;
+      const updated = await update(edit);
+      expect(updated.status).toBe(200);
+      program = trainingProgramSchema.parse(updated.body);
+
+      const later = sessions(program)[1]!;
+      expect((await complete(later.id, '2026-10-30')).status).toBe(200);
+      expect(
+        await diaryPrescription(
+          plan.sessions[0]!.assignments[0]!.id,
+          '2026-10-30'
+        )
+      ).toHaveLength(0);
+      const diary = await diaryPrescription(
+        plan.sessions[1]!.assignments[0]!.id,
+        '2026-10-30'
+      );
+      expect(diary).toHaveLength(1);
+      expect(diary[0]!.sets[0]).toMatchObject({ reps: 12, weight: 40 });
+    });
+
+    it('preserves an already linked session and rejects a different owner', async () => {
+      const { session, assignmentId } = await completableSession();
+      expect(
+        (await complete(session.id, '2026-10-25', otherToken)).status
+      ).toBe(404);
+      const workout = await diaryWorkout('preset');
+      expect(
+        (await outcome(session.id, { status: 'completed', workout })).status
+      ).toBe(200);
+      const retry = await complete(session.id);
+      expect(retry.status).toBe(200);
+      expect(
+        sessions(trainingProgramSchema.parse(retry.body))[0]!.completed_workout
+          ?.id
+      ).toBe(workout.id);
+      expect(await diaryPrescription(assignmentId, '2026-10-25')).toHaveLength(
+        0
+      );
+    });
+
+    it('keeps future missed outcomes forbidden after completion is added', async () => {
+      const { session } = await completableSession();
+      setToday('2026-10-20');
+      expect((await outcome(session.id, { status: 'missed' })).status).toBe(
+        409
+      );
+      expect(sessions(await reload())[0]!.status).toBe('planned');
+    });
+
+    it('records an explicitly completed optional session after its omission date', async () => {
+      const { session, assignmentId } = await completableSession();
+      const edit = editable(program);
+      edit.phases[0]!.weeks[0]!.sessions[0]!.is_optional = true;
+      expect((await update(edit)).status).toBe(200);
+      setToday('2026-10-27');
+      expect(sessions(await reload())[0]!.status).toBe('omitted');
+      const response = await complete(session.id);
+      expect(response.status).toBe(200);
+      expect(
+        sessions(trainingProgramSchema.parse(response.body))[0]!.status
+      ).toBe('completed');
+      expect(await diaryPrescription(assignmentId, '2026-10-25')).toHaveLength(
+        1
+      );
+    });
   });
 
   describe("missed outcomes are bounded by the athlete's today", () => {

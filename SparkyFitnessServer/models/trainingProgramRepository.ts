@@ -14,6 +14,7 @@ import {
 import { getClient } from '../db/poolManager.js';
 import { HttpError } from '../utils/errors.js';
 import { isOptionalProgramSessionOmitted } from '../utils/trainingProgramOptionality.js';
+import { logWorkoutPlanSession } from '../services/exerciseService.js';
 
 type ProgramRow = Omit<
   TrainingProgram,
@@ -649,6 +650,73 @@ export async function recordTrainingProgramOutcome(
         409
       );
     }
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/** Creates and links an exact Workout Session under the Program outcome lock. */
+export async function completeTrainingProgramSession(
+  userId: string,
+  programId: string,
+  sessionId: string,
+  entryDate: string
+): Promise<TrainingProgram> {
+  const client = await getClient(userId, userId);
+  try {
+    await client.query('BEGIN');
+    const program = await client.query(
+      'SELECT id FROM training_programs WHERE id = $1 AND user_id = $2 FOR UPDATE',
+      [programId, userId]
+    );
+    if (!program.rowCount)
+      throw new HttpError('Training Program not found.', 404);
+    const locked = await client.query(
+      'SELECT id FROM training_program_sessions WHERE id = $1 AND program_id = $2 AND user_id = $3 FOR UPDATE',
+      [sessionId, programId, userId]
+    );
+    if (!locked.rowCount)
+      throw new HttpError('Planned Session not found.', 404);
+    const current = (await readPrograms(client, userId, programId))[0]!;
+    const session = findSession(current, sessionId)!;
+    if (session.status === 'completed') {
+      await client.query('COMMIT');
+      return current;
+    }
+    if (
+      session.status !== 'planned' &&
+      !(session.status === 'omitted' && session.is_optional)
+    )
+      throw new HttpError('This session already has a recorded outcome.', 409);
+
+    const created = await logWorkoutPlanSession(
+      userId,
+      userId,
+      session.workout_session_id,
+      entryDate,
+      client
+    );
+    if (!created.session)
+      throw new Error('Created diary workout could not be read.');
+    await client.query(
+      `UPDATE exercise_entry_sets SET completed_at = now()
+       WHERE exercise_entry_id IN (
+         SELECT id FROM exercise_entries WHERE exercise_preset_entry_id = $1 AND user_id = $2
+       )`,
+      [created.session.id, userId]
+    );
+    const input: TrainingProgramOutcomeInput = {
+      status: 'completed',
+      workout: { type: 'preset', id: created.session.id },
+    };
+    const workout = await lookupDiaryWorkout(client, userId, input.workout);
+    await writeOutcome(client, userId, programId, session, input, workout);
+    const saved = (await readPrograms(client, userId, programId))[0]!;
+    await client.query('COMMIT');
+    return saved;
+  } catch (error) {
+    await client.query('ROLLBACK');
     throw error;
   } finally {
     client.release();
