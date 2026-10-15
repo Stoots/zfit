@@ -1,10 +1,24 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import type { TrainingProgram } from '@workspace/shared';
 import ExerciseCard from '@/pages/Diary/ExerciseCard';
 import type { WorkoutPlanTemplate } from '@/types/workout';
+
+const mockNavigate = jest.fn();
+jest.mock('react-router-dom', () => ({
+  ...jest.requireActual('react-router-dom'),
+  useNavigate: () => mockNavigate,
+}));
+jest.mock('@/utils/workoutPlanSession', () => ({
+  buildWorkoutPlanSessionPreset: jest.fn(async () => ({
+    id: 'session-preset',
+    user_id: 'athlete',
+    name: 'Push',
+    exercises: [],
+  })),
+}));
 
 jest.mock('react-i18next', () =>
   jest.requireActual('@/tests/mocks/reactI18next')
@@ -139,6 +153,7 @@ const pickerFor = (sessionName: string) =>
 
 describe('ExerciseCard dashboard plans', () => {
   beforeEach(() => {
+    mockNavigate.mockReset();
     mockState.actingOnBehalf = false;
     mockState.programs = { data: [], isError: false };
     mockState.plans = [];
@@ -159,6 +174,59 @@ describe('ExerciseCard dashboard plans', () => {
     expect(
       screen.getByRole('button', { name: /^Start Workout: Push/ })
     ).toBeInTheDocument();
+  });
+
+  it('carries the exact Program identity into the persisted playback draft', async () => {
+    mockState.plans = [makePlan('7', 'Program plan', ['Push', 'Pull'])];
+    mockState.programs = { data: [programLinkedTo('7')], isError: false };
+    renderCard();
+    fireEvent.click(
+      screen.getByRole('button', { name: /^Start Workout: Push/ })
+    );
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith(
+        '/workout-playback?date=2026-10-12',
+        expect.objectContaining({
+          state: expect.objectContaining({
+            draft: expect.objectContaining({
+              training_program: {
+                program_id: 'program-1',
+                session_id: 'planned-session-1',
+              },
+            }),
+          }),
+        })
+      )
+    );
+  });
+
+  it('advances to the next pending session when the completed outcome refreshes', () => {
+    mockState.plans = [makePlan('7', 'Program plan', ['Push', 'Pull'])];
+    const program = programLinkedTo('7');
+    const sessions = program.phases[0]!.weeks[0]!.sessions;
+    sessions.push({
+      ...sessions[0]!,
+      id: 'planned-session-2',
+      workout_session_id: '7-s2',
+      effective_date: '2026-10-13',
+    });
+    mockState.programs = { data: [program], isError: false };
+    const view = renderCard();
+    expect(screen.getByText('Push')).toBeInTheDocument();
+    sessions[0]!.status = 'completed';
+    mockState.programs = { data: structuredClone([program]), isError: false };
+    view.rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter>
+          <ExerciseCard
+            selectedDate="2026-10-12"
+            onExercisesLogged={jest.fn()}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+    expect(screen.getByText('Pull')).toBeInTheDocument();
+    expect(screen.queryByText('Push')).not.toBeInTheDocument();
   });
 
   it('labels a future Program workout as the next session', () => {

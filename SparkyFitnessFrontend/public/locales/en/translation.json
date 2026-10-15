@@ -1335,6 +1335,7 @@
       "discard": "Discard",
       "discardConfirm": "Discard this in-progress workout? This cannot be undone.",
       "finish": "Finish Workout",
+      "programCompletionError": "Your workout was saved, but the Training Program could not be updated. Finish again to retry.",
       "finishError": "Failed to save workout. Your local progress is still preserved, and you can retry.",
       "finishing": "Saving...",
       "location": "Gym / Location",

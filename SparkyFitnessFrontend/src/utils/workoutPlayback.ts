@@ -15,6 +15,7 @@ import {
   type CreatePresetSessionRequest,
   type ExerciseModality,
   type WorkoutFormat,
+  type PresetSessionResponse,
 } from '@workspace/shared';
 import type { WorkoutPreset, WorkoutPresetSet } from '@/types/workout';
 import type { Exercise } from '@/types/exercises';
@@ -123,6 +124,9 @@ export interface WorkoutPlaybackDraft {
   version: 1;
   preset_id: string;
   workout_session_id?: string;
+  training_program?: WorkoutPreset['training_program'];
+  /** Checkpoint the diary save before recording the Program outcome. */
+  saved_session?: PresetSessionResponse;
   name: string;
   description: string | null;
   entry_date: string;
@@ -521,6 +525,7 @@ export function createWorkoutPlaybackDraftFromPreset(
     version: 1,
     preset_id: String(preset.id),
     workout_session_id: preset.workout_session_id,
+    training_program: preset.training_program,
     load_adjustments_applied: !!preset.workout_session_id,
     name: preset.name,
     description: preset.description ?? null,

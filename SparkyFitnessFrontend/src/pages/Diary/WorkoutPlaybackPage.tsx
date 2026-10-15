@@ -204,7 +204,17 @@ const WorkoutPlaybackPage = () => {
   const getDraft = useCallback(() => draftRef.current, []);
 
   const { mutateAsync: createPresetSession, isPending: isSaving } =
-    useCreatePresetSessionMutation();
+    useCreatePresetSessionMutation({
+      trainingProgram: draft?.training_program,
+      savedSession: draft?.saved_session,
+      onSessionSaved: (saved) => {
+        if (!draftRef.current) return;
+        const checkpoint = { ...draftRef.current, saved_session: saved };
+        draftRef.current = checkpoint;
+        saveWorkoutPlaybackDraftToStorage(checkpoint);
+        setDraft(checkpoint);
+      },
+    });
   // Auto-evaluate progression overload and the per-set ramp for uncompleted
   // exercises, once per workout: a reopened draft keeps what the lifter
   // typed (and a heavier set 1 never re-seeds the ramp).
@@ -1056,8 +1066,12 @@ const WorkoutPlaybackPage = () => {
     } catch {
       setSaveError(
         t(
-          'exercise.workoutPlaybackDialog.finishError',
-          'Failed to save workout. Your local progress is still preserved, and you can retry.'
+          draftRef.current?.saved_session
+            ? 'exercise.workoutPlaybackDialog.programCompletionError'
+            : 'exercise.workoutPlaybackDialog.finishError',
+          draftRef.current?.saved_session
+            ? 'Your workout was saved, but the Training Program could not be updated. Finish again to retry.'
+            : 'Failed to save workout. Your local progress is still preserved, and you can retry.'
         )
       );
     }

@@ -148,6 +148,24 @@ const ExerciseCard = ({
         currentUserId ?? '',
         (id) => queryClient.fetchQuery(exerciseByIdOptions(id))
       );
+      const program =
+        !isActingOnBehalf &&
+        trainingPrograms?.find((item) =>
+          item.phases.some((phase) =>
+            phase.weeks.some((week) =>
+              week.sessions.some(
+                (planned) =>
+                  planned.id === targetPlan.training_program_session_id
+              )
+            )
+          )
+        );
+      if (program && targetPlan.training_program_session_id) {
+        preset.training_program = {
+          program_id: program.id,
+          session_id: targetPlan.training_program_session_id,
+        };
+      }
       navigate(`/workout-playback?date=${selectedDate}`, {
         state: createWorkoutPlaybackRouteState(
           preset,

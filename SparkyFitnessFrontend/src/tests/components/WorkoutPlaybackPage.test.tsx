@@ -1,6 +1,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import WorkoutPlaybackPage from '@/pages/Diary/WorkoutPlaybackPage';
+import type { useCreatePresetSessionMutation } from '@/hooks/Exercises/useExerciseEntries';
+import type { PresetSessionResponse } from '@workspace/shared';
 import type { WorkoutPreset } from '@/types/workout';
 import {
   buildPresetSessionCreateRequestFromDraft,
@@ -11,6 +13,7 @@ import {
 const mockNavigate = jest.fn();
 const mockCreatePresetSession = jest.fn();
 const mockSearchParams = new URLSearchParams('date=2026-04-27');
+let mockSaveOptions: Parameters<typeof useCreatePresetSessionMutation>[0];
 let mockDistanceUnit: 'km' | 'miles' = 'km';
 let mockLocationState: { returnTo?: string; draft?: unknown } | null = null;
 
@@ -33,10 +36,15 @@ jest.mock('@/contexts/PreferencesContext', () => ({
 }));
 
 jest.mock('@/hooks/Exercises/useExerciseEntries', () => ({
-  useCreatePresetSessionMutation: () => ({
-    mutateAsync: (...args: unknown[]) => mockCreatePresetSession(...args),
-    isPending: false,
-  }),
+  useCreatePresetSessionMutation: (
+    options: Parameters<typeof useCreatePresetSessionMutation>[0]
+  ) => {
+    mockSaveOptions = options;
+    return {
+      mutateAsync: (...args: unknown[]) => mockCreatePresetSession(...args),
+      isPending: false,
+    };
+  },
   useWorkoutLocations: () => ({ data: ['Home Gym', 'Downtown'] }),
   fetchExerciseProgressionStats: jest.fn(async () => null),
 }));
@@ -74,6 +82,49 @@ describe('WorkoutPlaybackPage', () => {
     mockCreatePresetSession.mockReset();
     window.localStorage.clear();
     mockLocationState = { returnTo: '/?date=2026-04-27' };
+  });
+
+  it('persists the saved workout when Program completion fails and restores it after reload', async () => {
+    const preset = {
+      ...presetFixture,
+      training_program: {
+        program_id: 'program-1',
+        session_id: 'planned-session-1',
+      },
+    };
+    const draft = createWorkoutPlaybackDraftFromPreset(preset, '2026-04-27');
+    draft.exercises[0]!.sets[0]!.completed = true;
+    mockLocationState = { draft };
+    const saved: PresetSessionResponse = {
+      type: 'preset',
+      id: 'saved-workout',
+      name: draft.name,
+      entry_date: draft.entry_date,
+      workout_preset_id: null,
+      description: null,
+      notes: null,
+      source: 'sparky',
+      total_duration_minutes: 5,
+      activity_details: [],
+      exercises: [],
+    };
+    mockCreatePresetSession.mockImplementation(async () => {
+      mockSaveOptions!.onSessionSaved(saved);
+      throw new Error('Program update failed');
+    });
+    const view = render(<WorkoutPlaybackPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'Finish Workout' }));
+    await screen.findByText(
+      'Your workout was saved, but the Training Program could not be updated. Finish again to retry.'
+    );
+    expect(
+      loadWorkoutPlaybackDraftFromStorage(draft.entry_date)?.saved_session?.id
+    ).toBe(saved.id);
+    view.unmount();
+    mockLocationState = null;
+    render(<WorkoutPlaybackPage />);
+    expect(mockSaveOptions?.savedSession?.id).toBe(saved.id);
+    expect(mockSaveOptions?.trainingProgram).toEqual(preset.training_program);
   });
 
   it.each([

@@ -19,6 +19,9 @@ import {
   trainingProgramKeys,
 } from '@/api/keys/exercises';
 import i18n from '@/i18n';
+import { recordTrainingProgramOutcome } from '@/api/TrainingPrograms/trainingPrograms';
+import type { PresetSessionResponse } from '@workspace/shared';
+import type { WorkoutPreset } from '@/types/workout';
 import { dailyProgressKeys } from '@/api/keys/diary';
 import { UpdateExerciseEntryRequest } from '@workspace/shared';
 import { useDiaryInvalidation } from '../useInvalidateKeys';
@@ -157,12 +160,28 @@ export const useLogWorkoutPresetMutation = () => {
   });
 };
 
-export const useCreatePresetSessionMutation = () => {
+export const useCreatePresetSessionMutation = (options?: {
+  trainingProgram?: WorkoutPreset['training_program'];
+  savedSession?: PresetSessionResponse;
+  onSessionSaved: (saved: PresetSessionResponse) => void;
+}) => {
   const queryClient = useQueryClient();
   const { t } = useTranslation();
 
   return useMutation({
-    mutationFn: createPresetSession,
+    mutationFn: async (payload: Parameters<typeof createPresetSession>[0]) => {
+      const saved =
+        options?.savedSession ?? (await createPresetSession(payload));
+      if (options?.trainingProgram) {
+        options.onSessionSaved(saved);
+        await recordTrainingProgramOutcome(
+          options.trainingProgram.program_id,
+          options.trainingProgram.session_id,
+          { status: 'completed', workout: { type: 'preset', id: saved.id } }
+        );
+      }
+      return saved;
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: exerciseEntryKeys.all });
       queryClient.invalidateQueries({ queryKey: dailyProgressKeys.all });
