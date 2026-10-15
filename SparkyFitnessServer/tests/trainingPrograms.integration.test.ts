@@ -2539,7 +2539,15 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
         const complete = await activeSession();
         expect(complete.next_session?.id).toBe(plan.sessions[1]!.id);
         expect(complete.next_assignments).toEqual(
-          plan.sessions[1]!.assignments
+          plan.sessions[1]!.assignments.map((assignment) =>
+            expect.objectContaining({
+              ...assignment,
+              template_id: plan.id,
+              day_of_week: plan.sessions[1]!.day_of_week,
+              session_index: schedule_type === 'sequential' ? 2 : null,
+              session_name: 'B',
+            })
+          )
         );
         if (schedule_type === 'sequential')
           expect(complete.sequence_position).toEqual({

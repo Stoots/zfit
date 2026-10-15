@@ -191,7 +191,7 @@ These tables contain daily diaries, logging entries, and scheduler items. **Care
 | `workout_plan_template_assignments` | Ordered exercise/preset assignments belonging to an exact Workout Session; presets execute from local snapshots | Delegate with `can_manage_diary` may delete; insert/update also require `can_view_exercise_library` for parent plan/session visibility | Delegate with `can_manage_diary`, `can_view_exercise_library`, or `can_view_reports` |
 | `workout_plan_assignment_sets` | Individual exercise prescriptions; distance and JSONB extension fields retain effort/ranges and per-side instructions | Delegate with `can_manage_diary` | Delegate with `can_manage_diary`, `can_view_exercise_library`, or `can_view_reports` |
 | `workout_feedback` | How a logged workout (or one exercise in it) felt: `difficulty` (`too_easy` / `just_right` / `too_hard`), a `pain` flag and optional `pain_note`; drives adaptive workout suggestions. Writes must reference the same user's session/exercise entry | Delegate with `can_manage_diary` | Delegate with `can_manage_diary` or `can_view_reports` |
-| `cardio_test_attempts` | Dated results for Cooper run and supported Cardio Tests | Delegate with `can_manage_diary` | Delegate with `can_manage_diary` or `can_view_reports` |
+| `cardio_test_attempts` | Dated Cooper, sprint, 30-second power, and ramp Test results | Delegate with `can_manage_diary` | Delegate with `can_manage_diary` or `can_view_reports` |
 
 #### B. Medication Logs (Writable by delegates with `can_manage_medications` / Readable by `can_view_reports` or `can_manage_medications`)
 

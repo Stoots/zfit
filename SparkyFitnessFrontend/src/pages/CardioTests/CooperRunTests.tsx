@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useActiveUser } from '@/contexts/ActiveUserContext';
 import { useCooperRunAttempts } from '@/hooks/CardioTests/useCooperRunAttempts';
+import PowerTests from './PowerTests';
 
 export default function CooperRunTests() {
   const { activeUserId } = useActiveUser();
@@ -73,8 +74,8 @@ function ProfileCooperRunTests() {
         </h1>
         <p className="mt-2 max-w-prose text-muted-foreground">
           {t(
-            'cardioTests.cooper.intro',
-            'Record the distance you cover in a 12-minute Cooper run and compare attempts over time.'
+            'cardioTests.intro',
+            'Record Cooper and power Test Attempts and compare results over time.'
           )}
         </p>
       </header>
@@ -249,6 +250,7 @@ function ProfileCooperRunTests() {
           </section>
         </>
       )}
+      <PowerTests />
     </main>
   );
 }

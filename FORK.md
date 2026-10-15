@@ -77,6 +77,7 @@ Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded her
 #### Features
 
 - Make the fork web app installable from iPhone Safari with correctly sized icons, standalone launch metadata, safe-area spacing, and phone-sized Training Programs, Workout Sessions, and Cardio Tests controls.
+- Record five-effort sprint and two-effort 30-second power Test Attempts with dated history and trends on web and mobile.
 - Cooper run Test Attempts (#4): entry, edit, dated history, and trend graph on web and mobile; native acceptance pending per `agent-docs/cooper-manual-acceptance.md`.
 - Normalize stored exercise and diary exercise names with consistent capitalization (#10).
 - Bind Program Planned Sessions to exact Workout Sessions and retain session-level prescriptions (#11).

@@ -11,11 +11,15 @@ import { renderWithClient } from '../test-utils';
 import type {
   CooperRunAttempt,
   CooperRunAttemptInput,
+  CardioTestAttempt,
+  CardioTestAttemptInput,
 } from '@workspace/shared';
 import CooperRunTests from '@/pages/CardioTests/CooperRunTests';
 import {
   createCooperRunAttempt,
   updateCooperRunAttempt,
+  getProtocolAttempts,
+  saveProtocolAttempt,
 } from '@/api/CardioTests/cardioTests';
 
 jest.mock('react-i18next', () => ({
@@ -25,6 +29,7 @@ jest.mock('react-i18next', () => ({
   }),
 }));
 const mockServer = { records: [] as CooperRunAttempt[] };
+let mockProtocolRecords: CardioTestAttempt[] = [];
 let mockActiveUserId = '00000000-0000-4000-a000-000000000001';
 
 function deferred<T>() {
@@ -44,6 +49,20 @@ jest.mock('@/contexts/ActiveUserContext', () => ({
 }));
 
 jest.mock('@/api/CardioTests/cardioTests', () => ({
+  getProtocolAttempts: jest.fn(async (protocol: string) =>
+    mockProtocolRecords.filter((attempt) => attempt.test_type === protocol)
+  ),
+  saveProtocolAttempt: jest.fn(async (input: CardioTestAttemptInput) => {
+    const saved = {
+      ...input,
+      id: `00000000-0000-4000-a000-0000000000${mockProtocolRecords.length + 20}`,
+      user_id: mockActiveUserId,
+      created_at: '2026-10-01T12:00:00Z',
+      updated_at: '2026-10-01T12:00:00Z',
+    } as CardioTestAttempt;
+    mockProtocolRecords = [...mockProtocolRecords, saved];
+    return saved;
+  }),
   getCooperRunAttempts: jest.fn(async () => mockServer.records),
   createCooperRunAttempt: jest.fn(async (input: CooperRunAttemptInput) => {
     const timestamp = '2026-10-09T12:00:00.000Z';
@@ -133,8 +152,153 @@ function expectTrend(dates: string[], distances: number[]) {
 describe('Cooper run Test Attempts', () => {
   beforeEach(() => {
     mockServer.records = [];
+    mockProtocolRecords = [];
     jest.clearAllMocks();
     mockActiveUserId = '00000000-0000-4000-a000-000000000001';
+  });
+
+  it('records both power protocols and shows their dated graph and results', async () => {
+    renderWithClient(<CooperRunTests />);
+    const sprint = screen.getByRole('region', {
+      name: '5 × 6-second sprint (54-second rests)',
+    });
+    expect(within(sprint).getByLabelText('Effort 1 peak (W)')).toHaveAttribute(
+      'inputmode',
+      'decimal'
+    );
+    fireEvent.change(within(sprint).getByLabelText('Date'), {
+      target: { value: '2026-10-01' },
+    });
+    [900, 800, 700, 600, 500].forEach((value, index) =>
+      fireEvent.change(
+        within(sprint).getByLabelText(`Effort ${index + 1} peak (W)`),
+        { target: { value: String(value) } }
+      )
+    );
+    fireEvent.click(
+      within(sprint).getByRole('button', { name: 'Record Sprint' })
+    );
+    await waitFor(() =>
+      expect(saveProtocolAttempt).toHaveBeenCalledWith(
+        {
+          test_type: 'sprint_6s',
+          attempt_date: '2026-10-01',
+          results: { peak_watts: [900, 800, 700, 600, 500] },
+        },
+        undefined
+      )
+    );
+    expect(
+      await within(sprint).findByText(/Drop-off: 400 W \(44\.4%\)/)
+    ).toBeInTheDocument();
+    expect(
+      within(sprint).getByRole('img', { name: /sprint.*trend by date/ })
+    ).toBeInTheDocument();
+
+    const thirty = screen.getByRole('region', {
+      name: '2 × 30-second power (60-second rest)',
+    });
+    fireEvent.change(within(thirty).getByLabelText('Date'), {
+      target: { value: '2026-10-02' },
+    });
+    [
+      'Effort 1 peak (W)',
+      'Effort 1 average (W)',
+      'Effort 2 peak (W)',
+      'Effort 2 average (W)',
+    ].forEach((label, index) =>
+      fireEvent.change(within(thirty).getByLabelText(label), {
+        target: { value: String([700, 450, 650, 425][index]) },
+      })
+    );
+    fireEvent.click(
+      within(thirty).getByRole('button', { name: 'Record 30-second Power' })
+    );
+    await waitFor(() =>
+      expect(saveProtocolAttempt).toHaveBeenCalledWith(
+        {
+          test_type: 'power_30s',
+          attempt_date: '2026-10-02',
+          results: {
+            efforts: [
+              { peak_watts: 700, average_watts: 450 },
+              { peak_watts: 650, average_watts: 425 },
+            ],
+          },
+        },
+        undefined
+      )
+    );
+    expect(
+      await within(thirty).findByText('700/450 W · 650/425 W')
+    ).toBeInTheDocument();
+    expect(
+      within(thirty).getByRole('img', { name: /power.*trend by date/ })
+    ).toBeInTheDocument();
+    expect(getProtocolAttempts).toHaveBeenCalledWith('sprint_6s');
+    expect(getProtocolAttempts).toHaveBeenCalledWith('power_30s');
+  });
+
+  it('accepts decimal commas on the web power forms used on iPhone', async () => {
+    renderWithClient(<CooperRunTests />);
+    const sprint = screen.getByRole('region', {
+      name: '5 × 6-second sprint (54-second rests)',
+    });
+    fireEvent.change(within(sprint).getByLabelText('Date'), {
+      target: { value: '2026-10-01' },
+    });
+    ['900,5', '800', '700', '600', '500'].forEach((value, index) =>
+      fireEvent.change(
+        within(sprint).getByLabelText(`Effort ${index + 1} peak (W)`),
+        { target: { value } }
+      )
+    );
+    fireEvent.click(
+      within(sprint).getByRole('button', { name: 'Record Sprint' })
+    );
+    await waitFor(() =>
+      expect(saveProtocolAttempt).toHaveBeenCalledWith(
+        expect.objectContaining({
+          test_type: 'sprint_6s',
+          results: { peak_watts: [900.5, 800, 700, 600, 500] },
+        }),
+        undefined
+      )
+    );
+
+    const thirty = screen.getByRole('region', {
+      name: '2 × 30-second power (60-second rest)',
+    });
+    fireEvent.change(within(thirty).getByLabelText('Date'), {
+      target: { value: '2026-10-02' },
+    });
+    [
+      ['Effort 1 peak (W)', '700,5'],
+      ['Effort 1 average (W)', '450,5'],
+      ['Effort 2 peak (W)', '650'],
+      ['Effort 2 average (W)', '425,5'],
+    ].forEach(([label, value]) =>
+      fireEvent.change(within(thirty).getByLabelText(label!), {
+        target: { value },
+      })
+    );
+    fireEvent.click(
+      within(thirty).getByRole('button', { name: 'Record 30-second Power' })
+    );
+    await waitFor(() =>
+      expect(saveProtocolAttempt).toHaveBeenCalledWith(
+        expect.objectContaining({
+          test_type: 'power_30s',
+          results: {
+            efforts: [
+              { peak_watts: 700.5, average_watts: 450.5 },
+              { peak_watts: 650, average_watts: 425.5 },
+            ],
+          },
+        }),
+        undefined
+      )
+    );
   });
 
   it('records a dated distance, shows the trend and history, and edits an attempt', async () => {
@@ -150,7 +314,7 @@ describe('Cooper run Test Attempts', () => {
       },
     ];
     renderWithClient(<CooperRunTests />);
-    fireEvent.change(screen.getByLabelText('Date'), {
+    fireEvent.change(screen.getAllByLabelText('Date')[0]!, {
       target: { value: '2026-09-22' },
     });
     fireEvent.change(screen.getByLabelText('12-minute distance (m)'), {
@@ -176,7 +340,7 @@ describe('Cooper run Test Attempts', () => {
         name: 'Edit',
       })
     );
-    fireEvent.change(screen.getByLabelText('Date'), {
+    fireEvent.change(screen.getAllByLabelText('Date')[0]!, {
       target: { value: '2026-09-23' },
     });
     fireEvent.change(screen.getByLabelText('12-minute distance (m)'), {
@@ -220,7 +384,7 @@ describe('Cooper run Test Attempts', () => {
       const view = renderWithClient(<CooperRunTests />);
       if (mode === 'update')
         fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
-      fireEvent.change(screen.getByLabelText('Date'), {
+      fireEvent.change(screen.getAllByLabelText('Date')[0]!, {
         target: { value: '2026-09-22' },
       });
       fireEvent.change(screen.getByLabelText('12-minute distance (m)'), {
@@ -235,9 +399,9 @@ describe('Cooper run Test Attempts', () => {
 
       mockActiveUserId = '00000000-0000-4000-a000-000000000002';
       view.rerender(<CooperRunTests />);
-      expect(screen.getByLabelText('Date')).toHaveValue('');
+      expect(screen.getAllByLabelText('Date')[0]!).toHaveValue('');
       expect(screen.getByLabelText('12-minute distance (m)')).toHaveValue(null);
-      fireEvent.change(screen.getByLabelText('Date'), {
+      fireEvent.change(screen.getAllByLabelText('Date')[0]!, {
         target: { value: '2026-10-01' },
       });
       fireEvent.change(screen.getByLabelText('12-minute distance (m)'), {
@@ -254,7 +418,7 @@ describe('Cooper run Test Attempts', () => {
           updated_at: '2026-09-22T12:00:00Z',
         });
       });
-      expect(screen.getByLabelText('Date')).toHaveValue('2026-10-01');
+      expect(screen.getAllByLabelText('Date')[0]!).toHaveValue('2026-10-01');
       expect(screen.getByLabelText('12-minute distance (m)')).toHaveValue(2800);
       expect(screen.getByRole('button', { name: 'Record Test' })).toBeEnabled();
     }
@@ -286,7 +450,7 @@ describe('Cooper run Test Attempts', () => {
       const edit = await screen.findByRole('button', { name: 'Edit' });
       if (mode === 'update') fireEvent.click(edit);
       else {
-        fireEvent.change(screen.getByLabelText('Date'), {
+        fireEvent.change(screen.getAllByLabelText('Date')[0]!, {
           target: { value: '2026-09-22' },
         });
         fireEvent.change(screen.getByLabelText('12-minute distance (m)'), {
@@ -299,7 +463,7 @@ describe('Cooper run Test Attempts', () => {
         })
       );
       await screen.findByRole('button', { name: 'Saving…' });
-      expect(screen.getByLabelText('Date')).toBeDisabled();
+      expect(screen.getAllByLabelText('Date')[0]!).toBeDisabled();
       expect(screen.getByLabelText('12-minute distance (m)')).toBeDisabled();
       expect(edit).toBeDisabled();
       if (mode === 'update') {
@@ -308,7 +472,7 @@ describe('Cooper run Test Attempts', () => {
         fireEvent.click(cancel);
       }
       fireEvent.click(edit);
-      fireEvent.submit(screen.getByLabelText('Date').closest('form')!);
+      fireEvent.submit(screen.getAllByLabelText('Date')[0]!.closest('form')!);
       expect(createCooperRunAttempt).toHaveBeenCalledTimes(
         mode === 'create' ? 1 : 0
       );

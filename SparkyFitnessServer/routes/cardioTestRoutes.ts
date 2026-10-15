@@ -5,6 +5,8 @@ import {
   createCooperRunTestAttempt,
   editCooperRunTestAttempt,
   getCooperRunAttempts,
+  getProtocolAttempts,
+  saveProtocolAttempt,
 } from '../services/cardioTestAttemptService.js';
 
 const router = express.Router();
@@ -105,6 +107,91 @@ router.put('/cooper-run/attempts/:id', async (req, res, next) => {
         req.authenticatedUserId,
         req.params.id!,
         req.body
+      )
+    );
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * @swagger
+ * /cardio-tests/{protocol}/attempts:
+ *   get:
+ *     summary: List dated Test Attempts for a protocol
+ *     tags: [Cardio Tests]
+ *     parameters:
+ *       - in: path
+ *         name: protocol
+ *         required: true
+ *         schema: { type: string, enum: [sprint_6s, power_30s, ramp] }
+ *     responses:
+ *       200: { description: The active user's dated attempts for this protocol. }
+ *       403: { description: Diary access required. }
+ *   post:
+ *     summary: Record a Test Attempt with test_type, attempt_date and protocol results
+ *     tags: [Cardio Tests]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [test_type, attempt_date, results]
+ *     responses:
+ *       201: { description: The persisted Test Attempt. }
+ *       400: { description: Invalid protocol, date, or results. }
+ *       403: { description: Diary write access required. }
+ */
+router.get('/:protocol/attempts', async (req, res, next) => {
+  try {
+    res.json(
+      await getProtocolAttempts(
+        req.userId,
+        req.authenticatedUserId,
+        req.params.protocol!
+      )
+    );
+  } catch (error) {
+    next(error);
+  }
+});
+router.post('/:protocol/attempts', async (req, res, next) => {
+  try {
+    res
+      .status(201)
+      .json(
+        await saveProtocolAttempt(
+          req.userId,
+          req.authenticatedUserId,
+          req.params.protocol!,
+          req.body
+        )
+      );
+  } catch (error) {
+    next(error);
+  }
+});
+/**
+ * @swagger
+ * /cardio-tests/{protocol}/attempts/{id}:
+ *   put:
+ *     summary: Edit a dated Test Attempt within its original protocol
+ *     tags: [Cardio Tests]
+ *     responses:
+ *       200: { description: The updated Test Attempt. }
+ *       400: { description: Invalid identifier, protocol, date, or results. }
+ *       404: { description: Test Attempt not found or not owned. }
+ */
+router.put('/:protocol/attempts/:id', async (req, res, next) => {
+  try {
+    res.json(
+      await saveProtocolAttempt(
+        req.userId,
+        req.authenticatedUserId,
+        req.params.protocol!,
+        req.body,
+        req.params.id!
       )
     );
   } catch (error) {

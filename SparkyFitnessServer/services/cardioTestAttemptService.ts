@@ -2,6 +2,10 @@ import { z } from 'zod';
 import {
   cardioTestAttemptsSchema,
   cooperRunAttemptInputSchema,
+  cardioTestAttemptInputSchema,
+  cardioTestAttemptSchema,
+  cardioTestTypeSchema,
+  type CardioTestAttempt,
   type CardioTestAttempts,
   type CooperRunAttempt,
 } from '@workspace/shared';
@@ -9,6 +13,8 @@ import {
   createCooperRunAttempt,
   listCooperRunAttempts,
   updateCooperRunAttempt,
+  listCardioTestAttempts,
+  saveCardioTestAttempt,
 } from '../models/cardioTestAttemptRepository.js';
 import { HttpError } from '../utils/errors.js';
 
@@ -31,6 +37,8 @@ function parseInput(input: unknown) {
 
 function response(attempt: CardioTestAttempts): CooperRunAttempt {
   const normalized = cardioTestAttemptsSchema.parse(attempt);
+  if (normalized.test_type !== 'cooper_run')
+    throw new Error('Expected Cooper run attempt');
   return {
     id: normalized.id,
     user_id: normalized.user_id,
@@ -40,6 +48,56 @@ function response(attempt: CardioTestAttempts): CooperRunAttempt {
     created_at: normalized.created_at.toISOString(),
     updated_at: normalized.updated_at.toISOString(),
   };
+}
+
+function protocolResponse(attempt: CardioTestAttempts): CardioTestAttempt {
+  const normalized = cardioTestAttemptsSchema.parse(attempt);
+  if (normalized.test_type === 'cooper_run')
+    throw new Error('Expected protocol attempt');
+  return cardioTestAttemptSchema.parse({
+    ...normalized,
+    created_at: normalized.created_at.toISOString(),
+    updated_at: normalized.updated_at.toISOString(),
+  });
+}
+
+export async function getProtocolAttempts(
+  userId: string,
+  authenticatedUserId: string,
+  protocol: string
+) {
+  const testType = cardioTestTypeSchema.safeParse(protocol);
+  if (!testType.success || testType.data === 'cooper_run')
+    throw new HttpError('Unknown Test protocol.', 404);
+  return (
+    await listCardioTestAttempts(userId, authenticatedUserId, testType.data)
+  ).map(protocolResponse);
+}
+
+export async function saveProtocolAttempt(
+  userId: string,
+  authenticatedUserId: string,
+  protocol: string,
+  body: unknown,
+  id?: string
+): Promise<CardioTestAttempt> {
+  const parsed = cardioTestAttemptInputSchema.safeParse(body);
+  if (!parsed.success || parsed.data.test_type !== protocol) {
+    throw new HttpError(
+      parsed.success
+        ? 'Test protocol does not match URL.'
+        : parsed.error.issues[0]!.message,
+      400
+    );
+  }
+  const attempt = await saveCardioTestAttempt(
+    userId,
+    authenticatedUserId,
+    parsed.data,
+    id ? parseId(id) : undefined
+  );
+  if (!attempt) throw new HttpError('Test Attempt not found.', 404);
+  return protocolResponse(attempt);
 }
 
 export async function getCooperRunAttempts(
