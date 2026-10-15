@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { cardioTestTypeSchema } from "../database/CardioTestAttempts.zod.ts";
 
 const title = z.string().trim().min(1).max(200);
 const goal = z.string().trim().min(1).max(2000);
@@ -20,7 +21,7 @@ const sessionInput = z
   .strictObject({
     ...sessionFields,
     workout_session_id: z.uuid().nullable().optional(),
-    cardio_test_type: z.string().min(1).optional(),
+    cardio_test_type: cardioTestTypeSchema.nullable().optional(),
   })
   .refine(
     (value) =>

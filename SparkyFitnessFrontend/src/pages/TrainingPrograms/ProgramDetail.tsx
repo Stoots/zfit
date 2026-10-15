@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import SessionRowActions from './SessionRowActions';
 import type { ProgramSession, OutcomeStatus } from './programTypes';
+import { cardioTestTitle } from './cardioTestTitle';
 
 const recordableTests = new Set(['cooper_run', 'sprint_6s', 'power_30s']);
 
@@ -215,9 +216,7 @@ export default function ProgramDetail({
                         </p>
                         <p className="break-words text-muted-foreground">
                           {session.cardio_test_type
-                            ? session.cardio_test_type === 'cooper_run'
-                              ? t('cardioTests.cooper.title', 'Cooper Run Test')
-                              : session.cardio_test_type.replaceAll('_', ' ')
+                            ? cardioTestTitle(session.cardio_test_type, t)
                             : `${session.workout_plan_name} · ${session.workout_session_name}`}
                         </p>
                         {session.completed_test_attempt && (
@@ -238,7 +237,7 @@ export default function ProgramDetail({
                                     'distance_meters'
                                   ]
                                 )}{' '}
-                                m
+                                {t('cardioTests.unit.meters', 'm')}
                               </Link>
                             ) : (
                               session.completed_test_attempt.attempt_date

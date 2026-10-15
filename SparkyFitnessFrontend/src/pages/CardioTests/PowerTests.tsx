@@ -106,22 +106,24 @@ function PowerProtocol({
       ? (params.get('planned_session_id') ?? '')
       : '';
   });
+  const selectedPlannedSessionId = programs.isError ? '' : plannedSessionId;
   const assessments = selectProgramCardioAssessmentChoices(
     programs.data ?? [],
     protocol,
-    plannedSessionId
+    selectedPlannedSessionId
   );
   useEffect(() => {
-    if (date || !plannedSessionId) return;
+    if (date || !selectedPlannedSessionId) return;
     const chosen = assessments.find(
-      (item) => item.session.id === plannedSessionId
+      (item) => item.session.id === selectedPlannedSessionId
     );
     if (chosen) setDate(chosen.session.effective_date);
-  }, [assessments, date, plannedSessionId]);
+  }, [assessments, date, selectedPlannedSessionId]);
   const [values, setValues] = useState<string[]>(
     config[protocol].labels.map(() => '')
   );
   const [editing, setEditing] = useState<string | null>(null);
+  const linkedEditBlocked = programs.isError && !!editing && !!plannedSessionId;
   const [validationError, setValidationError] = useState('');
   const savingRef = useRef(false);
   const title =
@@ -155,13 +157,14 @@ function PowerProtocol({
     if (
       savingRef.current ||
       save.isPending ||
+      linkedEditBlocked ||
       values.some((value) => value.trim() === '')
     )
       return;
     const parsed = cardioTestAttemptInputSchema.safeParse({
       ...powerTestInput(protocol, date, values.map(parseWattsInput)),
-      ...(editing || plannedSessionId
-        ? { planned_session_id: plannedSessionId || null }
+      ...(editing || selectedPlannedSessionId
+        ? { planned_session_id: selectedPlannedSessionId || null }
         : {}),
     });
     if (!parsed.success) {
@@ -212,7 +215,7 @@ function PowerProtocol({
               </Label>
               <select
                 id={`${protocol}-planned-session`}
-                value={plannedSessionId}
+                value={selectedPlannedSessionId}
                 disabled={save.isPending || programs.isPending}
                 onChange={(event) => {
                   const id = event.target.value;
@@ -235,6 +238,14 @@ function PowerProtocol({
                   </option>
                 ))}
               </select>
+              {programs.isError && (
+                <p role="alert" className="text-sm text-destructive">
+                  {t(
+                    'cardioTests.plannedAssessmentsUnavailable',
+                    'Planned assessments could not be loaded. New attempts will be standalone; linked attempts cannot be edited.'
+                  )}
+                </p>
+              )}
             </div>
           )}
           <div>
@@ -282,7 +293,10 @@ function PowerProtocol({
             ))}
           </div>
           <div className="flex gap-2">
-            <Button type="submit" disabled={save.isPending}>
+            <Button
+              type="submit"
+              disabled={save.isPending || linkedEditBlocked}
+            >
               {editing
                 ? t('common.save', 'Save')
                 : protocol === 'sprint_6s'

@@ -48,20 +48,22 @@ function ProfileCooperRunTests() {
       new URLSearchParams(window.location.search).get('planned_session_id') ??
       ''
   );
+  const selectedPlannedSessionId = programs.isError ? '' : plannedSessionId;
   const assessments = selectProgramCardioAssessmentChoices(
     programs.data ?? [],
     'cooper_run',
-    plannedSessionId
+    selectedPlannedSessionId
   );
   useEffect(() => {
-    if (editing || attemptDate || !plannedSessionId) return;
+    if (editing || attemptDate || !selectedPlannedSessionId) return;
     const chosen = assessments.find(
-      (item) => item.session.id === plannedSessionId
+      (item) => item.session.id === selectedPlannedSessionId
     );
     if (chosen) setAttemptDate(chosen.session.effective_date);
-  }, [assessments, attemptDate, editing, plannedSessionId]);
+  }, [assessments, attemptDate, editing, selectedPlannedSessionId]);
   const mutation = editing ? update : create;
   const pending = create.isPending || update.isPending;
+  const linkedEditBlocked = programs.isError && !!editing?.planned_session_id;
   const savingRef = useRef(false);
 
   const selectAttempt = (attempt: CooperRunAttempt) => {
@@ -79,7 +81,7 @@ function ProfileCooperRunTests() {
   };
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (savingRef.current || pending) return;
+    if (savingRef.current || pending || linkedEditBlocked) return;
     const distanceMeters = Number(distance);
     if (!attemptDate || !Number.isFinite(distanceMeters) || distanceMeters <= 0)
       return;
@@ -88,7 +90,7 @@ function ProfileCooperRunTests() {
       const input = {
         attempt_date: attemptDate,
         distance_meters: distanceMeters,
-        planned_session_id: plannedSessionId || null,
+        planned_session_id: selectedPlannedSessionId || null,
       };
       if (editing) await update.mutateAsync({ id: editing.id, input });
       else await create.mutateAsync(input);
@@ -157,7 +159,7 @@ function ProfileCooperRunTests() {
                     </Label>
                     <select
                       id="cooper-planned-session"
-                      value={plannedSessionId}
+                      value={selectedPlannedSessionId}
                       disabled={pending || programs.isPending}
                       onChange={(event) => {
                         const id = event.target.value;
@@ -180,6 +182,14 @@ function ProfileCooperRunTests() {
                         </option>
                       ))}
                     </select>
+                    {programs.isError && (
+                      <p role="alert" className="text-sm text-destructive">
+                        {t(
+                          'cardioTests.plannedAssessmentsUnavailable',
+                          'Planned assessments could not be loaded. New attempts will be standalone; linked attempts cannot be edited.'
+                        )}
+                      </p>
+                    )}
                   </div>
                 )}
                 <div className="space-y-2">
@@ -217,7 +227,7 @@ function ProfileCooperRunTests() {
                 </div>
               </div>
               <div className="flex flex-wrap gap-2 border-t pt-4">
-                <Button type="submit" disabled={pending}>
+                <Button type="submit" disabled={pending || linkedEditBlocked}>
                   {pending
                     ? t('common.saving', 'Saving…')
                     : editing

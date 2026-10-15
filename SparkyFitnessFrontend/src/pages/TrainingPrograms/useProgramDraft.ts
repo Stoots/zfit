@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { addDays, todayInZone } from '@workspace/shared';
+import { addDays, cardioTestTypeSchema, todayInZone } from '@workspace/shared';
 import type { TrainingProgram, TrainingProgramInput } from '@workspace/shared';
 
 type InputPhase = TrainingProgramInput['phases'][number];
@@ -95,7 +95,9 @@ export function toProgramInput(
             {
               ...session,
               workout_session_id: session.workout_session_id,
-              cardio_test_type: session.cardio_test_type ?? undefined,
+              cardio_test_type: session.cardio_test_type
+                ? cardioTestTypeSchema.parse(session.cardio_test_type)
+                : undefined,
             },
           ];
         }),

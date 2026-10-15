@@ -420,20 +420,27 @@ it('schedules a Cardio Test without a Workout Plan and shows its linked attempt 
     attempt_date: '2026-10-25',
     results: { distance_meters: 2520 },
   };
-  fireEvent.click(
-    screen.getByRole('button', { name: 'All Training Programs' })
-  );
-  fireEvent.click(await screen.findByRole('link', { name: 'View Autumn 10K' }));
-  expect(await screen.findByText(/Linked Test Attempt:/)).toBeInTheDocument();
-  expect(screen.getByText(/2520 m/)).toBeInTheDocument();
+  i18n.addResource('en', 'translation', 'cardioTests.unit.meters', 'metres');
+  try {
+    fireEvent.click(
+      screen.getByRole('button', { name: 'All Training Programs' })
+    );
+    fireEvent.click(
+      await screen.findByRole('link', { name: 'View Autumn 10K' })
+    );
+    expect(await screen.findByText(/Linked Test Attempt:/)).toBeInTheDocument();
+    expect(screen.getByText(/2520 metres/)).toBeInTheDocument();
+  } finally {
+    i18n.addResource('en', 'translation', 'cardioTests.unit.meters', 'm');
+  }
 });
 
 it.each([
-  ['sprint_6s', 'sprint_6s'],
-  ['power_30s', 'power_30s'],
+  ['sprint_6s', 'sprint_6s', '5 × 6-second sprint (54-second rests)'],
+  ['power_30s', 'power_30s', '2 × 30-second power (60-second rest)'],
 ])(
   'links a planned %s assessment to its matching web form',
-  async (protocol, routeProtocol) => {
+  async (protocol, routeProtocol, title) => {
     jest.mocked(getWorkoutPlanTemplates).mockResolvedValueOnce([]);
     mount();
     await startProgram();
@@ -446,11 +453,13 @@ it.each([
     );
     fill('Session name', 'Power baseline');
     fill('Session type', 'cardio');
+    expect(screen.getByRole('option', { name: title })).toBeInTheDocument();
     fill('Cardio Test protocol', protocol);
     fireEvent.click(
       screen.getByRole('button', { name: 'Save Training Program' })
     );
     await screen.findByRole('heading', { name: 'Autumn 10K' });
+    expect(screen.getByText(title)).toBeInTheDocument();
     const session = stored!.phases[0]!.weeks[0]!.sessions[0]!;
     expect(session).toMatchObject({
       cardio_test_type: protocol,

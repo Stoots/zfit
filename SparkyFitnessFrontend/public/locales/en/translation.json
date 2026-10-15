@@ -7050,7 +7050,14 @@
       "chart": "2 × 30-second power (60-second rest) trend by date",
       "editA11y": "Edit 30-second power attempt on {{date}}"
     },
+    "ramp": {
+      "title": "Ramp Test"
+    },
+    "unit": {
+      "meters": "m"
+    },
     "plannedSession": "Planned assessment",
+    "plannedAssessmentsUnavailable": "Planned assessments could not be loaded. New attempts will be standalone; linked attempts cannot be edited.",
     "standalone": "Standalone Test Attempt",
     "scheduled": "Scheduled assessment",
     "cooper": {

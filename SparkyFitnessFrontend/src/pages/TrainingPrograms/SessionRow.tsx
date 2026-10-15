@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label';
 import type { WorkoutPlanTemplate } from '@/types/workout';
 import ProgramItemControls from './ProgramItemControls';
 import type { SessionDraft } from './useProgramDraft';
+import { cardioTestTitle } from './cardioTestTitle';
 
 export default function SessionRow({
   session,
@@ -121,9 +122,7 @@ export default function SessionRow({
               >
                 {cardioTestTypeSchema.options.map((protocol) => (
                   <option key={protocol} value={protocol}>
-                    {protocol === 'cooper_run'
-                      ? t('cardioTests.cooper.title', 'Cooper Run Test')
-                      : String(protocol).replaceAll('_', ' ')}
+                    {cardioTestTitle(protocol, t)}
                   </option>
                 ))}
               </select>

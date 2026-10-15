@@ -274,11 +274,17 @@ async function updatePlannedSessionLink(
   if ((oldLink || newLink) && userId !== authenticatedUserId)
     throw new HttpError('Training Programs are owner-only.', 403);
   if (newLink !== oldLink) {
-    if (oldLink)
-      await client.query(
-        "UPDATE training_program_sessions SET status = 'planned', outcome_at = NULL, updated_at = now() WHERE id = $1 AND user_id = $2",
+    if (oldLink) {
+      const released = await client.query<{ program_id: string }>(
+        "UPDATE training_program_sessions SET status = 'planned', outcome_at = NULL, updated_at = now() WHERE id = $1 AND user_id = $2 RETURNING program_id",
         [oldLink, userId]
       );
+      if (released.rowCount)
+        await client.query(
+          'UPDATE training_programs SET updated_at = now() WHERE id = $1 AND user_id = $2',
+          [released.rows[0]!.program_id, userId]
+        );
+    }
     if (newLink)
       await claimPlannedSession(
         client,

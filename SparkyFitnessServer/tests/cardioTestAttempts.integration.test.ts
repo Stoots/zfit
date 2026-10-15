@@ -482,6 +482,15 @@ describe.runIf(run)('persisted authenticated Cooper Test Attempts', () => {
         .set('Authorization', `Bearer ${ownerToken}`)
         .send(input);
       expect(duplicate.status).toBe(409);
+      const db = await getSystemClient();
+      try {
+        await db.query(
+          "UPDATE training_programs SET updated_at = '2020-01-01T00:00:00Z' WHERE id = $1",
+          [program.body.id]
+        );
+      } finally {
+        db.release();
+      }
       const unlinked = await request(app)
         .put(`${path}/${linked.body.id}`)
         .set('Authorization', `Bearer ${ownerToken}`)
@@ -491,6 +500,9 @@ describe.runIf(run)('persisted authenticated Cooper Test Attempts', () => {
       const restored = await request(app)
         .get(`/api/training-programs/${program.body.id}`)
         .set('Authorization', `Bearer ${ownerToken}`);
+      expect(new Date(restored.body.updated_at).getTime()).toBeGreaterThan(
+        new Date('2020-01-01T00:00:00Z').getTime()
+      );
       expect(restored.body.phases[0].weeks[0].sessions[0]).toMatchObject({
         status: 'planned',
         completed_test_attempt: null,

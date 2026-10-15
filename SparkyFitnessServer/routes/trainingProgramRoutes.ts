@@ -29,7 +29,7 @@ router.use(authenticate, onBehalfOfMiddleware, requireSelfActor);
  *         name: { type: string, maxLength: 200 }
  *         scheduled_date: { type: string, format: date, description: Fixed calendar date within the week. }
  *         workout_session_id: { type: string, format: uuid, nullable: true, description: The exact Workout Session inside a Workout Plan owned by the caller. Supply either this or cardio_test_type. }
- *         cardio_test_type: { type: string, description: Supported Cardio Test protocol. Supply either this or workout_session_id. }
+ *         cardio_test_type: { type: string, nullable: true, description: Supported Cardio Test protocol. Supply either this or workout_session_id. }
  *         is_optional: { type: boolean, description: Explicit optionality. New bindings inherit the selected Workout Session when omitted; existing bindings retain their flag. }
  *     PlannedSession:
  *       type: object
