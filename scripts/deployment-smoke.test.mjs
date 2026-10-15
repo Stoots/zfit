@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import cardAttributes from "../shared/src/constants/dashboardWorkoutCardAttributes.json" with { type: "json" };
 import { test } from "node:test";
 import {
   assertSnapshot,
@@ -257,28 +258,36 @@ test("frozen preset prescription differences fail even with matching session ide
 test("reads stable identity and full prescription from the card, never its label", () => {
   const original = globalThis.document;
   const attributes = {
-    "data-workout-session-id": sessionB,
-    "data-workout-plan-id": "7",
-    "data-training-program-session-id": "planned-b",
-    "data-workout-session-prescription": JSON.stringify(second.assignments),
+    [cardAttributes.sessionId]: sessionB,
+    [cardAttributes.planId]: "7",
+    [cardAttributes.programSessionId]: "planned-b",
+    [cardAttributes.prescription]: JSON.stringify(second.assignments),
   };
   globalThis.document = {
     querySelectorAll: () => [
       {
         textContent: "Start Workout",
         closest: (selector) => {
-          assert.equal(selector, "[data-workout-session-id]");
+          assert.equal(selector, `[${cardAttributes.sessionId}]`);
           return { getAttribute: (key) => attributes[key] ?? null };
         },
       },
     ],
   };
   try {
-    assert.deepEqual(readWorkoutCards(), [card(sessionB, 3, "planned-b")]);
-    assert.equal(readWorkoutCards([card(sessionB, 3, "planned-b")]), true);
-    assert.equal(readWorkoutCards([card(sessionA)]), false);
-    delete attributes["data-workout-session-prescription"];
-    assert.equal(readWorkoutCards([card(sessionB, 3, "planned-b")]), false);
+    assert.deepEqual(readWorkoutCards(cardAttributes), [
+      card(sessionB, 3, "planned-b"),
+    ]);
+    assert.equal(
+      readWorkoutCards(cardAttributes, [card(sessionB, 3, "planned-b")]),
+      true,
+    );
+    assert.equal(readWorkoutCards(cardAttributes, [card(sessionA)]), false);
+    delete attributes[cardAttributes.prescription];
+    assert.equal(
+      readWorkoutCards(cardAttributes, [card(sessionB, 3, "planned-b")]),
+      false,
+    );
   } finally {
     if (original === undefined) delete globalThis.document;
     else globalThis.document = original;

@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
+import { DASHBOARD_WORKOUT_CARD_ATTRIBUTES } from '@workspace/shared';
 import type { TrainingProgram } from '@workspace/shared';
 import ExerciseCard from '@/pages/Diary/ExerciseCard';
 import type { WorkoutPlanTemplate } from '@/types/workout';
@@ -172,6 +173,29 @@ describe('ExerciseCard dashboard plans', () => {
     mockState.actingOnBehalf = false;
     mockState.programs = { data: [], isError: false };
     mockState.plans = [];
+  });
+
+  it('renders the exact workout attributes read by the deployment smoke gate', () => {
+    const plan = makePlan('7', 'Program plan', ['Push']);
+    mockState.plans = [plan];
+    mockState.programs = { data: [programLinkedTo('7')], isError: false };
+    renderCard();
+
+    const card = screen.getByTestId('dashboard-plan-7');
+    expect(card.getAttribute(DASHBOARD_WORKOUT_CARD_ATTRIBUTES.sessionId)).toBe(
+      plan.next_session!.id
+    );
+    expect(card.getAttribute(DASHBOARD_WORKOUT_CARD_ATTRIBUTES.planId)).toBe(
+      '7'
+    );
+    expect(
+      card.getAttribute(DASHBOARD_WORKOUT_CARD_ATTRIBUTES.programSessionId)
+    ).toBe('planned-session-1');
+    expect(
+      JSON.parse(
+        card.getAttribute(DASHBOARD_WORKOUT_CARD_ATTRIBUTES.prescription)!
+      )
+    ).toEqual(plan.next_session!.assignments);
   });
 
   it('confirms before logging prescribed sets and recording the Program outcome', async () => {

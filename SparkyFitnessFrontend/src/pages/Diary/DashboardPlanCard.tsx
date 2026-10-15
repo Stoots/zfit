@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import type { WorkoutPlanSession, WorkoutPlanTemplate } from '@/types/workout';
+import { DASHBOARD_WORKOUT_CARD_ATTRIBUTES } from '@workspace/shared';
 
 interface DashboardPlanCardProps {
   plan: WorkoutPlanTemplate;
@@ -71,12 +72,15 @@ const DashboardPlanCard = ({
     <div
       className="border-b pb-3 mb-3 md:pb-5 md:mb-4 flex flex-col items-start justify-between gap-3 md:gap-4"
       data-testid={`dashboard-plan-${plan.id}`}
-      data-workout-session-id={currentSession.id}
-      data-workout-plan-id={plan.id}
-      data-training-program-session-id={plan.training_program_session_id}
-      data-workout-session-prescription={JSON.stringify(
-        currentSession.assignments
-      )}
+      {...{
+        [DASHBOARD_WORKOUT_CARD_ATTRIBUTES.sessionId]: currentSession.id,
+        [DASHBOARD_WORKOUT_CARD_ATTRIBUTES.planId]: plan.id,
+        [DASHBOARD_WORKOUT_CARD_ATTRIBUTES.programSessionId]:
+          plan.training_program_session_id,
+        [DASHBOARD_WORKOUT_CARD_ATTRIBUTES.prescription]: JSON.stringify(
+          currentSession.assignments
+        ),
+      }}
     >
       <div className="min-w-0 space-y-2">
         {programContext && (

@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { pathToFileURL } from "node:url";
 import puppeteer from "puppeteer-core";
+import cardAttributes from "../shared/src/constants/dashboardWorkoutCardAttributes.json" with { type: "json" };
 
 const timeout = 30_000;
 
@@ -131,18 +132,18 @@ export function expectedWorkoutCards(
 }
 
 // Also used as the browser wait predicate: no label or whole-plan fallback.
-export function readWorkoutCards(expected) {
+export function readWorkoutCards(cardAttributes, expected) {
   const actual = [...document.querySelectorAll("button")]
     .filter((button) => button.textContent.trim() === "Start Workout")
     .map((button) => {
-      const root = button.closest("[data-workout-session-id]");
+      const root = button.closest(`[${cardAttributes.sessionId}]`);
       return {
-        workoutSessionId: root?.getAttribute("data-workout-session-id") ?? null,
-        workoutPlanId: root?.getAttribute("data-workout-plan-id") ?? null,
+        workoutSessionId: root?.getAttribute(cardAttributes.sessionId) ?? null,
+        workoutPlanId: root?.getAttribute(cardAttributes.planId) ?? null,
         trainingProgramSessionId:
-          root?.getAttribute("data-training-program-session-id") || null,
+          root?.getAttribute(cardAttributes.programSessionId) || null,
         prescription: JSON.parse(
-          root?.getAttribute("data-workout-session-prescription") || "null",
+          root?.getAttribute(cardAttributes.prescription) || "null",
         ),
       };
     });
@@ -200,7 +201,7 @@ async function snapshot(page) {
   return {
     ...surface,
     expected: expectedWorkoutCards(programs, plans, entries, libraryPlans),
-    actual: await page.evaluate(readWorkoutCards),
+    actual: await page.evaluate(readWorkoutCards, cardAttributes),
   };
 }
 
@@ -349,14 +350,21 @@ The browser stays open. Reports and screenshots contain private workout data, bu
       }
       // Wait for the exact-session Program query and prescription to render.
       const expected = (await snapshot(page)).expected;
-      await page.waitForFunction(readWorkoutCards, {}, expected);
+      await page.waitForFunction(
+        readWorkoutCards,
+        {},
+        cardAttributes,
+        expected,
+      );
       report.final = await snapshot(page);
       assertSnapshot(report.final, expectedEntry);
-      await page.evaluate(() =>
-        [...document.querySelectorAll("button")]
-          .find((button) => button.textContent.trim() === "Start Workout")
-          .closest("[data-workout-session-id]")
-          .scrollIntoView({ block: "start" }),
+      await page.evaluate(
+        (sessionIdAttribute) =>
+          [...document.querySelectorAll("button")]
+            .find((button) => button.textContent.trim() === "Start Workout")
+            .closest(`[${sessionIdAttribute}]`)
+            .scrollIntoView({ block: "start" }),
+        cardAttributes.sessionId,
       );
       await page.screenshot({ path: resolve(output, "upcoming-workouts.png") });
     }
