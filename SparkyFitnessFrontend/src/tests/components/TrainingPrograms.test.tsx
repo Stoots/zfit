@@ -475,6 +475,21 @@ it.each([
   }
 );
 
+it('offers only Cardio Tests that can be recorded on web', async () => {
+  jest.mocked(getWorkoutPlanTemplates).mockResolvedValueOnce([]);
+  mount();
+  await startProgram();
+  fireEvent.click(screen.getByRole('button', { name: 'Add phase' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Add week' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Add Planned Session' }));
+  fill('Session type', 'cardio');
+  const protocol = screen.getByRole('combobox', {
+    name: 'Cardio Test protocol',
+  });
+  expect(within(protocol).getAllByRole('option')).toHaveLength(3);
+  expect(within(protocol).queryByRole('option', { name: /ramp/i })).toBeNull();
+});
+
 it('does not expose owner data or authoring while acting as a family delegate', () => {
   mockActor.delegated = true;
   mount();
