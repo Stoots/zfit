@@ -162,20 +162,35 @@ async function createExerciseEntriesFromTemplate(
             [session.id, userId, currentDay]
           );
           if (missing.rows.length === 0) continue;
-          const completed = await client.query(
-            `SELECT 1 FROM exercise_entries entry
+          const candidate = await client.query<{
+            exercise_preset_entry_id: string;
+          }>(
+            `SELECT entry.exercise_preset_entry_id
+             FROM exercise_entries entry
              JOIN workout_plan_template_assignments assignment
                ON assignment.id = entry.workout_plan_assignment_id
-             JOIN exercise_entries sibling
-               ON sibling.exercise_preset_entry_id = entry.exercise_preset_entry_id
-             JOIN exercise_entry_sets done ON done.exercise_entry_id = sibling.id
+             JOIN exercise_entry_activity_details detail
+               ON detail.exercise_preset_entry_id = entry.exercise_preset_entry_id
              WHERE assignment.workout_session_id = $1
                AND entry.user_id = $2 AND entry.entry_date = $3
-               AND entry.is_weekly_prefill AND done.completed_at IS NOT NULL
-             LIMIT 1`,
+               AND entry.source = 'Workout Plan' AND entry.is_weekly_prefill
+               AND detail.detail_type = 'workout_plan_prescription'
+               AND detail.detail_data->>'workout_session_id' = $1::text
+             ORDER BY entry.created_at, entry.id LIMIT 1`,
             [session.id, userId, currentDay]
           );
-          if (completed.rowCount) continue;
+          const candidateId = candidate.rows[0]?.exercise_preset_entry_id;
+          if (candidateId) {
+            // The player locks this parent before saving; eligibility is checked again below.
+            await client.query(
+              'SELECT id FROM exercise_preset_entries WHERE id = $1 FOR UPDATE NOWAIT',
+              [candidateId]
+            );
+            await client.query(
+              'SELECT id FROM exercise_entries WHERE user_id = $1 AND exercise_preset_entry_id = $2 ORDER BY id FOR UPDATE NOWAIT',
+              [userId, candidateId]
+            );
+          }
           const existing = await client.query<{
             exercise_preset_entry_id: string;
           }>(
@@ -191,8 +206,27 @@ async function createExerciseEntriesFromTemplate(
                AND entry.is_weekly_prefill
                AND detail.detail_type = 'workout_plan_prescription'
                AND detail.detail_data->>'workout_session_id' = $1::text
+               AND entry.exercise_preset_entry_id = $4::uuid
+               AND NOT EXISTS (
+                 SELECT 1 FROM exercise_entries sibling
+                 WHERE sibling.exercise_preset_entry_id = entry.exercise_preset_entry_id
+                   AND NOT sibling.is_weekly_prefill
+               )
+               AND NOT EXISTS (
+                 SELECT 1 FROM exercise_entries sibling
+                 JOIN exercise_entry_sets done ON done.exercise_entry_id = sibling.id
+                 WHERE sibling.exercise_preset_entry_id = entry.exercise_preset_entry_id
+                   AND done.completed_at IS NOT NULL
+               )
+               AND NOT EXISTS (
+                 SELECT 1 FROM workout_feedback feedback
+                 LEFT JOIN exercise_entries sibling ON sibling.id = feedback.exercise_entry_id
+                 WHERE feedback.user_id = $2
+                   AND (feedback.exercise_preset_entry_id = entry.exercise_preset_entry_id
+                     OR sibling.exercise_preset_entry_id = entry.exercise_preset_entry_id)
+               )
              ORDER BY entry.created_at, entry.id LIMIT 1`,
-            [session.id, userId, currentDay]
+            [session.id, userId, currentDay, candidateId ?? null]
           );
           if (!existing.rows.length) {
             const occupied = await client.query(

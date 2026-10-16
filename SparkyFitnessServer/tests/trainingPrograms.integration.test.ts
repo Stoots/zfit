@@ -417,6 +417,8 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
       await import('../routes/exerciseEntryRoutes.js');
     const { router: historyRoutes } =
       await import('../routes/v2/exerciseEntryRoutes.js');
+    const { default: coachingRoutes } =
+      await import('../routes/v2/workoutCoachingRoutes.js');
     app.use(express.json(), cookieParser());
     app.use('/api/training-programs', routes);
     app.use('/api/workout-plan-templates', workoutRoutes);
@@ -424,6 +426,7 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
     app.use('/api/exercise-preset-entries', authenticate, completionRoutes);
     app.use('/api/exercise-entries', diaryRoutes);
     app.use('/api/v2/exercise-entries', authenticate, historyRoutes);
+    app.use('/api/v2/workout-coaching', coachingRoutes);
     app.use(errorHandler);
   }, 30000);
   beforeEach(async () => {
@@ -3087,6 +3090,321 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
     expect(
       (await diaryPrescription(assignmentId, '2026-10-25'))[0]!.entry.notes
     ).toBe('My own notes');
+  });
+  it.each(['session', 'exercise'] as const)(
+    'keeps a future prefill workout with %s feedback when its assignment or plan is removed',
+    async (target) => {
+      setToday('2026-10-25');
+      const plan = await createPlan({
+        plan_name: 'Feedback history',
+        schedule_type: 'weekly',
+        entry_mode: 'prefill',
+        is_active: true,
+        start_date: '2026-10-25',
+        end_date: '2026-10-25',
+        currentClientDate: '2026-10-25',
+        sessions: [
+          {
+            name: 'A',
+            day_of_week: 0,
+            sort_order: 0,
+            assignments: [
+              {
+                exercise_id: await seedExercise(),
+                sort_order: 0,
+                sets: prescribedSets(2),
+              },
+            ],
+          },
+        ],
+      });
+      const assignmentId = plan.sessions[0]!.assignments[0]!.id;
+      const before = (await diaryPrescription(assignmentId, '2026-10-25'))[0]!;
+      const groupId = before.entry.exercise_preset_entry_id as string;
+      const feedback = {
+        session:
+          target === 'session'
+            ? { difficulty: null, pain: true, pain_note: 'Knee pain' }
+            : null,
+        exercises:
+          target === 'exercise'
+            ? [
+                {
+                  exercise_entry_id: before.entry.id,
+                  difficulty: null,
+                  pain: true,
+                  pain_note: 'Knee pain',
+                },
+              ]
+            : [],
+      };
+      expect(
+        (
+          await request(app)
+            .put(`/api/v2/workout-coaching/sessions/${groupId}/feedback`)
+            .set('Authorization', `Bearer ${ownerToken}`)
+            .send(feedback)
+        ).status
+      ).toBe(200);
+      const edit = planInput(plan);
+      edit.currentClientDate = '2026-10-25';
+      edit.sessions[0]!.assignments = [];
+      expect(
+        (
+          await request(app)
+            .put(`/api/workout-plan-templates/${plan.id}`)
+            .set('Authorization', `Bearer ${ownerToken}`)
+            .send(edit)
+        ).status
+      ).toBe(409);
+      expect(
+        (
+          await request(app)
+            .delete(`/api/workout-plan-templates/${plan.id}`)
+            .set('Authorization', `Bearer ${ownerToken}`)
+        ).status
+      ).toBe(409);
+      expect(await diaryPrescription(assignmentId, '2026-10-25')).toHaveLength(
+        1
+      );
+      const saved = await request(app)
+        .get(`/api/v2/workout-coaching/sessions/${groupId}/feedback`)
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(saved.status).toBe(200);
+      expect(
+        target === 'session'
+          ? saved.body.session?.pain_note
+          : saved.body.exercises[0]?.pain_note
+      ).toBe('Knee pain');
+    }
+  );
+  it('keeps exercise feedback committed during a concurrent plan removal', async () => {
+    setToday('2026-10-25');
+    const plan = await createPlan({
+      plan_name: 'Concurrent feedback',
+      schedule_type: 'weekly',
+      entry_mode: 'prefill',
+      is_active: true,
+      start_date: '2026-10-25',
+      end_date: '2026-10-25',
+      currentClientDate: '2026-10-25',
+      sessions: [
+        {
+          name: 'A',
+          day_of_week: 0,
+          sort_order: 0,
+          assignments: [
+            {
+              exercise_id: await seedExercise(),
+              sort_order: 0,
+              sets: prescribedSets(2),
+            },
+          ],
+        },
+      ],
+    });
+    const assignmentId = plan.sessions[0]!.assignments[0]!.id;
+    const entry = (await diaryPrescription(assignmentId, '2026-10-25'))[0]!
+      .entry;
+    const edit = planInput(plan);
+    edit.currentClientDate = '2026-10-25';
+    edit.sessions[0]!.assignments = [];
+    const feedbackWriter = await getSystemClient();
+    await feedbackWriter.query('BEGIN');
+    try {
+      await feedbackWriter.query(
+        `INSERT INTO workout_feedback(user_id, exercise_entry_id, pain, pain_note)
+         VALUES ($1, $2, true, 'Knee pain')`,
+        [owner, entry.id]
+      );
+      let finishedStatus: number | null = null;
+      const pending = request(app)
+        .put(`/api/workout-plan-templates/${plan.id}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send(edit)
+        .then((response: { status: number }) => {
+          finishedStatus = response.status;
+          return response;
+        });
+      for (
+        let attempt = 0;
+        attempt < 100 && finishedStatus === null;
+        attempt++
+      ) {
+        await feedbackWriter.query('SELECT pg_stat_clear_snapshot()');
+        const activity = await feedbackWriter.query(
+          `SELECT 1 FROM pg_stat_activity WHERE wait_event_type = 'Lock'
+           AND query LIKE 'DELETE FROM exercise_entries entry%' LIMIT 1`
+        );
+        if (activity.rowCount) break;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      await feedbackWriter.query('COMMIT');
+      expect((await pending).status).toBe(409);
+      expect(await diaryPrescription(assignmentId, '2026-10-25')).toHaveLength(
+        1
+      );
+      const saved = await request(app)
+        .get(
+          `/api/v2/workout-coaching/sessions/${entry.exercise_preset_entry_id}/feedback`
+        )
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(saved.body.exercises[0]?.pain_note).toBe('Knee pain');
+    } finally {
+      await feedbackWriter.query('ROLLBACK');
+      feedbackWriter.release();
+    }
+  });
+  it('does not append to a weekly group after one sibling was edited', async () => {
+    setToday('2026-10-25');
+    const plan = await createPlan({
+      plan_name: 'Partly edited group',
+      schedule_type: 'weekly',
+      entry_mode: 'prefill',
+      is_active: true,
+      start_date: '2026-10-25',
+      end_date: '2026-10-25',
+      currentClientDate: '2026-10-25',
+      sessions: [
+        {
+          name: 'A',
+          day_of_week: 0,
+          sort_order: 0,
+          assignments: [
+            {
+              exercise_id: await seedExercise(),
+              sort_order: 0,
+              sets: prescribedSets(2),
+            },
+            {
+              exercise_id: await seedExercise(),
+              sort_order: 1,
+              sets: prescribedSets(2),
+            },
+          ],
+        },
+      ],
+    });
+    const firstId = plan.sessions[0]!.assignments[0]!.id;
+    const secondId = plan.sessions[0]!.assignments[1]!.id;
+    const first = (await diaryPrescription(firstId, '2026-10-25'))[0]!;
+    expect(
+      (
+        await request(app)
+          .put(`/api/exercise-entries/${first.entry.id}`)
+          .set('Authorization', `Bearer ${ownerToken}`)
+          .send({ notes: 'Adjusted form' })
+      ).status
+    ).toBe(200);
+    const edit = planInput(plan);
+    edit.currentClientDate = '2026-10-25';
+    edit.sessions[0]!.assignments.push({
+      exercise_id: await seedExercise(),
+      sort_order: 2,
+      sets: prescribedSets(2),
+    });
+    expect(
+      (
+        await request(app)
+          .put(`/api/workout-plan-templates/${plan.id}`)
+          .set('Authorization', `Bearer ${ownerToken}`)
+          .send(edit)
+      ).status
+    ).toBe(200);
+    const addedId = (await reloadPlan(plan.id)).sessions[0]!.assignments[2]!.id;
+    expect(await diaryPrescription(addedId, '2026-10-25')).toEqual([]);
+    expect(
+      (await diaryPrescription(firstId, '2026-10-25'))[0]!.entry.notes
+    ).toBe('Adjusted form');
+    expect(await diaryPrescription(secondId, '2026-10-25')).toHaveLength(1);
+  });
+  it('does not append while a player transaction completes the group', async () => {
+    setToday('2026-10-25');
+    const plan = await createPlan({
+      plan_name: 'Concurrent player save',
+      schedule_type: 'weekly',
+      entry_mode: 'prefill',
+      is_active: true,
+      start_date: '2026-10-25',
+      end_date: '2026-10-25',
+      currentClientDate: '2026-10-25',
+      sessions: [
+        {
+          name: 'A',
+          day_of_week: 0,
+          sort_order: 0,
+          assignments: [
+            {
+              exercise_id: await seedExercise(),
+              sort_order: 0,
+              sets: prescribedSets(2),
+            },
+          ],
+        },
+      ],
+    });
+    const originalId = plan.sessions[0]!.assignments[0]!.id;
+    const original = (await diaryPrescription(originalId, '2026-10-25'))[0]!;
+    const groupId = original.entry.exercise_preset_entry_id as string;
+    const edit = planInput(plan);
+    edit.currentClientDate = '2026-10-25';
+    edit.sessions[0]!.assignments.push({
+      exercise_id: await seedExercise(),
+      sort_order: 1,
+      sets: prescribedSets(2),
+    });
+    const player = await getSystemClient();
+    await player.query('BEGIN');
+    try {
+      await player.query(
+        'SELECT id FROM exercise_preset_entries WHERE id = $1 FOR UPDATE',
+        [groupId]
+      );
+      await player.query(
+        'UPDATE exercise_entry_sets SET completed_at = $2 WHERE exercise_entry_id = $1 AND set_number = 1',
+        [original.entry.id, '2026-10-25T10:00:00Z']
+      );
+      await player.query(
+        'UPDATE exercise_entries SET is_weekly_prefill = false WHERE exercise_preset_entry_id = $1',
+        [groupId]
+      );
+      let finishedStatus: number | null = null;
+      const pending = request(app)
+        .put(`/api/workout-plan-templates/${plan.id}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send(edit)
+        .then((response: { status: number }) => {
+          finishedStatus = response.status;
+          return response;
+        });
+      let waiting = false;
+      for (
+        let attempt = 0;
+        attempt < 100 && finishedStatus === null;
+        attempt++
+      ) {
+        await player.query('SELECT pg_stat_clear_snapshot()');
+        const activity = await player.query(
+          `SELECT 1 FROM pg_stat_activity WHERE wait_event_type = 'Lock'
+           AND query LIKE 'INSERT INTO exercise_entries%' LIMIT 1`
+        );
+        if (activity.rowCount) {
+          waiting = true;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      expect(waiting || finishedStatus !== null).toBe(true);
+      await player.query('COMMIT');
+      expect((await pending).status).toBe(409);
+      const addedId = (await reloadPlan(plan.id)).sessions[0]!.assignments[1]
+        ?.id;
+      expect(addedId).toBeUndefined();
+      expect(await diaryPrescription(originalId, '2026-10-25')).toHaveLength(1);
+    } finally {
+      await player.query('ROLLBACK');
+      player.release();
+    }
   });
   it('adds to the generated group when an explicit start created a duplicate group', async () => {
     setToday('2026-10-25');
