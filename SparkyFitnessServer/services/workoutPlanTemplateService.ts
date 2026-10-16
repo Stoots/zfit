@@ -89,8 +89,8 @@ async function updateWorkoutPlanTemplate(
     userId,
     parsed.data.currentClientDate
   );
-  // Identity checks, local prescription edits and idempotent prefill insertion
-  // share one repository transaction. There is no diary cleanup/unlink step.
+  // Identity checks, disposable prefill cleanup and idempotent insertion
+  // share one repository transaction.
   return workoutPlanTemplateRepository.updateWorkoutPlanTemplate(
     templateId,
     userId,

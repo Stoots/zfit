@@ -2675,9 +2675,11 @@ async function logWorkoutPlanSession(
   completion?: {
     programSessionId: string;
     performedExercises?: PresetSessionExerciseRequest[];
-  }
+  },
+  existingPresetEntryId?: string
 ) {
-  const client = transactionClient ?? (await getClient(userId, actingUserId));
+  const client: PoolClient =
+    transactionClient ?? (await getClient(userId, actingUserId));
   try {
     if (!transactionClient) await client.query('BEGIN');
     const session = await getWorkoutSessionForExecution(
@@ -2705,7 +2707,14 @@ async function logWorkoutPlanSession(
           : []
       )
     );
-    let sortOrder = 0;
+    const lastSortOrder = existingPresetEntryId
+      ? await client.query<{ next_order: number }>(
+          `SELECT COALESCE(MAX(sort_order) + 1, 0) AS next_order
+           FROM exercise_entries WHERE user_id = $1 AND exercise_preset_entry_id = $2`,
+          [userId, existingPresetEntryId]
+        )
+      : null;
+    let sortOrder = lastSortOrder?.rows[0]?.next_order ?? 0;
     const exercises = assignments.flatMap<
       PresetSessionExerciseRequest & { exercise_name?: string }
     >((assignment) => {
@@ -2772,6 +2781,60 @@ async function logWorkoutPlanSession(
           };
         })
       : exercises;
+    if (existingPresetEntryId) {
+      await createGroupedExerciseEntriesWithClient(
+        client,
+        userId,
+        actingUserId,
+        existingPresetEntryId,
+        entryDate,
+        loggedExercises,
+        {
+          entrySource: 'Workout Plan',
+          frozenExerciseSnapshots: new Map(
+            assignments.flatMap((assignment) =>
+              assignment.preset_snapshot
+                ? [
+                    [
+                      assignment.id,
+                      assignment.preset_snapshot.exercises,
+                    ] as const,
+                  ]
+                : []
+            )
+          ),
+        }
+      );
+      await client.query(
+        `UPDATE exercise_entry_activity_details
+         SET detail_data = jsonb_set(detail_data, '{assignments}',
+           COALESCE((
+             SELECT jsonb_agg(item)
+             FROM jsonb_array_elements(detail_data->'assignments') item
+             WHERE (item->>'id')::integer <> ALL($4::integer[])
+           ), '[]'::jsonb) || $3::jsonb)
+         WHERE exercise_preset_entry_id = $1
+           AND detail_type = 'workout_plan_prescription'
+           AND detail_data->>'workout_session_id' = $2`,
+        [
+          existingPresetEntryId,
+          session.id,
+          JSON.stringify(assignments),
+          assignments.map((assignment) => assignment.id),
+        ]
+      );
+      const groupedSession = await getGroupedExerciseSessionByIdWithClient(
+        client,
+        userId,
+        existingPresetEntryId
+      );
+      if (!transactionClient) await client.query('COMMIT');
+      return {
+        workout_session_id: session.id,
+        workout_session_name: session.name,
+        session: groupedSession,
+      };
+    }
     const groupedSession = await createGroupedWorkoutSession(
       userId,
       actingUserId,
