@@ -9,7 +9,7 @@ A **Training Program** organizes multiple weeks around a goal. It contains order
 3. Add phases and enter each phase's name and goal. Add weeks within the Program dates. Each week spans one to seven days; weeks must be chronological and cannot overlap.
 4. Add Planned Sessions. Give each a name and authored calendar date within its week, then choose an exact **Workout Session** inside one of your plans or a **Cardio Test** protocol. A Cardio Test does not create a placeholder Workout Plan. The Workout Session selector shows the session ordinal and prescription, so two sessions named A with 2 × 8 and 3 × 8 remain distinguishable. Multiple Planned Sessions can share a date or reuse the same workout session. **Optional** initially inherits the selected Workout Session; explicitly change it to override optionality for this Program binding. Cardio assessments start required unless marked optional.
 
-   For a scheduled Cooper, five-effort sprint, or 30-second power test, choose **Record Test Attempt** from Program history on web or select the assessment on the Cardio Tests screen. The matching form opens with the Planned Session and its date selected. Saving the result completes the Planned Session and shows the attempt in Program history. Choose **Standalone Test Attempt** to record a test outside a Program. Removing a Program preserves its Test Attempts as standalone history. Ramp tests can be scheduled, but do not yet have a recording form.
+   For a scheduled Cooper, five-effort sprint, 30-second power, or ramp test, choose **Record Test Attempt** from Program history on web or select the assessment on the Cardio Tests screen. The matching form opens with the Planned Session and its date selected. Saving the result completes the Planned Session and shows the attempt in Program history. Choose **Standalone Test Attempt** to record a test outside a Program. Removing a Program preserves its Test Attempts as standalone history. A ramp test starts at 100 W and increases by 20 W per minute; enter maximum watts, peak heart rate, and heart rate one minute after stopping to see heart-rate recovery and dated trends.
 
 5. Leave **Auto-shift after a miss** off for fixed dates, or explicitly enable it. Save to view your schedule and history. Empty structures can be saved for later authoring.
 
@@ -23,7 +23,7 @@ Weekly plans retain explicit weekdays, including unscheduled sessions without a 
 
 **Optional** is an explicit session checkbox, not a name convention. Existing sessions default to required. Copying and saving a Workout Session retain its flag and full prescription; names such as “C” or “accessory” never make it optional. Later library edits do not change an existing Program binding's stored optionality. Mark only the intended sessions optional; absent deload sessions remain absent rather than being generated.
 
-**Start Workout** in the Program view opens the exact bound session, not the plan's standalone next session. The web Diary previews up to three pending exact sessions across effective dates in date and authored order, even when their plans are inactive, plus unrelated active standalone plans. A Program session stays in that preview until its Program outcome is recorded. Finishing **Start Workout** playback from Home or the Program page sends the performed sets to the same atomic completion endpoint and records the Program outcome with the diary workout. An identical retry returns that result without logging again. Program playback does not offer exercise replacement because completion requires the prescribed exercises. If an older local draft contains a replacement, the server rejection offers **Save as a separate workout** (unlinked) or **Discard**. The same recovery is available if another completion or explicit link already recorded a different workout. Standalone playback still offers replacement and saves a diary workout normally. **Mark complete** confirms one atomic server action that logs the exact bound Workout Session prescription on the selected Diary date and records the Program outcome. Retrying after an uncertain response returns the recorded completion without logging another workout. The same dialog offers **Link an existing workout**: choose any diary date and explicitly select an unlinked workout, including a partial workout, to record its completion without logging a new one. A workout already linked to another Planned Session is unavailable. Sessions with no prescribed sets use only the link flow; the direct completion API rejects logging them without performed sets.
+**Start Workout** in the Program view opens the exact bound session, not the plan's standalone next session. The web Diary previews up to four pending exact sessions across effective dates in date and authored order, even when their plans are inactive, plus unrelated active standalone plans. A Program session stays in that preview until its Program outcome is recorded. Completing or linking any displayed occurrence immediately replaces it with the next pending occurrence, while earlier unfinished sessions remain visible. Finishing **Start Workout** playback from Home or the Program page sends the performed sets to the same atomic completion endpoint and records the Program outcome with the diary workout. An identical retry returns that result without logging again. Program playback does not offer exercise replacement because completion requires the prescribed exercises. If an older local draft contains a replacement, the server rejection offers **Save as a separate workout** (unlinked) or **Discard**. The same recovery is available if another completion or explicit link already recorded a different workout. Standalone playback still offers replacement and saves a diary workout normally. **Mark complete** confirms one atomic server action that logs the exact bound Workout Session prescription on the selected Diary date and records the Program outcome. Retrying after an uncertain response returns the recorded completion without logging another workout. The same dialog offers **Link an existing workout**: choose any diary date and explicitly select an unlinked workout, including a partial workout, to record its completion without logging a new one. A workout already linked to another Planned Session is unavailable. Sessions with no prescribed sets use only the link flow; the direct completion API rejects logging them without performed sets.
 
 Frozen execution retains all prescribed exercise/set data, effort, rest, distance, ranges and notes. A single-preset session uses its frozen format and time cap. Multi-assignment sessions retain each prescription but use one combined timer: matching frozen preset formats keep that format, including EMOM, and keep a shared time cap when all caps agree. Mixed formats become standard and drop the cap; mixed caps also drop the cap. There are no independent per-block timers. Logging keeps performed results separate from the server-frozen prescription; later local or library edits do not refresh that history.
 
@@ -80,54 +80,15 @@ For example, sessions authored October 25, October 30 and November 7 become: **O
 - Recorded sessions must retain their IDs, parents, names, authored dates and exact Workout Session bindings; their effective dates, timestamps and completion snapshots are read-only. Their containing phases/weeks must remain. Order may change; goals and valid containing date ranges may be edited. An invalid or history-rewriting aggregate save is rejected atomically.
 - Outcome recording and aggregate editing lock the Program in one transaction. Concurrent duplicate misses yield one shift; duplicate completion links yield one winner and 409 for the competing link.
 
-## Consolidate a fragmented Program
+## Historical Program consolidation
 
-An operator can explicitly consolidate one existing Program's workouts into a
-single Workout Plan containing independent Workout Sessions. This is not a
-**Save Program** action or a new scheduling system. Same-label sessions retain
-their distinct sets, loads (including unspecified loads), effort, rest, notes,
-per-side instructions, frozen presets and conditioning formats. Program,
-phase, week and Planned Session identities, dates, same-day order, optional
-overrides and recorded outcomes stay intact. No workouts or absent deload
-sessions are created.
-
-Cardio Test Planned Sessions and their linked Test Attempts stay unchanged;
-only workout-bound sessions enter the mapping. A Program containing only
-assessments has no workouts to consolidate, so preflight returns no proposal.
-
-The operator first reviews a read-only inventory and exact identity mapping.
-Unshared, unprotected sessions move with their Session/assignment/set IDs
-retained. Sessions still needed by another Program, standalone plan, family
-library/report reader or outside diary history are explicitly cloned; their
-original container and historical links remain. Only selected live Program
-bindings change to the clone, never recorded prescription/result snapshots.
-Old plans are removed only when individually approved and proven safely empty.
-
-The new plan is inactive, sequential and has no start/end dates: the Program
-remains the private calendar, and **Start Workout** still opens its exact bound
-session. The ordinary plan editor still refuses moves/deletes that would break
-Program or diary references; the guarded operator transaction is a separate
-reviewed exception. Its private owner-only journal also protects the target
-plan from ordinary deletion. Explicit Program deletion removes that Program's
-journal but leaves reusable plans and diary workouts intact.
-
-Each current new-apply operator mapping requires `target_day_of_week: null`;
-moves and clones clear destination weekdays for the sequential plan, while
-protected weekly sources keep their weekdays and the Program keeps its
-dates/order. An exact unchanged **recorded** manifest, including an old format,
-recovers its stored acknowledgment through owner-scoped locked journal replay
-before current write-schema validation, without reapplying data or rewriting
-the receipt. Changed recorded manifests are rejected. Only **unrecorded** old
-manifests missing the required field need fresh preflight and review; they cannot
-write through a historical-format compatibility path. See the runbook for exact
-recovery guards and local verification limits.
-
-See the [database operator runbook](../../developer/database.md#selected-program-consolidation-operator-runbook)
-for CLI guards, legacy ambiguity mapping, backup/restore, interruption recovery
-and repeat safety. Local rehearsal is not live approval. A live cutover requires
-separate authorization, public-origin cache-enabled frontend verification,
-actual supported mobile workout checks and a refreshed private Program export.
-Unavailable native runtime checks block a fully verified cutover claim.
+The one-off #14 consolidation completed on 2026-10-15, and its operator tool
+was retired in #50. The resulting reusable plan and exact Program session
+bindings remain available through the ordinary workout flows. The private,
+owner-only journal remains an audit record; its foreign key still protects the
+target plan from deletion. Program deletion removes its journal but leaves
+reusable plans and diary workouts intact. See the
+[historical journal notes](../../developer/database.md#historical-program-consolidation-journal).
 
 ## Privacy and deletion safety
 

@@ -109,7 +109,7 @@ export function expectedWorkoutCards(
   const expected = [];
   let selected = 0;
   for (const planned of pending) {
-    if (selected >= 3) break;
+    if (selected >= 4) break;
     const candidate = byId.get(planned.workout_session_id);
     if (
       !candidate ||
@@ -221,7 +221,7 @@ async function main() {
 
 Use a dedicated Chrome profile, signed in to the public-origin Diary in English.
 Run warm BEFORE deployment and verify AFTER deployment, with the same browser and output directory.
-Verify compares the loaded entry asset with the running container and checks exact session UUIDs and prescriptions for the next three Program workouts plus unrelated active standalone plans.
+Verify compares the loaded entry asset with the running container and checks exact session UUIDs and prescriptions for the next four Program workouts plus unrelated active standalone plans.
 Inactive owner plans bound by a Program remain eligible; shared or unbound inactive plans do not become standalone previews.
 Caching remains enabled. Stale builds trigger a normal service-worker update and one reload.
 The browser stays open. Reports and screenshots contain private workout data, but no cookies.`);

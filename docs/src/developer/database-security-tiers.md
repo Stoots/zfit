@@ -63,20 +63,14 @@ These tables contain highly sensitive credentials, API keys, SSO tokens, 2FA rec
 
 The consolidation journal uses `create_owner_policy`, like the four Program
 hierarchy tables; neither diary/report nor exercise-library grants expose it.
-Consolidation additionally requires the owner as the actual actor and a
-non-table-owner, non-superuser, non-BYPASSRLS application database role. There is
-no public HTTP apply endpoint. A journal-referenced target plan cannot be
-deleted through the ordinary plan interface. Program deletion cascades its
-journal rows but leaves reusable plans and diary history intact. Account deletion
-retains its normal account-data cascades, including the owner's journal rows.
-The journal records an approved operation, not a full backup.
-
-The consolidated library plan retains existing library sharing rules, but is
-inactive with SQL NULL start/end dates: the owner-only Program calendar is not
-copied to family-readable plan dates. Active library/report readers and other
-outside consumers protect source sessions by requiring explicit clones rather
-than moves. See the [operator runbook](./database#selected-program-consolidation-operator-runbook)
-for private-file guards, approval and recovery boundaries.
+The one-off consolidation operator tool was retired after the live cutover (#50).
+The table remains a historical audit record with its shared Zod schema and RLS
+matrix coverage. A journal-referenced target plan cannot be deleted through the
+ordinary plan interface. Program deletion cascades its journal rows but leaves
+reusable plans and diary history intact. Account deletion retains its normal
+account-data cascades, including the owner's journal rows. The journal records
+an approved operation, not a full backup. See the
+[historical journal notes](./database#historical-program-consolidation-journal).
 
 ---
 

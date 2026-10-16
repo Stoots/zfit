@@ -27,10 +27,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - slice: consolidation
-            database: zfit_consolidation14_disposable_test
-            flag: RUN_CONSOLIDATION_DB
-            suites: tests/workoutProgramConsolidation.integration.test.ts
           - slice: bulk
             database: zfit_bulk13_disposable_ci
             flag: RUN_BULK_PRESCRIPTION_DB

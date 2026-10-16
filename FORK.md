@@ -72,6 +72,7 @@ Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded her
 
 #### Bug fixes
 
+- Show four pending Program workouts on the web dashboard and refresh the queue immediately after completing or linking any occurrence, preserving earlier unfinished sessions and completed outcomes when mutation responses arrive out of order (#49).
 - Restore hidden CSV exercises in place on re-import, counting them as updated while preserving separate-copy imports for hidden manual exercises (#21).
 
 - Allow Workout Program consolidation when a Program includes Cardio Tests, preserving assessment and attempt links; assessment-only Programs return no workout proposal.
@@ -85,6 +86,7 @@ Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded her
 
 #### Features
 
+- Record and graph ramp Test Attempts on web, including heart-rate recovery and Program assessment linking (#6).
 - Make the fork web app installable from iPhone Safari with correctly sized icons, standalone launch metadata, safe-area spacing, and phone-sized Training Programs, Workout Sessions, and Cardio Tests controls.
 - Record five-effort sprint and two-effort 30-second power Test Attempts with dated history and trends on web and mobile.
 - Schedule Cardio Test assessments in Program Phases without placeholder Workout Sessions, link dated Test Attempts to Program history, and retain standalone attempts (#7).
@@ -93,11 +95,13 @@ Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded her
 - Bind Program Planned Sessions to exact Workout Sessions and retain session-level prescriptions (#11).
 - Support optional sessions and linking a completed workout after its scheduled date (#12).
 - Preview and apply selected future prescriptions in bulk with Program-aware conflict checks (#13).
-- Add owner-scoped Workout Plan consolidation preflight, explicit mappings, replay-safe transactions, and private rollback receipts (#14). Live cutover remains separately approval-gated.
+- Add owner-scoped Workout Plan consolidation preflight, explicit mappings, replay-safe transactions, and private rollback receipts (#14). Live cutover completed on 2026-10-15; the one-off tool was retired in #50.
 - Training Programs: authoring, outcomes, and optional auto-shift (issues #2, #3). See `docs/src/features/exercises/training-programs.md` and `docs/adr/`.
 
 #### Developer tooling
 
+- Retire the completed one-off Program consolidation tool and its acceptance job (#50); retain the historical journal, migration, schema and owner-only RLS coverage.
+
 - Add a warm-cache deployment smoke command that verifies the browser's loaded frontend asset and live upcoming-workout order, with private JSON/screenshot evidence and CI acceptance checks (`agent-docs/deployment-smoke.md`).
 - Run the Training Program integration suite in CI against Postgres; trigger consumer checks for shared-contract changes.
-- Add guarded, isolated PostgreSQL acceptance jobs for consolidation and bulk workflows; require the JSON report checker to reject missing, skipped or incomplete suites. The existing migration-check job runs the RLS matrix.
+- Add guarded, isolated PostgreSQL acceptance jobs for bulk workflows (the completed consolidation slice was retired in #50); require the JSON report checker to reject missing, skipped or incomplete suites. The existing migration-check job runs the RLS matrix.

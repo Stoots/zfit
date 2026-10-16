@@ -17,9 +17,9 @@ export function cooperRunAttemptsQueryKey(userId: string) {
   return ['cardioTestAttempts', userId, 'cooperRun'] as const;
 }
 
-export function usePowerTestAttempts(
+export function useProtocolAttempts(
   userId: string,
-  protocol: 'sprint_6s' | 'power_30s'
+  protocol: CardioTestAttemptInput['test_type']
 ) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();

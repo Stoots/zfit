@@ -16,25 +16,17 @@ import {
   powerTestInput,
   powerTestValues,
   selectProgramCardioAssessmentChoices,
-  toNumber,
   type CardioTestAttempt,
 } from '@workspace/shared';
-import { usePowerTestAttempts } from '@/hooks/CardioTests/useCooperRunAttempts';
+import { useProtocolAttempts } from '@/hooks/CardioTests/useCooperRunAttempts';
 import { useActiveUser } from '@/contexts/ActiveUserContext';
 import { useTrainingProgramsList } from '@/hooks/TrainingPrograms/useTrainingPrograms';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { parseWattsInput } from './wattsInput';
 
 type Protocol = 'sprint_6s' | 'power_30s';
-const wattInputPattern = /^\d+(?:[.,]\d+)?$/;
-
-function parseWattsInput(value: string): number {
-  const text = value.trim();
-  // These short measurements use one separator as a decimal, never grouping.
-  if (!wattInputPattern.test(text)) return Number.NaN;
-  return toNumber(text, text.includes(',') ? 'eu' : 'us') ?? Number.NaN;
-}
 
 const config = {
   sprint_6s: {
@@ -64,6 +56,7 @@ export default function PowerTests() {
   const requestedProtocol = new URLSearchParams(window.location.search).get(
     'protocol'
   );
+  if (requestedProtocol === 'ramp') return null;
   return (
     <div className="space-y-8">
       {requestedProtocol !== 'power_30s' && (
@@ -97,7 +90,7 @@ function PowerProtocol({
 }) {
   const { t } = useTranslation();
   const { isActingOnBehalf } = useActiveUser();
-  const { attempts, save } = usePowerTestAttempts(userId, protocol);
+  const { attempts, save } = useProtocolAttempts(userId, protocol);
   const programs = useTrainingProgramsList(userId, !isActingOnBehalf);
   const [date, setDate] = useState('');
   const [plannedSessionId, setPlannedSessionId] = useState(() => {

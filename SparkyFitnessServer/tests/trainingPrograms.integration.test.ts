@@ -838,6 +838,7 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
     ).toEqual(program);
     const db = await getSystemClient();
     let unusedId: number;
+    const journalId = randomUUID();
     try {
       unusedId = (
         await db.query(
@@ -845,8 +846,29 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
           [owner, 'Unused']
         )
       ).rows[0].id;
+      await db.query(
+        `INSERT INTO workout_program_consolidations(id,user_id,program_id,target_plan_id,manifest,result)
+         VALUES($1,$2,$3,$4,'{}'::jsonb,'{}'::jsonb)`,
+        [journalId, owner, program.id, unusedId]
+      );
     } finally {
       db.release();
+    }
+    const journalDelete = await request(app)
+      .delete(`/api/workout-plan-templates/${unusedId}`)
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(journalDelete.status).toBe(409);
+    expect(journalDelete.body.error).toBe(
+      'This plan/session/assignment is still referenced or a referenced identity is invalid. No changes were saved.'
+    );
+    const cleanup = await getSystemClient();
+    try {
+      await cleanup.query(
+        'DELETE FROM workout_program_consolidations WHERE id = $1',
+        [journalId]
+      );
+    } finally {
+      cleanup.release();
     }
     expect(
       (
