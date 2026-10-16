@@ -10,6 +10,7 @@ import {
 } from '@/api/Exercises/workoutPlanTemplates';
 import { trainingProgramKeys } from '@/api/keys/exercises';
 import type { WorkoutPlanDraft } from '@/types/workout';
+import { useDiaryInvalidation } from '@/hooks/useInvalidateKeys';
 
 export const workoutPlanKeys = {
   all: ['workoutPlanTemplates'] as const,
@@ -93,7 +94,7 @@ export const useCreateWorkoutPlanTemplateMutation = () => {
 };
 
 export const useUpdateWorkoutPlanTemplateMutation = () => {
-  const queryClient = useQueryClient();
+  const invalidateDiary = useDiaryInvalidation();
   const { t } = useTranslation();
 
   return useMutation({
@@ -105,8 +106,7 @@ export const useUpdateWorkoutPlanTemplateMutation = () => {
       data: Partial<WorkoutPlanDraft>;
     }) => updateWorkoutPlanTemplate(id, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: workoutPlanKeys.all });
-      queryClient.invalidateQueries({ queryKey: trainingProgramKeys.all });
+      invalidateDiary();
     },
     meta: {
       errorMessage: t(
@@ -136,14 +136,13 @@ export const useUpdateWorkoutPlanTemplateMutation = () => {
 };
 
 export const useDeleteWorkoutPlanTemplateMutation = () => {
-  const queryClient = useQueryClient();
+  const invalidateDiary = useDiaryInvalidation();
   const { t } = useTranslation();
 
   return useMutation({
     mutationFn: (id: string) => deleteWorkoutPlanTemplate(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: workoutPlanKeys.all });
-      queryClient.invalidateQueries({ queryKey: trainingProgramKeys.all });
+      invalidateDiary();
     },
     meta: {
       successMessage: t(

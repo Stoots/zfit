@@ -27,7 +27,8 @@ WITH ranked AS (
            AND jsonb_strip_nulls(to_jsonb(e) - ARRAY[
              'id', 'user_id', 'exercise_id', 'entry_date', 'duration_minutes',
              'calories_burned', 'notes', 'created_by_user_id', 'updated_by_user_id',
-             'exercise_name', 'source', 'created_at', 'updated_at', 'sort_order'
+             'exercise_name', 'source', 'created_at', 'updated_at', 'sort_order',
+             'is_weekly_prefill'
            ]) = '{}'::jsonb
            AND COALESCE(e.sort_order, 0) = 0
            AND NOT EXISTS (SELECT 1 FROM public.exercise_entry_activity_details d WHERE d.exercise_entry_id = e.id)

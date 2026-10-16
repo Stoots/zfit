@@ -415,15 +415,21 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
     const { authenticate } = await import('../middleware/authMiddleware.js');
     const { default: diaryRoutes } =
       await import('../routes/exerciseEntryRoutes.js');
+    const { default: exerciseRoutes } =
+      await import('../routes/exerciseRoutes.js');
     const { router: historyRoutes } =
       await import('../routes/v2/exerciseEntryRoutes.js');
+    const { default: coachingRoutes } =
+      await import('../routes/v2/workoutCoachingRoutes.js');
     app.use(express.json(), cookieParser());
     app.use('/api/training-programs', routes);
     app.use('/api/workout-plan-templates', workoutRoutes);
     app.use('/api/cardio-tests', cardioRoutes);
     app.use('/api/exercise-preset-entries', authenticate, completionRoutes);
     app.use('/api/exercise-entries', diaryRoutes);
+    app.use('/api/exercises', exerciseRoutes);
     app.use('/api/v2/exercise-entries', authenticate, historyRoutes);
+    app.use('/api/v2/workout-coaching', coachingRoutes);
     app.use(errorHandler);
   }, 30000);
   beforeEach(async () => {
@@ -2723,6 +2729,10 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
       const entries = await diaryPrescription(added.id, date);
       expect(entries).toHaveLength(1);
       expect(entries[0].sets).toMatchObject(prescribedSets(3));
+      const original = await diaryPrescription(retained.id, date);
+      expect(entries[0].entry.exercise_preset_entry_id).toBe(
+        original[0].entry.exercise_preset_entry_id
+      );
       addedDates.push(entries);
     }
     const repeat = planInput(saved);
@@ -2798,8 +2808,1305 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
       );
     }
   });
-  it.each(['incomplete', 'completed'] as const)(
-    'protects assignment/session history and deletes only eligible plans (%s diary history)',
+  it.each(['remove', 'swap'] as const)(
+    '%s an assignment and its disposable future prefill rows',
+    async (change) => {
+      setToday('2026-10-25');
+      const exerciseId = await seedExercise();
+      const retainedExerciseId =
+        change === 'swap' ? await seedExercise() : null;
+      const plan = await createPlan({
+        plan_name: 'Editable weekly prefill',
+        schedule_type: 'weekly',
+        entry_mode: 'prefill',
+        is_active: true,
+        start_date: '2026-10-25',
+        end_date: '2026-11-01',
+        currentClientDate: '2026-10-25',
+        sessions: [
+          {
+            name: 'A',
+            day_of_week: 0,
+            sort_order: 0,
+            assignments: [
+              {
+                exercise_id: exerciseId,
+                sort_order: 0,
+                sets: prescribedSets(2),
+              },
+              ...(retainedExerciseId
+                ? [
+                    {
+                      exercise_id: retainedExerciseId,
+                      sort_order: 1,
+                      sets: prescribedSets(2),
+                    },
+                  ]
+                : []),
+            ],
+          },
+        ],
+      });
+      const assignmentId = plan.sessions[0]!.assignments[0]!.id;
+      const retainedId = plan.sessions[0]!.assignments[1]?.id;
+      expect(await diaryPrescription(assignmentId, '2026-10-25')).toHaveLength(
+        1
+      );
+      expect(await diaryPrescription(assignmentId, '2026-11-01')).toHaveLength(
+        1
+      );
+      const edited = planInput(plan);
+      edited.currentClientDate = '2026-10-25';
+      const replacementId = change === 'swap' ? await seedExercise() : null;
+      edited.sessions[0]!.assignments = replacementId
+        ? [
+            {
+              ...edited.sessions[0]!.assignments[0]!,
+              exercise_id: replacementId,
+            },
+            edited.sessions[0]!.assignments[1]!,
+          ]
+        : [];
+      const response = await request(app)
+        .put(`/api/workout-plan-templates/${plan.id}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send(edited);
+      expect(response.status).toBe(200);
+      expect((await reloadPlan(plan.id)).sessions[0]!.assignments).toHaveLength(
+        replacementId ? 2 : 0
+      );
+      for (const date of ['2026-10-25', '2026-11-01']) {
+        const entries = await diaryPrescription(assignmentId, date);
+        expect(entries).toHaveLength(replacementId ? 1 : 0);
+        if (replacementId) {
+          expect(entries[0].entry.exercise_id).toBe(replacementId);
+          const retained = await diaryPrescription(retainedId!, date);
+          expect(retained).toHaveLength(1);
+          expect(entries[0].entry.exercise_preset_entry_id).toBe(
+            retained[0].entry.exercise_preset_entry_id
+          );
+          const detail = await request(app)
+            .get(
+              `/api/exercise-preset-entries/${retained[0].entry.exercise_preset_entry_id}`
+            )
+            .set('Authorization', `Bearer ${ownerToken}`);
+          expect(detail.status).toBe(200);
+          const prescription = presetSessionResponseSchema
+            .parse(detail.body)
+            .activity_details.find(
+              (item) => item.detail_type === 'workout_plan_prescription'
+            );
+          expect(prescription?.detail_data).toMatchObject({
+            assignments: expect.arrayContaining([
+              expect.objectContaining({
+                id: assignmentId,
+                exercise_id: replacementId,
+              }),
+              expect.objectContaining({
+                id: retainedId,
+                exercise_id: retainedExerciseId,
+              }),
+            ]),
+          });
+          expect(
+            (prescription?.detail_data as { assignments: unknown[] })
+              ?.assignments
+          ).toHaveLength(2);
+        }
+      }
+    }
+  );
+  it('keeps an explicitly started workout when its weekly assignment is removed or its plan is deleted', async () => {
+    setToday('2026-10-25');
+    const exerciseId = await seedExercise();
+    const plan = await createPlan({
+      plan_name: 'Manual start survives',
+      schedule_type: 'weekly',
+      entry_mode: 'prefill',
+      is_active: true,
+      start_date: '2026-10-25',
+      end_date: '2026-11-01',
+      currentClientDate: '2026-10-25',
+      sessions: [
+        {
+          name: 'A',
+          day_of_week: 0,
+          sort_order: 0,
+          assignments: [
+            { exercise_id: exerciseId, sort_order: 0, sets: prescribedSets(2) },
+          ],
+        },
+      ],
+    });
+    const assignmentId = plan.sessions[0]!.assignments[0]!.id;
+    const started = await startSession(plan.sessions[0]!.id, '2026-11-01');
+    expect(started.status).toBe(201);
+    const before = await diaryPrescription(assignmentId, '2026-11-01');
+    expect(before).toHaveLength(2);
+    const explicit = before.find(
+      (row: { entry: { id: string; exercise_preset_entry_id: string } }) =>
+        row.entry.id !== before[0]!.entry.id &&
+        row.entry.exercise_preset_entry_id !==
+          before[0]!.entry.exercise_preset_entry_id
+    );
+    expect(explicit).toBeDefined();
+    const edit = planInput(plan);
+    edit.currentClientDate = '2026-10-25';
+    edit.sessions[0]!.assignments = [];
+    expect(
+      (
+        await request(app)
+          .put(`/api/workout-plan-templates/${plan.id}`)
+          .set('Authorization', `Bearer ${ownerToken}`)
+          .send(edit)
+      ).status
+    ).toBe(409);
+    expect(await diaryPrescription(assignmentId, '2026-11-01')).toEqual(before);
+    expect(
+      (
+        await request(app)
+          .delete(`/api/workout-plan-templates/${plan.id}`)
+          .set('Authorization', `Bearer ${ownerToken}`)
+      ).status
+    ).toBe(409);
+    expect(await diaryPrescription(assignmentId, '2026-11-01')).toEqual(before);
+  });
+  it('gives a plan-save prefill one database timestamp across dates and an explicit start a separate timestamp', async () => {
+    setToday('2026-10-25');
+    const plan = await createPlan({
+      plan_name: 'Batch timestamp',
+      schedule_type: 'weekly',
+      entry_mode: 'prefill',
+      is_active: true,
+      start_date: '2026-10-25',
+      end_date: '2026-11-08',
+      currentClientDate: '2026-10-25',
+      sessions: [
+        {
+          name: 'A',
+          day_of_week: 0,
+          sort_order: 0,
+          assignments: [
+            {
+              exercise_id: await seedExercise(),
+              sort_order: 0,
+              sets: prescribedSets(2),
+            },
+          ],
+        },
+      ],
+    });
+    expect(
+      (await startSession(plan.sessions[0]!.id, '2026-11-08')).status
+    ).toBe(201);
+    const assignmentId = plan.sessions[0]!.assignments[0]!.id;
+    const db = await getSystemClient();
+    try {
+      const signature = await db.query(
+        `SELECT
+        count(DISTINCT entry_date) FILTER (WHERE is_weekly_prefill)::integer AS prefill_dates,
+        count(DISTINCT created_at) FILTER (WHERE is_weekly_prefill)::integer AS prefill_timestamps,
+        count(DISTINCT created_at) FILTER (WHERE NOT is_weekly_prefill)::integer AS manual_timestamps,
+        bool_or(created_at = (SELECT min(created_at) FROM exercise_entries
+          WHERE workout_plan_assignment_id = $1 AND is_weekly_prefill))
+          FILTER (WHERE NOT is_weekly_prefill) AS manual_matches_prefill
+        FROM exercise_entries WHERE workout_plan_assignment_id = $1`,
+        [assignmentId]
+      );
+      expect(signature.rows[0]).toEqual({
+        prefill_dates: 3,
+        prefill_timestamps: 1,
+        manual_timestamps: 1,
+        manual_matches_prefill: false,
+      });
+    } finally {
+      db.release();
+    }
+  });
+  it('does not append a new assignment to a completed weekly workout', async () => {
+    setToday('2026-10-25');
+    const exerciseId = await seedExercise();
+    const plan = await createPlan({
+      plan_name: 'Completed weekly group',
+      schedule_type: 'weekly',
+      entry_mode: 'prefill',
+      is_active: true,
+      start_date: '2026-10-25',
+      end_date: '2026-10-25',
+      currentClientDate: '2026-10-25',
+      sessions: [
+        {
+          name: 'A',
+          day_of_week: 0,
+          sort_order: 0,
+          assignments: [
+            { exercise_id: exerciseId, sort_order: 0, sets: prescribedSets(2) },
+            {
+              exercise_id: await seedExercise(),
+              sort_order: 1,
+              sets: prescribedSets(2),
+            },
+          ],
+        },
+      ],
+    });
+    const original = plan.sessions[0]!.assignments[0]!.id;
+    const unperformed = plan.sessions[0]!.assignments[1]!.id;
+    const before = await diaryPrescription(original, '2026-10-25');
+    const db = await getSystemClient();
+    try {
+      await db.query(
+        'UPDATE exercise_entry_sets SET completed_at = $2 WHERE exercise_entry_id = $1 AND set_number = 1',
+        [before[0]!.entry.id, '2026-10-25T10:00:00Z']
+      );
+    } finally {
+      db.release();
+    }
+    const edit = planInput(plan);
+    edit.currentClientDate = '2026-10-25';
+    edit.sessions[0]!.assignments.push({
+      exercise_id: await seedExercise(),
+      sort_order: 2,
+      sets: prescribedSets(2),
+    });
+    expect(
+      (
+        await request(app)
+          .put(`/api/workout-plan-templates/${plan.id}`)
+          .set('Authorization', `Bearer ${ownerToken}`)
+          .send(edit)
+      ).status
+    ).toBe(200);
+    const savedPlan = await reloadPlan(plan.id);
+    const added = savedPlan.sessions[0]!.assignments[2]!.id;
+    expect(await diaryPrescription(added, '2026-10-25')).toEqual([]);
+    expect(await diaryPrescription(original, '2026-10-25')).toHaveLength(1);
+    const remove = planInput(savedPlan);
+    remove.currentClientDate = '2026-10-25';
+    remove.sessions[0]!.assignments = remove.sessions[0]!.assignments.filter(
+      (assignment) => assignment.id !== unperformed
+    );
+    expect(
+      (
+        await request(app)
+          .put(`/api/workout-plan-templates/${plan.id}`)
+          .set('Authorization', `Bearer ${ownerToken}`)
+          .send(remove)
+      ).status
+    ).toBe(409);
+    expect(await diaryPrescription(unperformed, '2026-10-25')).toHaveLength(1);
+  });
+  it('protects a prefill exercise after a diary edit', async () => {
+    setToday('2026-10-25');
+    const plan = await createPlan({
+      plan_name: 'Edited prefill',
+      schedule_type: 'weekly',
+      entry_mode: 'prefill',
+      is_active: true,
+      start_date: '2026-10-25',
+      end_date: '2026-10-25',
+      currentClientDate: '2026-10-25',
+      sessions: [
+        {
+          name: 'A',
+          day_of_week: 0,
+          sort_order: 0,
+          assignments: [
+            {
+              exercise_id: await seedExercise(),
+              sort_order: 0,
+              sets: prescribedSets(2),
+            },
+          ],
+        },
+      ],
+    });
+    const assignmentId = plan.sessions[0]!.assignments[0]!.id;
+    const before = (await diaryPrescription(assignmentId, '2026-10-25'))[0]!;
+    expect(
+      (
+        await request(app)
+          .put(`/api/exercise-entries/${before.entry.id}`)
+          .set('Authorization', `Bearer ${ownerToken}`)
+          .send({ notes: 'My own notes' })
+      ).status
+    ).toBe(200);
+    const edit = planInput(plan);
+    edit.currentClientDate = '2026-10-25';
+    edit.sessions[0]!.assignments = [];
+    expect(
+      (
+        await request(app)
+          .put(`/api/workout-plan-templates/${plan.id}`)
+          .set('Authorization', `Bearer ${ownerToken}`)
+          .send(edit)
+      ).status
+    ).toBe(409);
+    expect(
+      (await diaryPrescription(assignmentId, '2026-10-25'))[0]!.entry.notes
+    ).toBe('My own notes');
+  });
+  it.each(['assignment', 'plan'] as const)(
+    'protects an edited prefill group when removing its %s',
+    async (removal) => {
+      setToday('2026-10-25');
+      const plan = await createPlan({
+        plan_name: 'Partly edited removal',
+        schedule_type: 'weekly',
+        entry_mode: 'prefill',
+        is_active: true,
+        start_date: '2026-10-25',
+        end_date: '2026-10-25',
+        currentClientDate: '2026-10-25',
+        sessions: [
+          {
+            name: 'A',
+            day_of_week: 0,
+            sort_order: 0,
+            assignments: [
+              {
+                exercise_id: await seedExercise(),
+                sort_order: 0,
+                sets: prescribedSets(2),
+              },
+              {
+                exercise_id: await seedExercise(),
+                sort_order: 1,
+                sets: prescribedSets(2),
+              },
+            ],
+          },
+        ],
+      });
+      const [editedId, removedId] = plan.sessions[0]!.assignments.map(
+        (assignment) => assignment.id
+      );
+      const editedEntry = (await diaryPrescription(editedId!, '2026-10-25'))[0]!
+        .entry;
+      expect(
+        (
+          await request(app)
+            .put(`/api/exercise-entries/${editedEntry.id}`)
+            .set('Authorization', `Bearer ${ownerToken}`)
+            .send({ notes: 'Adjusted form' })
+        ).status
+      ).toBe(200);
+      const before = await diaryPrescription(removedId!, '2026-10-25');
+      const groupId = editedEntry.exercise_preset_entry_id as string;
+      const groupBefore = await request(app)
+        .get(`/api/exercise-preset-entries/${groupId}`)
+        .set('Authorization', `Bearer ${ownerToken}`);
+      const edit = planInput(plan);
+      edit.currentClientDate = '2026-10-25';
+      edit.sessions[0]!.assignments = edit.sessions[0]!.assignments.slice(0, 1);
+      const response =
+        removal === 'assignment'
+          ? await request(app)
+              .put(`/api/workout-plan-templates/${plan.id}`)
+              .set('Authorization', `Bearer ${ownerToken}`)
+              .send(edit)
+          : await request(app)
+              .delete(`/api/workout-plan-templates/${plan.id}`)
+              .set('Authorization', `Bearer ${ownerToken}`);
+      expect(response.status).toBe(409);
+      expect(await diaryPrescription(removedId!, '2026-10-25')).toEqual(before);
+      const groupAfter = await request(app)
+        .get(`/api/exercise-preset-entries/${groupId}`)
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(groupAfter.body).toEqual(groupBefore.body);
+    }
+  );
+  it.each(['session', 'exercise'] as const)(
+    'keeps a future prefill workout with %s feedback when its assignment or plan is removed',
+    async (target) => {
+      setToday('2026-10-25');
+      const plan = await createPlan({
+        plan_name: 'Feedback history',
+        schedule_type: 'weekly',
+        entry_mode: 'prefill',
+        is_active: true,
+        start_date: '2026-10-25',
+        end_date: '2026-10-25',
+        currentClientDate: '2026-10-25',
+        sessions: [
+          {
+            name: 'A',
+            day_of_week: 0,
+            sort_order: 0,
+            assignments: [
+              {
+                exercise_id: await seedExercise(),
+                sort_order: 0,
+                sets: prescribedSets(2),
+              },
+            ],
+          },
+        ],
+      });
+      const assignmentId = plan.sessions[0]!.assignments[0]!.id;
+      const before = (await diaryPrescription(assignmentId, '2026-10-25'))[0]!;
+      const groupId = before.entry.exercise_preset_entry_id as string;
+      const feedback = {
+        session:
+          target === 'session'
+            ? { difficulty: null, pain: true, pain_note: 'Knee pain' }
+            : null,
+        exercises:
+          target === 'exercise'
+            ? [
+                {
+                  exercise_entry_id: before.entry.id,
+                  difficulty: null,
+                  pain: true,
+                  pain_note: 'Knee pain',
+                },
+              ]
+            : [],
+      };
+      expect(
+        (
+          await request(app)
+            .put(`/api/v2/workout-coaching/sessions/${groupId}/feedback`)
+            .set('Authorization', `Bearer ${ownerToken}`)
+            .send(feedback)
+        ).status
+      ).toBe(200);
+      const edit = planInput(plan);
+      edit.currentClientDate = '2026-10-25';
+      edit.sessions[0]!.assignments = [];
+      expect(
+        (
+          await request(app)
+            .put(`/api/workout-plan-templates/${plan.id}`)
+            .set('Authorization', `Bearer ${ownerToken}`)
+            .send(edit)
+        ).status
+      ).toBe(409);
+      expect(
+        (
+          await request(app)
+            .delete(`/api/workout-plan-templates/${plan.id}`)
+            .set('Authorization', `Bearer ${ownerToken}`)
+        ).status
+      ).toBe(409);
+      expect(await diaryPrescription(assignmentId, '2026-10-25')).toHaveLength(
+        1
+      );
+      const saved = await request(app)
+        .get(`/api/v2/workout-coaching/sessions/${groupId}/feedback`)
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(saved.status).toBe(200);
+      expect(
+        target === 'session'
+          ? saved.body.session?.pain_note
+          : saved.body.exercises[0]?.pain_note
+      ).toBe('Knee pain');
+    }
+  );
+  it('keeps exercise feedback committed during a concurrent plan removal', async () => {
+    setToday('2026-10-25');
+    const plan = await createPlan({
+      plan_name: 'Concurrent feedback',
+      schedule_type: 'weekly',
+      entry_mode: 'prefill',
+      is_active: true,
+      start_date: '2026-10-25',
+      end_date: '2026-10-25',
+      currentClientDate: '2026-10-25',
+      sessions: [
+        {
+          name: 'A',
+          day_of_week: 0,
+          sort_order: 0,
+          assignments: [
+            {
+              exercise_id: await seedExercise(),
+              sort_order: 0,
+              sets: prescribedSets(2),
+            },
+          ],
+        },
+      ],
+    });
+    const assignmentId = plan.sessions[0]!.assignments[0]!.id;
+    const entry = (await diaryPrescription(assignmentId, '2026-10-25'))[0]!
+      .entry;
+    const edit = planInput(plan);
+    edit.currentClientDate = '2026-10-25';
+    edit.sessions[0]!.assignments = [];
+    const feedbackWriter = await getSystemClient();
+    await feedbackWriter.query('BEGIN');
+    try {
+      await feedbackWriter.query(
+        `INSERT INTO workout_feedback(user_id, exercise_entry_id, pain, pain_note)
+         VALUES ($1, $2, true, 'Knee pain')`,
+        [owner, entry.id]
+      );
+      let finishedStatus: number | null = null;
+      const pending = request(app)
+        .put(`/api/workout-plan-templates/${plan.id}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send(edit)
+        .then((response: { status: number }) => {
+          finishedStatus = response.status;
+          return response;
+        });
+      for (
+        let attempt = 0;
+        attempt < 100 && finishedStatus === null;
+        attempt++
+      ) {
+        await feedbackWriter.query('SELECT pg_stat_clear_snapshot()');
+        const activity = await feedbackWriter.query(
+          `SELECT 1 FROM pg_stat_activity WHERE wait_event_type = 'Lock'
+           AND query LIKE 'DELETE FROM exercise_entries entry%' LIMIT 1`
+        );
+        if (activity.rowCount) break;
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      await feedbackWriter.query('COMMIT');
+      expect((await pending).status).toBe(409);
+      expect(await diaryPrescription(assignmentId, '2026-10-25')).toHaveLength(
+        1
+      );
+      const saved = await request(app)
+        .get(
+          `/api/v2/workout-coaching/sessions/${entry.exercise_preset_entry_id}/feedback`
+        )
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(saved.body.exercises[0]?.pain_note).toBe('Knee pain');
+    } finally {
+      await feedbackWriter.query('ROLLBACK');
+      feedbackWriter.release();
+    }
+  });
+  it('does not append to a weekly group after one sibling was edited', async () => {
+    setToday('2026-10-25');
+    const plan = await createPlan({
+      plan_name: 'Partly edited group',
+      schedule_type: 'weekly',
+      entry_mode: 'prefill',
+      is_active: true,
+      start_date: '2026-10-25',
+      end_date: '2026-10-25',
+      currentClientDate: '2026-10-25',
+      sessions: [
+        {
+          name: 'A',
+          day_of_week: 0,
+          sort_order: 0,
+          assignments: [
+            {
+              exercise_id: await seedExercise(),
+              sort_order: 0,
+              sets: prescribedSets(2),
+            },
+            {
+              exercise_id: await seedExercise(),
+              sort_order: 1,
+              sets: prescribedSets(2),
+            },
+          ],
+        },
+      ],
+    });
+    const firstId = plan.sessions[0]!.assignments[0]!.id;
+    const secondId = plan.sessions[0]!.assignments[1]!.id;
+    const first = (await diaryPrescription(firstId, '2026-10-25'))[0]!;
+    expect(
+      (
+        await request(app)
+          .put(`/api/exercise-entries/${first.entry.id}`)
+          .set('Authorization', `Bearer ${ownerToken}`)
+          .send({ notes: 'Adjusted form' })
+      ).status
+    ).toBe(200);
+    const edit = planInput(plan);
+    edit.currentClientDate = '2026-10-25';
+    edit.sessions[0]!.assignments.push({
+      exercise_id: await seedExercise(),
+      sort_order: 2,
+      sets: prescribedSets(2),
+    });
+    expect(
+      (
+        await request(app)
+          .put(`/api/workout-plan-templates/${plan.id}`)
+          .set('Authorization', `Bearer ${ownerToken}`)
+          .send(edit)
+      ).status
+    ).toBe(200);
+    const addedId = (await reloadPlan(plan.id)).sessions[0]!.assignments[2]!.id;
+    expect(await diaryPrescription(addedId, '2026-10-25')).toEqual([]);
+    expect(
+      (await diaryPrescription(firstId, '2026-10-25'))[0]!.entry.notes
+    ).toBe('Adjusted form');
+    expect(await diaryPrescription(secondId, '2026-10-25')).toHaveLength(1);
+  });
+  it('does not append while a player transaction completes the group', async () => {
+    setToday('2026-10-25');
+    const plan = await createPlan({
+      plan_name: 'Concurrent player save',
+      schedule_type: 'weekly',
+      entry_mode: 'prefill',
+      is_active: true,
+      start_date: '2026-10-25',
+      end_date: '2026-10-25',
+      currentClientDate: '2026-10-25',
+      sessions: [
+        {
+          name: 'A',
+          day_of_week: 0,
+          sort_order: 0,
+          assignments: [
+            {
+              exercise_id: await seedExercise(),
+              sort_order: 0,
+              sets: prescribedSets(2),
+            },
+          ],
+        },
+      ],
+    });
+    const originalId = plan.sessions[0]!.assignments[0]!.id;
+    const original = (await diaryPrescription(originalId, '2026-10-25'))[0]!;
+    const groupId = original.entry.exercise_preset_entry_id as string;
+    const edit = planInput(plan);
+    edit.currentClientDate = '2026-10-25';
+    edit.sessions[0]!.assignments.push({
+      exercise_id: await seedExercise(),
+      sort_order: 1,
+      sets: prescribedSets(2),
+    });
+    const player = await getSystemClient();
+    await player.query('BEGIN');
+    try {
+      await player.query(
+        'SELECT id FROM exercise_preset_entries WHERE id = $1 FOR UPDATE',
+        [groupId]
+      );
+      await player.query(
+        'UPDATE exercise_entry_sets SET completed_at = $2 WHERE exercise_entry_id = $1 AND set_number = 1',
+        [original.entry.id, '2026-10-25T10:00:00Z']
+      );
+      await player.query(
+        'UPDATE exercise_entries SET is_weekly_prefill = false WHERE exercise_preset_entry_id = $1',
+        [groupId]
+      );
+      let finishedStatus: number | null = null;
+      const pending = request(app)
+        .put(`/api/workout-plan-templates/${plan.id}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send(edit)
+        .then((response: { status: number }) => {
+          finishedStatus = response.status;
+          return response;
+        });
+      let waiting = false;
+      for (
+        let attempt = 0;
+        attempt < 100 && finishedStatus === null;
+        attempt++
+      ) {
+        await player.query('SELECT pg_stat_clear_snapshot()');
+        const activity = await player.query(
+          `SELECT 1 FROM pg_stat_activity WHERE wait_event_type = 'Lock'
+           AND query LIKE 'INSERT INTO exercise_entries%' LIMIT 1`
+        );
+        if (activity.rowCount) {
+          waiting = true;
+          break;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
+      expect(waiting || finishedStatus !== null).toBe(true);
+      await player.query('COMMIT');
+      expect((await pending).status).toBe(409);
+      const addedId = (await reloadPlan(plan.id)).sessions[0]!.assignments[1]
+        ?.id;
+      expect(addedId).toBeUndefined();
+      expect(await diaryPrescription(originalId, '2026-10-25')).toHaveLength(1);
+    } finally {
+      await player.query('ROLLBACK');
+      player.release();
+    }
+  });
+  it('adds to the generated group when an explicit start created a duplicate group', async () => {
+    setToday('2026-10-25');
+    const plan = await createPlan({
+      plan_name: 'Two groups',
+      schedule_type: 'weekly',
+      entry_mode: 'prefill',
+      is_active: true,
+      start_date: '2026-10-25',
+      end_date: '2026-10-25',
+      currentClientDate: '2026-10-25',
+      sessions: [
+        {
+          name: 'A',
+          day_of_week: 0,
+          sort_order: 0,
+          assignments: [
+            {
+              exercise_id: await seedExercise(),
+              sort_order: 0,
+              sets: prescribedSets(2),
+            },
+          ],
+        },
+      ],
+    });
+    const original = plan.sessions[0]!.assignments[0]!.id;
+    const prefillGroup = (await diaryPrescription(original, '2026-10-25'))[0]!
+      .entry.exercise_preset_entry_id;
+    expect(
+      (await startSession(plan.sessions[0]!.id, '2026-10-25')).status
+    ).toBe(201);
+    const groups = (await diaryPrescription(original, '2026-10-25')).map(
+      (row: { entry: { exercise_preset_entry_id: string } }) =>
+        row.entry.exercise_preset_entry_id
+    );
+    expect(new Set(groups).size).toBe(2);
+    const edit = planInput(plan);
+    edit.currentClientDate = '2026-10-25';
+    edit.sessions[0]!.assignments.push({
+      exercise_id: await seedExercise(),
+      sort_order: 1,
+      sets: prescribedSets(2),
+    });
+    expect(
+      (
+        await request(app)
+          .put(`/api/workout-plan-templates/${plan.id}`)
+          .set('Authorization', `Bearer ${ownerToken}`)
+          .send(edit)
+      ).status
+    ).toBe(200);
+    const added = (await reloadPlan(plan.id)).sessions[0]!.assignments[1]!.id;
+    expect(
+      (await diaryPrescription(added, '2026-10-25'))[0]!.entry
+        .exercise_preset_entry_id
+    ).toBe(prefillGroup);
+  });
+  it('selects the marked prefill group even when an explicit group was created first', async () => {
+    setToday('2026-10-25');
+    const plan = await createPlan({
+      plan_name: 'Earlier explicit group',
+      schedule_type: 'weekly',
+      entry_mode: 'prefill',
+      is_active: false,
+      start_date: '2026-10-25',
+      end_date: '2026-10-25',
+      sessions: [
+        {
+          name: 'A',
+          day_of_week: 0,
+          sort_order: 0,
+          assignments: [
+            {
+              exercise_id: await seedExercise(),
+              sort_order: 0,
+              sets: prescribedSets(2),
+            },
+          ],
+        },
+      ],
+    });
+    const sessionId = plan.sessions[0]!.id;
+    const first = await startSession(sessionId, '2026-10-25');
+    const second = await startSession(sessionId, '2026-10-25');
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    const older = first.body.session.id as string;
+    const generated = second.body.session.id as string;
+    const db = await getSystemClient();
+    try {
+      await db.query(
+        'UPDATE exercise_entries SET is_weekly_prefill = true WHERE user_id = $1 AND exercise_preset_entry_id = $2',
+        [owner, generated]
+      );
+    } finally {
+      db.release();
+    }
+    const edit = planInput(plan);
+    edit.currentClientDate = '2026-10-25';
+    edit.is_active = true;
+    edit.sessions[0]!.assignments.push({
+      exercise_id: await seedExercise(),
+      sort_order: 1,
+      sets: prescribedSets(2),
+    });
+    expect(
+      (
+        await request(app)
+          .put(`/api/workout-plan-templates/${plan.id}`)
+          .set('Authorization', `Bearer ${ownerToken}`)
+          .send(edit)
+      ).status
+    ).toBe(200);
+    const added = (await reloadPlan(plan.id)).sessions[0]!.assignments[1]!.id;
+    expect(
+      (await diaryPrescription(added, '2026-10-25'))[0]!.entry
+        .exercise_preset_entry_id
+    ).toBe(generated);
+    expect(generated).not.toBe(older);
+  });
+  it.each(['edit', 'delete'] as const)(
+    'keeps yesterday after a %s waits on the plan lock past local midnight',
+    async (action) => {
+      setToday('2026-10-25');
+      const plan = await createPlan({
+        plan_name: 'Midnight edit',
+        schedule_type: 'weekly',
+        entry_mode: 'prefill',
+        is_active: true,
+        start_date: '2026-10-25',
+        end_date: '2026-10-25',
+        currentClientDate: '2026-10-25',
+        sessions: [
+          {
+            name: 'A',
+            day_of_week: 0,
+            sort_order: 0,
+            assignments: [
+              {
+                exercise_id: await seedExercise(),
+                sort_order: 0,
+                sets: prescribedSets(2),
+              },
+            ],
+          },
+        ],
+      });
+      const assignmentId = plan.sessions[0]!.assignments[0]!.id;
+      const before = await diaryPrescription(assignmentId, '2026-10-25');
+      const db = await getSystemClient();
+      await db.query('BEGIN');
+      try {
+        await db.query(
+          'SELECT id FROM workout_plan_templates WHERE id = $1 FOR UPDATE',
+          [plan.id]
+        );
+        const edit = planInput(plan);
+        edit.currentClientDate = '2026-10-25';
+        edit.sessions[0]!.assignments = [];
+        const pending =
+          action === 'edit'
+            ? request(app)
+                .put(`/api/workout-plan-templates/${plan.id}`)
+                .set('Authorization', `Bearer ${ownerToken}`)
+                .send(edit)
+                .then((response: { status: number }) => response)
+            : request(app)
+                .delete(`/api/workout-plan-templates/${plan.id}`)
+                .set('Authorization', `Bearer ${ownerToken}`)
+                .then((response: { status: number }) => response);
+        let blocked = false;
+        for (let attempt = 0; attempt < 100; attempt++) {
+          await db.query('SELECT pg_stat_clear_snapshot()');
+          const activity = await db.query(
+            `SELECT 1 FROM pg_stat_activity WHERE wait_event_type = 'Lock'
+           AND query LIKE 'SELECT id FROM workout_plan_templates WHERE id = %' LIMIT 1`
+          );
+          if (activity.rowCount) {
+            blocked = true;
+            break;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        expect(blocked).toBe(true);
+        setToday('2026-10-26');
+        await db.query('COMMIT');
+        expect((await pending).status).toBe(409);
+        expect(await diaryPrescription(assignmentId, '2026-10-25')).toEqual(
+          before
+        );
+      } finally {
+        await db.query('ROLLBACK');
+        db.release();
+      }
+    }
+  );
+  it('returns a recoverable conflict for either ordering of a plan edit and player save', async () => {
+    setToday('2026-10-25');
+    const plan = await createPlan({
+      plan_name: 'Save race',
+      schedule_type: 'weekly',
+      entry_mode: 'prefill',
+      is_active: true,
+      start_date: '2026-10-25',
+      end_date: '2026-10-25',
+      currentClientDate: '2026-10-25',
+      sessions: [
+        {
+          name: 'A',
+          day_of_week: 0,
+          sort_order: 0,
+          assignments: [
+            {
+              exercise_id: await seedExercise(),
+              sort_order: 0,
+              sets: prescribedSets(2),
+            },
+          ],
+        },
+      ],
+    });
+    const assignmentId = plan.sessions[0]!.assignments[0]!.id;
+    const groupId = (await diaryPrescription(assignmentId, '2026-10-25'))[0]!
+      .entry.exercise_preset_entry_id;
+    const edit = planInput(plan);
+    edit.currentClientDate = '2026-10-25';
+    edit.sessions[0]!.assignments = [];
+    const save = (id: string) =>
+      request(app)
+        .put(`/api/exercise-preset-entries/${id}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ notes: 'Performed and saved' });
+    const remove = () =>
+      request(app)
+        .put(`/api/workout-plan-templates/${plan.id}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send(edit);
+    const db = await getSystemClient();
+    await db.query('BEGIN');
+    try {
+      await db.query(
+        'SELECT id FROM exercise_preset_entries WHERE id = $1 FOR UPDATE',
+        [groupId]
+      );
+      expect((await remove()).status).toBe(409);
+      await db.query('COMMIT');
+    } finally {
+      await db.query('ROLLBACK');
+      db.release();
+    }
+    expect((await save(groupId)).status).toBe(200);
+    expect((await remove()).status).toBe(409);
+    expect(await diaryPrescription(assignmentId, '2026-10-25')).toHaveLength(1);
+
+    const second = await createPlan({
+      plan_name: 'Delete first',
+      schedule_type: 'weekly',
+      entry_mode: 'prefill',
+      is_active: true,
+      start_date: '2026-10-25',
+      end_date: '2026-10-25',
+      currentClientDate: '2026-10-25',
+      sessions: [
+        {
+          name: 'B',
+          day_of_week: 0,
+          sort_order: 0,
+          assignments: [
+            {
+              exercise_id: await seedExercise(),
+              sort_order: 0,
+              sets: prescribedSets(2),
+            },
+          ],
+        },
+      ],
+    });
+    const secondId = second.sessions[0]!.assignments[0]!.id;
+    const removedGroup = (await diaryPrescription(secondId, '2026-10-25'))[0]!
+      .entry.exercise_preset_entry_id;
+    const secondEdit = planInput(second);
+    secondEdit.currentClientDate = '2026-10-25';
+    secondEdit.sessions[0]!.assignments = [];
+    expect(
+      (
+        await request(app)
+          .put(`/api/workout-plan-templates/${second.id}`)
+          .set('Authorization', `Bearer ${ownerToken}`)
+          .send(secondEdit)
+      ).status
+    ).toBe(200);
+    expect((await save(removedGroup)).status).toBe(409);
+  });
+  it('returns 409 when a player saves a stale child in a retained group', async () => {
+    setToday('2026-10-25');
+    const plan = await createPlan({
+      plan_name: 'Partial group race',
+      schedule_type: 'weekly',
+      entry_mode: 'prefill',
+      is_active: true,
+      start_date: '2026-10-25',
+      end_date: '2026-10-25',
+      currentClientDate: '2026-10-25',
+      sessions: [
+        {
+          name: 'A',
+          day_of_week: 0,
+          sort_order: 0,
+          assignments: [
+            {
+              exercise_id: await seedExercise(),
+              sort_order: 0,
+              sets: prescribedSets(2),
+            },
+            {
+              exercise_id: await seedExercise(),
+              sort_order: 1,
+              sets: prescribedSets(2),
+            },
+          ],
+        },
+      ],
+    });
+    const [removed, retained] = plan.sessions[0]!.assignments;
+    const rows = [
+      ...(await diaryPrescription(removed!.id, '2026-10-25')),
+      ...(await diaryPrescription(retained!.id, '2026-10-25')),
+    ];
+    const groupId = rows[0]!.entry.exercise_preset_entry_id;
+    const exercises = rows.map(
+      (row: {
+        entry: {
+          id: string;
+          exercise_id: string;
+          sort_order: number;
+          duration_minutes: number;
+          workout_plan_assignment_id: number;
+        };
+        sets: Array<{
+          set_number: number;
+          reps: number;
+          weight: number | null;
+        }>;
+      }) => ({
+        id: row.entry.id,
+        exercise_id: row.entry.exercise_id,
+        sort_order: row.entry.sort_order,
+        duration_minutes: row.entry.duration_minutes,
+        workout_plan_assignment_id: row.entry.workout_plan_assignment_id,
+        sets: row.sets.map((set) => ({
+          set_number: set.set_number,
+          reps: set.reps,
+          weight: set.weight,
+        })),
+      })
+    );
+    const edit = planInput(plan);
+    edit.currentClientDate = '2026-10-25';
+    edit.sessions[0]!.assignments = edit.sessions[0]!.assignments.filter(
+      (assignment) => assignment.id !== removed!.id
+    );
+    expect(
+      (
+        await request(app)
+          .put(`/api/workout-plan-templates/${plan.id}`)
+          .set('Authorization', `Bearer ${ownerToken}`)
+          .send(edit)
+      ).status
+    ).toBe(200);
+    const save = await request(app)
+      .put(`/api/exercise-preset-entries/${groupId}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ exercises });
+    expect(save.status).toBe(409);
+    expect(await diaryPrescription(removed!.id, '2026-10-25')).toEqual([]);
+    expect(await diaryPrescription(retained!.id, '2026-10-25')).toHaveLength(1);
+  });
+  it('rejects a stale exercise after its assignment is swapped in an open group', async () => {
+    setToday('2026-10-25');
+    const originalExerciseId = await seedExercise('Original lift');
+    const retainedExerciseId = await seedExercise('Retained lift');
+    const replacementExerciseId = await seedExercise('Replacement lift');
+    const plan = await createPlan({
+      plan_name: 'Swapped open group',
+      schedule_type: 'weekly',
+      entry_mode: 'prefill',
+      is_active: true,
+      start_date: '2026-10-25',
+      end_date: '2026-10-25',
+      currentClientDate: '2026-10-25',
+      sessions: [
+        {
+          name: 'A',
+          day_of_week: 0,
+          sort_order: 0,
+          assignments: [
+            {
+              exercise_id: originalExerciseId,
+              sort_order: 0,
+              sets: prescribedSets(2),
+            },
+            {
+              exercise_id: retainedExerciseId,
+              sort_order: 1,
+              sets: prescribedSets(2),
+            },
+          ],
+        },
+      ],
+    });
+    const [swapped, retained] = plan.sessions[0]!.assignments;
+    const staleRows = [
+      ...(await diaryPrescription(swapped!.id, '2026-10-25')),
+      ...(await diaryPrescription(retained!.id, '2026-10-25')),
+    ];
+    const groupId = staleRows[0]!.entry.exercise_preset_entry_id;
+    const exercises = staleRows.map(
+      (row: {
+        entry: {
+          id: string;
+          exercise_id: string;
+          sort_order: number;
+          duration_minutes: number;
+          workout_plan_assignment_id: number;
+        };
+        sets: Array<{
+          set_number: number;
+          reps: number;
+          weight: number | null;
+        }>;
+      }) => ({
+        id: row.entry.id,
+        exercise_id: row.entry.exercise_id,
+        sort_order: row.entry.sort_order,
+        duration_minutes: row.entry.duration_minutes,
+        workout_plan_assignment_id: row.entry.workout_plan_assignment_id,
+        sets: row.sets.map((set) => ({
+          set_number: set.set_number,
+          reps: set.reps,
+          weight: set.weight,
+        })),
+      })
+    );
+    const edit = planInput(plan);
+    edit.currentClientDate = '2026-10-25';
+    edit.sessions[0]!.assignments[0]!.exercise_id = replacementExerciseId;
+    expect(
+      (
+        await request(app)
+          .put(`/api/workout-plan-templates/${plan.id}`)
+          .set('Authorization', `Bearer ${ownerToken}`)
+          .send(edit)
+      ).status
+    ).toBe(200);
+    const replacementBefore = (
+      await diaryPrescription(swapped!.id, '2026-10-25')
+    )[0]!;
+    expect(replacementBefore.entry.exercise_id).toBe(replacementExerciseId);
+    expect(replacementBefore.entry.exercise_preset_entry_id).toBe(groupId);
+
+    const save = await request(app)
+      .put(`/api/exercise-preset-entries/${groupId}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ exercises });
+    expect(save.status).toBe(409);
+    expect(await diaryPrescription(swapped!.id, '2026-10-25')).toEqual([
+      replacementBefore,
+    ]);
+    expect(await diaryPrescription(retained!.id, '2026-10-25')).toEqual([
+      staleRows[1],
+    ]);
+  });
+  it('saves an unchanged prefill child after its library exercise is deleted', async () => {
+    setToday('2026-10-25');
+    const exerciseId = await seedExercise('Deleted preset lift');
+    const db = await getSystemClient();
+    let presetId: number;
+    try {
+      presetId = (
+        await db.query(
+          "INSERT INTO workout_presets(user_id,name) VALUES ($1,'Deleted lift preset') RETURNING id",
+          [owner]
+        )
+      ).rows[0].id;
+    } finally {
+      db.release();
+    }
+    const plan = await createPlan({
+      plan_name: 'Deleted library exercise prefill',
+      schedule_type: 'weekly',
+      entry_mode: 'prefill',
+      is_active: true,
+      start_date: '2026-10-25',
+      end_date: '2026-10-25',
+      currentClientDate: '2026-10-25',
+      sessions: [
+        {
+          name: 'A',
+          day_of_week: 0,
+          sort_order: 0,
+          assignments: [
+            {
+              workout_preset_id: presetId!,
+              sort_order: 0,
+              preset_snapshot: {
+                id: presetId!,
+                name: 'Deleted lift preset',
+                description: null,
+                workout_format: 'standard',
+                exercises: [
+                  {
+                    id: 1,
+                    exercise_id: exerciseId,
+                    exercise_name: 'Deleted preset lift',
+                    category: 'Strength',
+                    image_url: null,
+                    superset_group: null,
+                    sets: [{ ...prescribedSets(1)[0]!, id: 1 }],
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    });
+    const assignmentId = plan.sessions[0]!.assignments[0]!.id;
+    const before = (await diaryPrescription(assignmentId, '2026-10-25'))[0]!;
+    const groupId = before.entry.exercise_preset_entry_id;
+    const deleted = await request(app)
+      .delete(`/api/exercises/${exerciseId}?mode=delete`)
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(deleted.status).toBe(200);
+    const stored = (await diaryPrescription(assignmentId, '2026-10-25'))[0]!;
+    expect(stored.entry).toMatchObject({
+      id: before.entry.id,
+      exercise_id: null,
+      workout_plan_assignment_id: assignmentId,
+    });
+
+    const saved = await request(app)
+      .put(`/api/exercise-preset-entries/${groupId}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        exercises: [
+          {
+            id: stored.entry.id,
+            exercise_id: stored.entry.exercise_id,
+            sort_order: stored.entry.sort_order,
+            duration_minutes: stored.entry.duration_minutes,
+            workout_plan_assignment_id: assignmentId,
+            sets: stored.sets.map(
+              (set: {
+                set_number: number;
+                reps: number;
+                weight: number | null;
+              }) => ({
+                set_number: set.set_number,
+                reps: set.reps,
+                weight: set.weight,
+              })
+            ),
+          },
+        ],
+      });
+    expect(saved.status).toBe(200);
+    expect(
+      (await diaryPrescription(assignmentId, '2026-10-25'))[0]!.entry
+    ).toMatchObject({
+      id: stored.entry.id,
+      exercise_id: null,
+      workout_plan_assignment_id: assignmentId,
+    });
+  });
+  it.each(['past', 'completed', 'program'] as const)(
+    'protects assignment/session history from edits and deletion (%s diary history)',
     async (status) => {
       setToday('2026-10-25');
       const exerciseId = await seedExercise();
@@ -2827,11 +4134,22 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
         ],
       });
       const assignment = plan.sessions[0]!.assignments[0]!;
-      const diary = await diaryPrescription(assignment.id, '2026-10-25');
+      let diary = await diaryPrescription(assignment.id, '2026-10-25');
       expect(diary).toHaveLength(1);
       expect(diary[0].entry.workout_plan_assignment_id).toBe(assignment.id);
       expect(diary[0].sets).toMatchObject(prescribedSets(2));
       if (status === 'completed') {
+        const db = await getSystemClient();
+        try {
+          await db.query(
+            'UPDATE exercise_entry_sets SET completed_at = $2 WHERE exercise_entry_id = $1 AND set_number = 1',
+            [diary[0].entry.id, '2026-10-25T10:00:00Z']
+          );
+        } finally {
+          db.release();
+        }
+      }
+      if (status === 'program') {
         const bind = editable(program);
         bind.phases[0]!.weeks[0]!.sessions[0]!.workout_session_id =
           plan.sessions[0]!.id;
@@ -2844,14 +4162,18 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
           (await outcome(first.id, { status: 'completed', workout })).status
         ).toBe(200);
       }
+      diary = await diaryPrescription(assignment.id, '2026-10-25');
+      if (status === 'past') setToday('2026-10-26');
       const savedProgram = await reload();
       const savedPlan = await reloadPlan(plan.id);
       const removeAssignment = planInput(savedPlan);
-      removeAssignment.currentClientDate = '2026-10-25';
+      removeAssignment.currentClientDate =
+        status === 'past' ? '2026-10-26' : '2026-10-25';
       removeAssignment.plan_name = 'Assignment removal must roll back';
       removeAssignment.sessions[0]!.assignments = [];
       const removeSession = planInput(savedPlan);
-      removeSession.currentClientDate = '2026-10-25';
+      removeSession.currentClientDate =
+        status === 'past' ? '2026-10-26' : '2026-10-25';
       removeSession.plan_name = 'Session removal must roll back';
       removeSession.sessions = [];
       for (const input of [removeAssignment, removeSession]) {
@@ -2869,23 +4191,12 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
       const deleted = await request(app)
         .delete(`/api/workout-plan-templates/${plan.id}`)
         .set('Authorization', `Bearer ${ownerToken}`);
-      const shouldDeletePlan = status === 'incomplete';
-      expect(deleted.status).toBe(shouldDeletePlan ? 200 : 409);
+      expect(deleted.status).toBe(409);
       expect(await reload()).toEqual(savedProgram);
-      if (shouldDeletePlan) {
-        const missingPlan = await request(app)
-          .get(`/api/workout-plan-templates/${plan.id}`)
-          .set('Authorization', `Bearer ${ownerToken}`);
-        expect(missingPlan.status).toBe(404);
-        expect(await diaryPrescription(assignment.id, '2026-10-25')).toEqual(
-          []
-        );
-      } else {
-        expect(await reloadPlan(plan.id)).toEqual(savedPlan);
-        expect(await diaryPrescription(assignment.id, '2026-10-25')).toEqual(
-          diary
-        );
-      }
+      expect(await reloadPlan(plan.id)).toEqual(savedPlan);
+      expect(await diaryPrescription(assignment.id, '2026-10-25')).toEqual(
+        diary
+      );
       const db = await getSystemClient();
       try {
         expect(
@@ -2895,11 +4206,7 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
               [diary[0].entry.id]
             )
           ).rows
-        ).toEqual(
-          shouldDeletePlan
-            ? []
-            : [{ workout_plan_assignment_id: assignment.id }]
-        );
+        ).toEqual([{ workout_plan_assignment_id: assignment.id }]);
         expect(
           (
             await db.query(
@@ -2907,7 +4214,7 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
               [assignment.id]
             )
           ).rows
-        ).toEqual(shouldDeletePlan ? [] : [{ id: assignment.id }]);
+        ).toEqual([{ id: assignment.id }]);
       } finally {
         db.release();
       }

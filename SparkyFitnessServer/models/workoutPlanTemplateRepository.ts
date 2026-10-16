@@ -10,6 +10,8 @@ import {
   workoutPlanBulkRequestSchema,
   workoutPlanBulkApplyRequestSchema,
   isValidTimeZone,
+  isDayString,
+  compareDays,
   todayInZone,
   dayToUtcRange,
   type WorkoutPlanBulkRequest,
@@ -386,6 +388,15 @@ function translateIntegrityError(error: unknown): never {
     error &&
     typeof error === 'object' &&
     'code' in error &&
+    error.code === '55P03'
+  )
+    conflict(
+      'A workout is being saved. Retry this plan change after the workout finishes.'
+    );
+  if (
+    error &&
+    typeof error === 'object' &&
+    'code' in error &&
     error.code === '23503'
   )
     conflict(
@@ -485,152 +496,70 @@ async function getWorkoutPlanTemplateById(
     client.release();
   }
 }
-async function updateWorkoutPlanTemplate(
-  templateId: string | number,
-  userId: string,
-  updateData: WorkoutPlanTemplateUpdateInput,
-  prefillDate?: string
-): Promise<WorkoutPlanTemplateRow> {
-  const input = workoutPlanUpdateRequestSchema.parse(updateData);
-  const client: PoolClient = await getClient(userId);
-  try {
-    await client.query('BEGIN');
-    const locked = await client.query(
-      'SELECT id FROM workout_plan_templates WHERE id = $1 AND user_id = $2 FOR UPDATE',
-      [templateId, userId]
-    );
-    if (!locked.rowCount)
-      throw Object.assign(new Error('Workout plan template not found.'), {
-        status: 404,
-      });
-    // Session locks serialize Program binding/removal with this replacement.
-    await client.query(
-      'SELECT id FROM workout_plan_sessions WHERE template_id = $1 AND user_id = $2 ORDER BY id FOR UPDATE',
-      [templateId, userId]
-    );
-    await client.query(
-      'SELECT id FROM workout_plan_template_assignments WHERE template_id = $1 AND user_id = $2 ORDER BY id FOR UPDATE',
-      [templateId, userId]
-    );
-    const previous = (
-      await readPlans(client, 'WHERE t.id = $1 AND t.user_id = $2', [
-        templateId,
-        userId,
-      ])
-    )[0]!;
-    const scheduleType = input.schedule_type ?? previous.schedule_type;
-    if (scheduleType !== previous.schedule_type && input.sessions === undefined)
-      invalid('Changing schedule_type requires providing sessions.');
-    if (input.sessions !== undefined)
-      await saveSessions(
-        client,
-        Number(templateId),
-        userId,
-        input.sessions,
-        previous.sessions,
-        scheduleType
-      );
-    const next = {
-      ...previous,
-      ...input,
-      entry_mode:
-        scheduleType === 'sequential'
-          ? 'prompt'
-          : (input.entry_mode ?? previous.entry_mode),
-    };
-    await client.query(
-      `UPDATE workout_plan_templates SET plan_name = $3, description = $4, start_date = $5, end_date = $6,
-      is_active = $7, schedule_type = $8, entry_mode = $9 WHERE id = $1 AND user_id = $2`,
-      [
-        templateId,
-        userId,
-        next.plan_name,
-        next.description,
-        next.start_date,
-        next.end_date,
-        next.is_active,
-        scheduleType,
-        next.entry_mode,
-      ]
-    );
-    // Idempotent insertion only. Existing diary snapshots and their links are
-    // never deleted, unlinked or rewritten when a prescription is edited.
-    if (
-      prefillDate &&
-      next.is_active &&
-      scheduleType === 'weekly' &&
-      next.entry_mode === 'prefill'
-    )
-      await createExerciseEntriesFromTemplate(
-        templateId,
-        userId,
-        prefillDate,
-        client
-      );
-    const saved = (
-      await readPlans(client, 'WHERE t.id = $1 AND t.user_id = $2', [
-        templateId,
-        userId,
-      ])
-    )[0]!;
-    await client.query('COMMIT');
-    return saved;
-  } catch (error) {
-    await client.query('ROLLBACK');
-    translateIntegrityError(error);
-  } finally {
-    client.release();
-  }
-}
-async function deleteWorkoutPlanTemplate(
-  templateId: string | number,
+async function deleteDisposablePrefillEntries(
+  client: PoolClient,
+  assignmentIds: readonly number[],
   userId: string,
   today: string
-): Promise<WorkoutPlanTemplateRow | null> {
-  const client: PoolClient = await getClient(userId);
-  try {
-    await client.query('BEGIN');
-    const locked = await client.query(
-      'SELECT id FROM workout_plan_templates WHERE id = $1 AND user_id = $2 FOR UPDATE',
-      [templateId, userId]
-    );
-    if (!locked.rowCount) {
-      await client.query('ROLLBACK');
-      return null;
-    }
-    const references = await client.query<{ kind: string }>(
-      `SELECT 'program' AS kind FROM training_program_sessions ps JOIN workout_plan_sessions s ON s.id = ps.workout_session_id
-      WHERE s.template_id = $1 AND s.user_id = $2
-      UNION ALL SELECT 'consolidation' AS kind FROM workout_program_consolidations
-      WHERE target_plan_id = $1 AND user_id = $2 LIMIT 1`,
-      [templateId, userId]
-    );
-    if (references.rowCount) {
-      const message =
-        references.rows[0]?.kind === 'consolidation'
-          ? 'This Workout Plan retains a private consolidation rollback receipt; keep it until that operation is accepted.'
-          : 'Remove this Workout Plan’s exact session references from Training Programs before deleting it.';
-      throw new HttpError(message, 409);
-    }
-    // Remove only still-incomplete, future rows generated by this plan's
-    // weekly prefill. Completed sets and every Program-linked row are history.
-    const removed = await client.query<{
-      exercise_preset_entry_id: string | null;
-    }>(
-      `DELETE FROM exercise_entries entry
+): Promise<void> {
+  if (assignmentIds.length === 0) return;
+  // The player locks its parent before saving. A busy parent is a retryable
+  // conflict; after the player commits, its rows are no longer disposable.
+  await client.query(
+    `SELECT parent.id FROM exercise_preset_entries parent
+     JOIN exercise_entries entry ON entry.exercise_preset_entry_id = parent.id
+     WHERE entry.user_id = $2 AND entry.workout_plan_assignment_id = ANY($1::integer[])
+       AND entry.is_weekly_prefill AND entry.entry_date >= $3::date
+     ORDER BY parent.id FOR UPDATE OF parent NOWAIT`,
+    [assignmentIds, userId, today]
+  );
+  await client.query(
+    `SELECT sibling.id FROM exercise_entries entry
+     JOIN exercise_entries sibling ON sibling.exercise_preset_entry_id = entry.exercise_preset_entry_id
+     WHERE entry.user_id = $2 AND entry.workout_plan_assignment_id = ANY($1::integer[])
+       AND entry.is_weekly_prefill AND entry.entry_date >= $3::date
+     ORDER BY sibling.id FOR UPDATE OF sibling NOWAIT`,
+    [assignmentIds, userId, today]
+  );
+  // Remove only still-incomplete, future rows generated by this plan's
+  // weekly prefill. Completed sets and every Program-linked row are history.
+  const removed = await client.query<{
+    exercise_preset_entry_id: string | null;
+  }>(
+    `DELETE FROM exercise_entries entry
        USING workout_plan_template_assignments assignment
        JOIN workout_plan_templates plan ON plan.id = assignment.template_id
          AND plan.user_id = assignment.user_id
-       WHERE assignment.template_id = $1 AND assignment.user_id = $2
+       WHERE assignment.id = ANY($1::integer[]) AND assignment.user_id = $2
          AND plan.schedule_type = 'weekly' AND plan.entry_mode = 'prefill'
          AND entry.user_id = $2
          AND entry.workout_plan_assignment_id = assignment.id
          AND entry.source = 'Workout Plan'
+         AND entry.is_weekly_prefill
          AND entry.entry_date >= $3::date
+         AND NOT EXISTS (
+           SELECT 1 FROM exercise_entries sibling
+           WHERE sibling.exercise_preset_entry_id = entry.exercise_preset_entry_id
+             AND NOT sibling.is_weekly_prefill
+         )
          AND NOT EXISTS (
            SELECT 1 FROM exercise_entry_sets completed_set
            WHERE completed_set.exercise_entry_id = entry.id
              AND completed_set.completed_at IS NOT NULL
+         )
+         AND NOT EXISTS (
+           SELECT 1 FROM exercise_entries sibling
+           JOIN exercise_entry_sets completed_set ON completed_set.exercise_entry_id = sibling.id
+           WHERE sibling.exercise_preset_entry_id = entry.exercise_preset_entry_id
+             AND completed_set.completed_at IS NOT NULL
+         )
+         AND NOT EXISTS (
+           SELECT 1 FROM workout_feedback feedback
+           LEFT JOIN exercise_entries sibling ON sibling.id = feedback.exercise_entry_id
+           WHERE feedback.user_id = $2
+             AND (feedback.exercise_preset_entry_id = entry.exercise_preset_entry_id
+               OR sibling.exercise_preset_entry_id = entry.exercise_preset_entry_id
+               OR feedback.exercise_entry_id = entry.id)
          )
          AND NOT EXISTS (
            SELECT 1 FROM training_program_sessions program
@@ -657,18 +586,30 @@ async function deleteWorkoutPlanTemplate(
              )
          )
        RETURNING entry.exercise_preset_entry_id`,
-      [templateId, userId, today]
+    [assignmentIds, userId, today]
+  );
+  const parentIds = [
+    ...new Set(
+      removed.rows.flatMap(({ exercise_preset_entry_id }) =>
+        exercise_preset_entry_id ? [exercise_preset_entry_id] : []
+      )
+    ),
+  ];
+  if (parentIds.length) {
+    await client.query(
+      `UPDATE exercise_entry_activity_details detail
+       SET detail_data = jsonb_set(detail_data, '{assignments}',
+         COALESCE((
+           SELECT jsonb_agg(item)
+           FROM jsonb_array_elements(detail_data->'assignments') item
+           WHERE (item->>'id')::integer <> ALL($2::integer[])
+         ), '[]'::jsonb))
+       WHERE detail.exercise_preset_entry_id = ANY($1::uuid[])
+         AND detail.detail_type = 'workout_plan_prescription'`,
+      [parentIds, assignmentIds]
     );
-    const parentIds = [
-      ...new Set(
-        removed.rows.flatMap(({ exercise_preset_entry_id }) =>
-          exercise_preset_entry_id ? [exercise_preset_entry_id] : []
-        )
-      ),
-    ];
-    if (parentIds.length) {
-      await client.query(
-        `DELETE FROM exercise_preset_entries parent
+    await client.query(
+      `DELETE FROM exercise_preset_entries parent
          WHERE parent.user_id = $1 AND parent.id = ANY($2::uuid[])
            AND NOT EXISTS (
              SELECT 1 FROM exercise_entries child
@@ -686,9 +627,194 @@ async function deleteWorkoutPlanTemplate(
                  )
                )
            )`,
-        [userId, parentIds]
+      [userId, parentIds]
+    );
+  }
+}
+
+async function currentPlanDay(
+  client: PoolClient,
+  userId: string,
+  clientDate?: string | null
+) {
+  const preference = await client.query<{ timezone: string | null }>(
+    'SELECT timezone FROM user_preferences WHERE user_id = $1',
+    [userId]
+  );
+  const zone = preference.rows[0]?.timezone;
+  const today = todayInZone(zone && isValidTimeZone(zone) ? zone : 'UTC');
+  return {
+    today,
+    startDay:
+      clientDate &&
+      isDayString(clientDate) &&
+      compareDays(clientDate, today) > 0
+        ? clientDate
+        : today,
+  };
+}
+
+async function updateWorkoutPlanTemplate(
+  templateId: string | number,
+  userId: string,
+  updateData: WorkoutPlanTemplateUpdateInput,
+  clientDate?: string | null
+): Promise<WorkoutPlanTemplateRow> {
+  const input = workoutPlanUpdateRequestSchema.parse(updateData);
+  const client: PoolClient = await getClient(userId);
+  try {
+    await client.query('BEGIN');
+    const locked = await client.query(
+      'SELECT id FROM workout_plan_templates WHERE id = $1 AND user_id = $2 FOR UPDATE',
+      [templateId, userId]
+    );
+    if (!locked.rowCount)
+      throw Object.assign(new Error('Workout plan template not found.'), {
+        status: 404,
+      });
+    // Session locks serialize Program binding/removal with this replacement.
+    await client.query(
+      'SELECT id FROM workout_plan_sessions WHERE template_id = $1 AND user_id = $2 ORDER BY id FOR UPDATE',
+      [templateId, userId]
+    );
+    await client.query(
+      'SELECT id FROM workout_plan_template_assignments WHERE template_id = $1 AND user_id = $2 ORDER BY id FOR UPDATE',
+      [templateId, userId]
+    );
+    const { today, startDay } = await currentPlanDay(
+      client,
+      userId,
+      clientDate
+    );
+    const previous = (
+      await readPlans(client, 'WHERE t.id = $1 AND t.user_id = $2', [
+        templateId,
+        userId,
+      ])
+    )[0]!;
+    const scheduleType = input.schedule_type ?? previous.schedule_type;
+    if (scheduleType !== previous.schedule_type && input.sessions === undefined)
+      invalid('Changing schedule_type requires providing sessions.');
+    if (input.sessions !== undefined) {
+      const submitted = new Map(
+        input.sessions.flatMap((session) =>
+          session.assignments.flatMap((assignment) =>
+            assignment.id === undefined
+              ? []
+              : [[assignment.id, assignment] as const]
+          )
+        )
+      );
+      const changed = previous.sessions.flatMap((session) =>
+        session.assignments.flatMap((assignment) => {
+          const next = submitted.get(assignment.id);
+          return !next ||
+            (next.exercise_id ?? null) !== assignment.exercise_id ||
+            (next.workout_preset_id ?? null) !== assignment.workout_preset_id
+            ? [assignment.id]
+            : [];
+        })
+      );
+      await deleteDisposablePrefillEntries(client, changed, userId, today);
+      await saveSessions(
+        client,
+        Number(templateId),
+        userId,
+        input.sessions,
+        previous.sessions,
+        scheduleType
       );
     }
+    const next = {
+      ...previous,
+      ...input,
+      entry_mode:
+        scheduleType === 'sequential'
+          ? 'prompt'
+          : (input.entry_mode ?? previous.entry_mode),
+    };
+    await client.query(
+      `UPDATE workout_plan_templates SET plan_name = $3, description = $4, start_date = $5, end_date = $6,
+      is_active = $7, schedule_type = $8, entry_mode = $9 WHERE id = $1 AND user_id = $2`,
+      [
+        templateId,
+        userId,
+        next.plan_name,
+        next.description,
+        next.start_date,
+        next.end_date,
+        next.is_active,
+        scheduleType,
+        next.entry_mode,
+      ]
+    );
+    // Preserve retained diary snapshots; materialize only missing assignments.
+    if (
+      next.is_active &&
+      scheduleType === 'weekly' &&
+      next.entry_mode === 'prefill'
+    )
+      await createExerciseEntriesFromTemplate(
+        templateId,
+        userId,
+        startDay,
+        client
+      );
+    const saved = (
+      await readPlans(client, 'WHERE t.id = $1 AND t.user_id = $2', [
+        templateId,
+        userId,
+      ])
+    )[0]!;
+    await client.query('COMMIT');
+    return saved;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    translateIntegrityError(error);
+  } finally {
+    client.release();
+  }
+}
+async function deleteWorkoutPlanTemplate(
+  templateId: string | number,
+  userId: string
+): Promise<WorkoutPlanTemplateRow | null> {
+  const client: PoolClient = await getClient(userId);
+  try {
+    await client.query('BEGIN');
+    const locked = await client.query(
+      'SELECT id FROM workout_plan_templates WHERE id = $1 AND user_id = $2 FOR UPDATE',
+      [templateId, userId]
+    );
+    if (!locked.rowCount) {
+      await client.query('ROLLBACK');
+      return null;
+    }
+    const references = await client.query<{ kind: string }>(
+      `SELECT 'program' AS kind FROM training_program_sessions ps JOIN workout_plan_sessions s ON s.id = ps.workout_session_id
+      WHERE s.template_id = $1 AND s.user_id = $2
+      UNION ALL SELECT 'consolidation' AS kind FROM workout_program_consolidations
+      WHERE target_plan_id = $1 AND user_id = $2 LIMIT 1`,
+      [templateId, userId]
+    );
+    if (references.rowCount) {
+      const message =
+        references.rows[0]?.kind === 'consolidation'
+          ? 'This Workout Plan retains a private consolidation rollback receipt; keep it until that operation is accepted.'
+          : 'Remove this Workout Plan’s exact session references from Training Programs before deleting it.';
+      throw new HttpError(message, 409);
+    }
+    const assignmentIds = await client.query<{ id: number }>(
+      'SELECT id FROM workout_plan_template_assignments WHERE template_id = $1 AND user_id = $2 ORDER BY id FOR UPDATE',
+      [templateId, userId]
+    );
+    const { today } = await currentPlanDay(client, userId);
+    await deleteDisposablePrefillEntries(
+      client,
+      assignmentIds.rows.map((row) => row.id),
+      userId,
+      today
+    );
     const diaryReferences = await client.query(
       `SELECT 1 FROM exercise_entries ee
       JOIN workout_plan_template_assignments a ON a.id = ee.workout_plan_assignment_id

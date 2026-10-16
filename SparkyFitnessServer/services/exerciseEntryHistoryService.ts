@@ -784,7 +784,7 @@ export async function getGroupedExerciseSessionByIdWithClient(
   const metaResult = await client.query(
     `SELECT id, workout_preset_id, name, description, notes, source, entry_date, location, workout_format, time_cap_seconds, created_at
      FROM exercise_preset_entries
-     WHERE user_id = $1 AND id = $2`,
+     WHERE user_id = $1 AND id = $2 ${lockExerciseEntries ? 'FOR UPDATE' : ''}`,
     [targetUserId, presetEntryId]
   );
 
