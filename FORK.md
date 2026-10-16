@@ -72,7 +72,7 @@ Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded her
 - Allow Workout Program consolidation when a Program includes Cardio Tests, preserving assessment and attempt links; assessment-only Programs return no workout proposal.
 - Prevent exercise replacement in web Training Program playback and recover older substituted drafts as separate, unlinked workouts.
 - Preserve a Workout Session's shared interval format and time cap across matching frozen presets on web, consistent with mobile.
-- Keep new exercises in their untouched weekly prefill workout and allow plan edits to replace only marked future incomplete prefill rows, preserving manually started, edited, feedback-bearing, past, completed and Program-linked diary history; reject stale player saves after a prescribed exercise changes (#45).
+- Keep new exercises in their untouched weekly prefill workout and allow plan edits to replace only marked future incomplete prefill rows, preserving manually started, edited, feedback-bearing, past, completed and Program-linked diary history; reject stale player saves after a prescribed exercise changes while allowing unchanged snapshots after library deletion (#45).
 - Show the next three pending Training Program workouts on the web dashboard and the next one on mobile (ordered by effective date), keeping the session picker for standalone Workout Plans and falling back to all plans if Programs fail to load.
 - Reject `missed` outcomes for future Planned Sessions so an accidental click cannot trigger an irreversible auto-shift; index Program session diary links.
 - Restore per-set RPE entry in started workouts, including timed cardio, with decimal effort values retained in resumed drafts and workout save requests.

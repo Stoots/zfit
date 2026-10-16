@@ -2416,6 +2416,13 @@ async function updateGroupedWorkoutSession(
         (exercise) =>
           exercise.workout_plan_assignment_id !== null &&
           exercise.workout_plan_assignment_id !== undefined &&
+          !existingSession.exercises?.some(
+            (stored) =>
+              stored.id === exercise.id &&
+              (stored.exercise_id ?? null) === (exercise.exercise_id ?? null) &&
+              Number(stored.workout_plan_assignment_id) ===
+                Number(exercise.workout_plan_assignment_id)
+          ) &&
           !prescribedExercises
             .get(Number(exercise.workout_plan_assignment_id))
             ?.has(exercise.exercise_id)

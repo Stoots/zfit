@@ -415,6 +415,8 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
     const { authenticate } = await import('../middleware/authMiddleware.js');
     const { default: diaryRoutes } =
       await import('../routes/exerciseEntryRoutes.js');
+    const { default: exerciseRoutes } =
+      await import('../routes/exerciseRoutes.js');
     const { router: historyRoutes } =
       await import('../routes/v2/exerciseEntryRoutes.js');
     const { default: coachingRoutes } =
@@ -425,6 +427,7 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
     app.use('/api/cardio-tests', cardioRoutes);
     app.use('/api/exercise-preset-entries', authenticate, completionRoutes);
     app.use('/api/exercise-entries', diaryRoutes);
+    app.use('/api/exercises', exerciseRoutes);
     app.use('/api/v2/exercise-entries', authenticate, historyRoutes);
     app.use('/api/v2/workout-coaching', coachingRoutes);
     app.use(errorHandler);
@@ -3999,6 +4002,108 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
     expect(await diaryPrescription(retained!.id, '2026-10-25')).toEqual([
       staleRows[1],
     ]);
+  });
+  it('saves an unchanged prefill child after its library exercise is deleted', async () => {
+    setToday('2026-10-25');
+    const exerciseId = await seedExercise('Deleted preset lift');
+    const db = await getSystemClient();
+    let presetId: number;
+    try {
+      presetId = (
+        await db.query(
+          "INSERT INTO workout_presets(user_id,name) VALUES ($1,'Deleted lift preset') RETURNING id",
+          [owner]
+        )
+      ).rows[0].id;
+    } finally {
+      db.release();
+    }
+    const plan = await createPlan({
+      plan_name: 'Deleted library exercise prefill',
+      schedule_type: 'weekly',
+      entry_mode: 'prefill',
+      is_active: true,
+      start_date: '2026-10-25',
+      end_date: '2026-10-25',
+      currentClientDate: '2026-10-25',
+      sessions: [
+        {
+          name: 'A',
+          day_of_week: 0,
+          sort_order: 0,
+          assignments: [
+            {
+              workout_preset_id: presetId!,
+              sort_order: 0,
+              preset_snapshot: {
+                id: presetId!,
+                name: 'Deleted lift preset',
+                description: null,
+                workout_format: 'standard',
+                exercises: [
+                  {
+                    id: 1,
+                    exercise_id: exerciseId,
+                    exercise_name: 'Deleted preset lift',
+                    category: 'Strength',
+                    image_url: null,
+                    superset_group: null,
+                    sets: [{ ...prescribedSets(1)[0]!, id: 1 }],
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    });
+    const assignmentId = plan.sessions[0]!.assignments[0]!.id;
+    const before = (await diaryPrescription(assignmentId, '2026-10-25'))[0]!;
+    const groupId = before.entry.exercise_preset_entry_id;
+    const deleted = await request(app)
+      .delete(`/api/exercises/${exerciseId}?mode=delete`)
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(deleted.status).toBe(200);
+    const stored = (await diaryPrescription(assignmentId, '2026-10-25'))[0]!;
+    expect(stored.entry).toMatchObject({
+      id: before.entry.id,
+      exercise_id: null,
+      workout_plan_assignment_id: assignmentId,
+    });
+
+    const saved = await request(app)
+      .put(`/api/exercise-preset-entries/${groupId}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        exercises: [
+          {
+            id: stored.entry.id,
+            exercise_id: stored.entry.exercise_id,
+            sort_order: stored.entry.sort_order,
+            duration_minutes: stored.entry.duration_minutes,
+            workout_plan_assignment_id: assignmentId,
+            sets: stored.sets.map(
+              (set: {
+                set_number: number;
+                reps: number;
+                weight: number | null;
+              }) => ({
+                set_number: set.set_number,
+                reps: set.reps,
+                weight: set.weight,
+              })
+            ),
+          },
+        ],
+      });
+    expect(saved.status).toBe(200);
+    expect(
+      (await diaryPrescription(assignmentId, '2026-10-25'))[0]!.entry
+    ).toMatchObject({
+      id: stored.entry.id,
+      exercise_id: null,
+      workout_plan_assignment_id: assignmentId,
+    });
   });
   it.each(['past', 'completed', 'program'] as const)(
     'protects assignment/session history from edits and deletion (%s diary history)',
