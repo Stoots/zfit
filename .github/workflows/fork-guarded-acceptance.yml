@@ -1,0 +1,120 @@
+name: Fork Guarded Acceptance
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "SparkyFitnessServer/**"
+      - "shared/**"
+      - ".github/scripts/assert-acceptance-report*"
+      - ".github/workflows/fork-guarded-acceptance.yml"
+  push:
+    branches: [main]
+    paths:
+      - "SparkyFitnessServer/**"
+      - "shared/**"
+      - ".github/scripts/assert-acceptance-report*"
+      - ".github/workflows/fork-guarded-acceptance.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  guarded-acceptance:
+    name: Guarded ${{ matrix.slice }} Acceptance
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - slice: consolidation
+            database: zfit_consolidation14_disposable_test
+            flag: RUN_CONSOLIDATION_DB
+            suites: tests/workoutProgramConsolidation.integration.test.ts
+          - slice: bulk
+            database: zfit_bulk13_disposable_ci
+            flag: RUN_BULK_PRESCRIPTION_DB
+            suites: tests/workoutPlanBulk.integration.test.ts
+
+    defaults:
+      run:
+        working-directory: SparkyFitnessServer
+
+    services:
+      postgres:
+        image: postgres:18.3-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: ${{ matrix.database }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      SPARKY_FITNESS_DB_HOST: 127.0.0.1
+      SPARKY_FITNESS_DB_PORT: "5432"
+      SPARKY_FITNESS_DB_NAME: ${{ matrix.database }}
+      SPARKY_FITNESS_DB_USER: postgres
+      SPARKY_FITNESS_DB_PASSWORD: postgres
+      SPARKY_FITNESS_APP_DB_USER: sparky_app
+      SPARKY_FITNESS_APP_DB_PASSWORD: sparky_app_pw
+      SPARKY_FITNESS_FRONTEND_URL: http://localhost:3004
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: "pnpm"
+          cache-dependency-path: pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify acceptance report checker
+        run: node --test ../.github/scripts/assert-acceptance-report.test.mjs
+
+      - name: Initialize isolated database with normal migrations and RLS
+        run: pnpm run test:migrations
+
+      - name: Collect guarded test identities without executing them
+        run: |
+          env "${{ matrix.flag }}=1" pnpm exec vitest run ${{ matrix.suites }} \
+            --testNamePattern='a^' --passWithNoTests --no-file-parallelism \
+            --reporter=json --outputFile=acceptance-collected.json
+
+      - name: Run serial acceptance and require complete passing reports
+        run: |
+          vitest_status=0
+          env "${{ matrix.flag }}=1" pnpm exec vitest run ${{ matrix.suites }} \
+            --no-file-parallelism --reporter=json --outputFile=acceptance-report.json \
+            || vitest_status=$?
+          checker_status=0
+          node ../.github/scripts/assert-acceptance-report.mjs \
+            acceptance-report.json acceptance-collected.json ${{ matrix.suites }} || checker_status=$?
+          if [ "$vitest_status" -ne 0 ]; then
+            exit "$vitest_status"
+          fi
+          exit "$checker_status"
+
+      - name: Upload acceptance report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: guarded-${{ matrix.slice }}-acceptance
+          path: |
+            SparkyFitnessServer/acceptance-report.json
+            SparkyFitnessServer/acceptance-collected.json
+          if-no-files-found: error
+          retention-days: 7

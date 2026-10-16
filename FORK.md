@@ -5,7 +5,7 @@
 - `FORK.md` (this file)
 - `agent-docs/` (fork additions: `HANDOVER.md`, `deployment-smoke.md`)
 - `docs/adr/`, `docs/agents/`
-- `scripts/deployment-smoke*`, `scripts/fork-check-commits*`, `scripts/fork-check-pr-body*`, `.github/workflows/deployment-smoke-checks.yml`
+- `scripts/deployment-smoke*`, `scripts/fork-check-commits*`, `scripts/fork-check-pr-body*`, `.github/workflows/deployment-smoke-checks.yml`, `.github/workflows/fork-guarded-acceptance.yml`
 
 ## Where to start
 
@@ -59,7 +59,7 @@ gh workflow disable <file>.yml -R Stoots/zfit   # and `gh workflow enable <file>
 | `sync-translations.yml`                                                                                                                    | Needs translation service secrets; opens PRs                  |
 | `pr-license-enforcement.yml`, `pr-validation.yml`, `first-contributor-welcome.yml`, `pr-merged-issue-notifier.yml`, `issue-auto-label.yml` | Upstream contributor and community automation                 |
 
-Kept enabled: `ci-tests.yml`, `pr-validation-tests.yml`, `docs-test.yml`, `helm-tests.yml`, `deployment-smoke-checks.yml`. Check the live state with `gh workflow list --all -R Stoots/zfit`.
+Kept enabled: `ci-tests.yml`, `pr-validation-tests.yml`, `docs-test.yml`, `helm-tests.yml`, `deployment-smoke-checks.yml`, `fork-guarded-acceptance.yml`. Check the live state with `gh workflow list --all -R Stoots/zfit`.
 
 ## Fork changelog
 

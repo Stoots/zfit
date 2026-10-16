@@ -1,6 +1,6 @@
 # Handover
 
-_Last updated: 2026-10-14_
+_Last updated: 2026-10-16_
 
 Read this after `AGENTS.md` and `FORK.md`. It records the landing state and the next work. Verify live issue and branch status before starting a ticket.
 
@@ -14,16 +14,20 @@ Deployment targets, rollback files, Penpot design-file IDs and local tool setup 
 - PR #15 (merge `3af43c044`): Cooper run Test Attempts (#4) on web and mobile, with shared validation, persistence and RLS. Phone acceptance remains open.
 - PR #20 (merge `0668e3bd9`): exercise-name capitalization (#10); exact, prescribed Workout Sessions (#11); optional and late-completed sessions (#12); bulk future-prescription edits (#13); guarded owner-scoped consolidation (#14). Live consolidation cutover requires a separate owner decision. The fork changelog in `FORK.md` records user-facing changes.
 - The earlier dashboard, cache, future-miss, workout playback and CI cleanup remains on `main`. The PR #20 review preserved the web/mobile dashboard fallback and the future-miss `409` behavior while changing the session contract.
+- 2026-10-14/15: Zolt-style web redesign and follow-ups (#32, #34), App Store active-plan compatibility (#28), delegate access boundary docs (#24, closing #18), fork delivery checks (#23).
+- 2026-10-15/16: sprint and 30-second power Tests (#27, closing #5), Cardio Tests in Program Phases (#29, closing #7), iPhone Home Screen fixes (#26), food-logging shortcuts (#38, closing #36), three upcoming workouts on the dashboard (#39, closing #35). Main `393c84e4a` was deployed on 2026-10-16.
 
 ## Next work
 
-The issue queue is on `Stoots/zfit` (`docs/agents/issue-tracker.md`). Specs #1 and #9 and ADR 0003 set the accepted design; #9 supersedes #1 for session identity. #5–#8 were labelled `ready-for-agent` on 2026-10-13.
+The issue queue is on `Stoots/zfit` (`docs/agents/issue-tracker.md`). Specs #1 and #9 and ADR 0003 set the accepted design; #9 supersedes #1 for session identity.
 
-1. #5 Sprint/Power Tests (`feat/5-sprint-power-tests`) and #7 Phase/Cardio Tests (`feat/7-phase-cardio-tests`) are in progress.
-2. #6 follows those branches, then #8.
-3. Cleanup tickets #16, #17, #19 and #21 remain to be scheduled.
+1. #17: guarded acceptance moves to the fork-owned `.github/workflows/fork-guarded-acceptance.yml`, the report checker compares against collected tests instead of fixed counts, and the intermittent consolidation failures (unordered row comparison, 5 s default timeout) are fixed.
+2. #6 ramp Tests, then #8 AI queries.
+3. #37 iPhone web app ease-of-use audit (low priority).
+4. Cleanup tickets #16, #19 and #21.
+5. Upstream sync (`FORK.md` procedure).
 
-Owner decisions and acceptance: #18 (delegate edit access), #14 (live consolidation cutover) and #4 (phone check). Keep private cutover identifiers out of the issue tracker.
+Owner items: #14 live consolidation cutover, #4 phone check of Cooper Tests, and a walkthrough of the #18 delegate access decision (closed by #24; the owner has asked for an explanation). Keep private cutover identifiers out of the issue tracker.
 
 ## Known gaps and upgrade notes
 

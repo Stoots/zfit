@@ -8,20 +8,21 @@ import { test } from "node:test";
 import { assertAcceptanceReport } from "./assert-acceptance-report.mjs";
 
 const suitePath = "tests/workoutProgramConsolidation.integration.test.ts";
-const otherPath = "tests/rlsPermissionMatrix.integration.test.ts";
-const specification = `${suitePath}=2`;
+const otherPath = "tests/workoutPlanBulk.integration.test.ts";
 
-function suite(name = suitePath, count = 2) {
+function suite(
+  path = suitePath,
+  names = ["case one", "case two"],
+  status = "passed",
+) {
   return {
-    name,
+    name: path,
     status: "passed",
-    assertionResults: Array.from({ length: count }, () => ({
-      status: "passed",
-    })),
+    assertionResults: names.map((fullName) => ({ fullName, status })),
   };
 }
 
-function report(testResults = [suite()]) {
+function report(testResults = [suite()], collection = false) {
   const total = testResults.reduce(
     (sum, result) => sum + result.assertionResults.length,
     0,
@@ -29,211 +30,159 @@ function report(testResults = [suite()]) {
   return {
     success: true,
     numFailedTests: 0,
-    numPendingTests: 0,
+    numPendingTests: collection ? total : 0,
     numTodoTests: 0,
     numFailedTestSuites: 0,
     numPendingTestSuites: 0,
-    numPassedTests: total,
+    numPassedTests: collection ? 0 : total,
     numTotalTests: total,
-    // Nested describes make this unrelated to the number of files.
     numPassedTestSuites: 19,
     testResults,
   };
 }
 
-test("accepts exact and slash-boundary repo suffixes with per-file passed totals", () => {
-  const input = report([
-    suite(`/runner/repository/SparkyFitnessServer/${suitePath}`),
-    suite(otherPath, 3),
+const collected = () =>
+  report([suite(suitePath, ["case one", "case two"], "skipped")], true);
+
+test("accepts complete passing suites with independent collected test identities", () => {
+  const actual = report([
+    suite(`/runner/SparkyFitnessServer/${suitePath}`),
+    suite(otherPath, ["third"]),
   ]);
+  const expected = report(
+    [
+      suite(suitePath, ["case one", "case two"], "skipped"),
+      suite(otherPath, ["third"], "skipped"),
+    ],
+    true,
+  );
   assert.deepEqual(
-    assertAcceptanceReport(input, [specification, `${otherPath}=2`]),
+    assertAcceptanceReport(actual, expected, [suitePath, otherPath]),
     [
       { path: suitePath, passed: 2 },
-      { path: otherPath, passed: 3 },
+      { path: otherPath, passed: 1 },
     ],
   );
 });
 
-test("rejects an empty, duplicate or malformed expected suite contract", () => {
-  for (const specifications of [
-    [],
-    undefined,
-    [specification, specification],
-    [""],
-    [suitePath],
-    [`${suitePath}=0`],
-    [`${suitePath}=-1`],
-    [`${suitePath}=1.5`],
-    [`${suitePath}=01`],
-    [`${suitePath}=Infinity`],
-    [`${suitePath}=9007199254740992`],
-    ["=2"],
-    [" =2"],
-    [null],
+test("rejects a missing collected test even with self-consistent passing totals", () => {
+  const expected = report(
+    [suite(suitePath, ["case one", "case two", "case three"], "skipped")],
+    true,
+  );
+  assert.throws(
+    () => assertAcceptanceReport(report(), expected, [suitePath]),
+    /Missing collected test/,
+  );
+});
+
+test("rejects uncollected, duplicate, and unidentified report tests", () => {
+  for (const names of [
+    ["case one", "unexpected"],
+    ["case one", "case one"],
+    ["case one", ""],
   ]) {
-    assert.throws(() => assertAcceptanceReport(report(), specifications));
+    assert.throws(() =>
+      assertAcceptanceReport(report([suite(suitePath, names)]), collected(), [
+        suitePath,
+      ]),
+    );
   }
 });
 
-test("rejects missing expected files rather than trusting aggregate passed suites", () => {
-  assert.throws(
-    () => assertAcceptanceReport(report([]), [specification]),
-    /Missing expected/,
-  );
-  assert.throws(
-    () => assertAcceptanceReport(report(), [specification, `${otherPath}=1`]),
-    /Missing expected/,
-  );
-});
-
-test("rejects duplicate matches, unexpected files and non-boundary suffixes", () => {
-  for (const input of [
-    report([suite(), suite(`/runner/${suitePath}`)]),
-    report([suite(), suite("tests/unexpected.test.ts")]),
-    report([suite(`prefix${suitePath}`)]),
-    report([suite(`${suitePath}.bak`)]),
-    report([suite(otherPath)]),
+test("rejects missing, empty, duplicate, unexpected, and ambiguous suites", () => {
+  for (const results of [
+    [],
+    [suite(suitePath, [])],
+    [suite(), suite()],
+    [suite("tests/other.test.ts")],
+    [suite(`prefix${suitePath}`)],
   ]) {
-    assert.throws(() => assertAcceptanceReport(input, [specification]));
+    assert.throws(() =>
+      assertAcceptanceReport(report(results), collected(), [suitePath]),
+    );
   }
   assert.throws(
     () =>
-      assertAcceptanceReport(report(), [
-        specification,
-        "workoutProgramConsolidation.integration.test.ts=1",
+      assertAcceptanceReport(report(), collected(), [
+        suitePath,
+        "workoutProgramConsolidation.integration.test.ts",
       ]),
-    /ambiguous/,
+    /ambiguous|Missing expected/,
   );
 });
 
-test("rejects failed or skipped assertions even with green suite and summary fields", () => {
-  for (const status of [
-    "failed",
-    "pending",
-    "todo",
-    "skipped",
-    "disabled",
-    undefined,
-  ]) {
-    const input = report();
-    input.testResults[0].assertionResults[1] = { status };
+test("rejects skipped, failed, pending, or todo assertions and suites", () => {
+  for (const status of ["skipped", "failed", "pending", "todo", undefined]) {
+    const failedAssertion = report();
+    failedAssertion.testResults[0].assertionResults[0].status = status;
     assert.throws(
-      () => assertAcceptanceReport(input, [specification]),
-      /Non-passed assertion/,
+      () => assertAcceptanceReport(failedAssertion, collected(), [suitePath]),
+      /Non-passed/,
     );
-  }
-  const input = report();
-  input.testResults[0].assertionResults[0] = null;
-  assert.throws(
-    () => assertAcceptanceReport(input, [specification]),
-    /Non-passed assertion/,
-  );
-});
-
-test("rejects failed or pending suites and empty or undersized assertion runs", () => {
-  for (const status of ["failed", "pending", "todo", undefined]) {
-    const input = report();
-    input.testResults[0].status = status;
+    const failedSuite = report();
+    failedSuite.testResults[0].status = status;
     assert.throws(
-      () => assertAcceptanceReport(input, [specification]),
+      () => assertAcceptanceReport(failedSuite, collected(), [suitePath]),
       /Suite did not pass/,
     );
   }
-  for (const count of [0, 1]) {
-    assert.throws(
-      () =>
-        assertAcceptanceReport(report([suite(suitePath, count)]), [
-          specification,
-        ]),
-      /minimum/,
-    );
-  }
 });
 
-test("rejects false success and malformed report structures", () => {
-  for (const input of [
-    null,
-    [],
-    {},
-    "report",
-    { ...report(), success: false },
-    { ...report(), success: "true" },
-  ]) {
-    assert.throws(() => assertAcceptanceReport(input, [specification]));
-  }
-  for (const testResults of [
-    undefined,
-    null,
-    {},
-    [null],
-    [{ status: "passed" }],
-    [suite("")],
-  ]) {
-    assert.throws(() =>
-      assertAcceptanceReport({ ...report(), testResults }, [specification]),
-    );
-  }
-  for (const assertionResults of [undefined, null, {}]) {
-    const input = report();
-    input.testResults[0].assertionResults = assertionResults;
-    assert.throws(
-      () => assertAcceptanceReport(input, [specification]),
-      /Missing assertions/,
-    );
-  }
-});
-
-test("rejects missing or inconsistent failure, pending and todo summaries", () => {
+test("rejects inconsistent summaries and malformed collection", () => {
   for (const field of ["numFailedTests", "numPendingTests", "numTodoTests"]) {
-    for (const value of [undefined, 1, -1, "0", null]) {
-      assert.throws(() =>
-        assertAcceptanceReport({ ...report(), [field]: value }, [
-          specification,
-        ]),
-      );
-    }
-  }
-  for (const field of ["numFailedTestSuites", "numPendingTestSuites"]) {
     assert.throws(() =>
-      assertAcceptanceReport({ ...report(), [field]: 1 }, [specification]),
+      assertAcceptanceReport({ ...report(), [field]: 1 }, collected(), [
+        suitePath,
+      ]),
     );
   }
   for (const field of ["numPassedTests", "numTotalTests"]) {
-    for (const value of [0, 3, "2", null]) {
-      assert.throws(() =>
-        assertAcceptanceReport({ ...report(), [field]: value }, [
-          specification,
-        ]),
-      );
-    }
+    assert.throws(() =>
+      assertAcceptanceReport({ ...report(), [field]: 1 }, collected(), [
+        suitePath,
+      ]),
+    );
   }
+  for (const collection of [
+    null,
+    {},
+    report([], true),
+    { ...collected(), success: false },
+    { ...collected(), numFailedTests: 1 },
+    { ...collected(), numPassedTests: 1 },
+    { ...collected(), numTotalTests: 1 },
+    { ...collected(), numPendingTests: 1 },
+  ]) {
+    assert.throws(() =>
+      assertAcceptanceReport(report(), collection, [suitePath]),
+    );
+  }
+  assert.throws(() => assertAcceptanceReport(report(), collected(), []));
+  assert.throws(() =>
+    assertAcceptanceReport(report(), collected(), [suitePath, suitePath]),
+  );
 });
 
-test("CLI returns failure for missing, malformed and falsely green skipped reports", (context) => {
+test("CLI checks both JSON files and reports the passing count", (context) => {
   const directory = mkdtempSync(join(tmpdir(), "acceptance-report-"));
   context.after(() => rmSync(directory, { recursive: true, force: true }));
   const executable = fileURLToPath(
     new URL("./assert-acceptance-report.mjs", import.meta.url),
   );
-  const path = join(directory, "report.json");
+  const resultPath = join(directory, "report.json");
+  const collectionPath = join(directory, "collection.json");
   const run = (...args) =>
     spawnSync(process.execPath, [executable, ...args], { encoding: "utf8" });
-  for (const args of [[], [path, specification]]) {
-    const result = run(...args);
-    assert.equal(result.status, 1);
-    assert.equal(result.stdout, "");
-  }
-  writeFileSync(path, "{not json");
-  assert.equal(run(path, specification).status, 1);
-  const skipped = report();
-  skipped.testResults[0].assertionResults[0].status = "pending";
-  writeFileSync(path, JSON.stringify(skipped));
-  assert.equal(run(path, specification).status, 1);
-  writeFileSync(path, JSON.stringify(report()));
-  assert.equal(run(path).status, 1);
-  const accepted = run(path, specification);
+  assert.equal(run().status, 1);
+  writeFileSync(resultPath, JSON.stringify(report()));
+  assert.equal(run(resultPath).status, 1);
+  writeFileSync(collectionPath, JSON.stringify(collected()));
+  assert.equal(run(resultPath, collectionPath).status, 1);
+  const accepted = run(resultPath, collectionPath, suitePath);
   assert.equal(accepted.status, 0);
   assert.equal(accepted.stdout, `${suitePath}: 2 passed\n`);
   assert.equal(accepted.stderr, "");
+  writeFileSync(resultPath, "{invalid");
+  assert.equal(run(resultPath, collectionPath, suitePath).status, 1);
 });

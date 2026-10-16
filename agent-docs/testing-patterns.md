@@ -196,10 +196,11 @@ intact; fault-trigger suites belong only in explicitly disposable databases.
 Serialize fixtures that initialize/reapply schema or RLS. A missing database,
 disabled opt-in or skipped suite is not a passing acceptance run.
 
-CI selection and fresh job-local database setup live in
-`.github/workflows/ci-tests.yml`; required-suite JSON report checks live in
-`.github/scripts/assert-acceptance-report.mjs`. Use those files as the source of
-truth for job selection and missing/skipped-case enforcement, not copied counts.
+General CI selection and migration database setup live in
+`.github/workflows/ci-tests.yml`; guarded consolidation and bulk acceptance
+run in `.github/workflows/fork-guarded-acceptance.yml`. Required-suite JSON
+report checks live in `.github/scripts/assert-acceptance-report.mjs`. Use those
+files as the source of truth for job selection and missing/skipped-case enforcement.
 
 The illustrative RLS shape below is not an executable seed: use the real suite's
 UUID accounts, complete schema-required fields and setup/teardown:
