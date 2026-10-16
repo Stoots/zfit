@@ -1,7 +1,8 @@
-import type {
-  ExerciseEntrySetRequest,
-  PresetSessionExerciseRequest,
-  WorkoutPlanAssignmentSetInput,
+import {
+  resolveWorkoutSessionTiming,
+  type ExerciseEntrySetRequest,
+  type PresetSessionExerciseRequest,
+  type WorkoutPlanAssignmentSetInput,
 } from '@workspace/shared';
 import type { StartLiveWorkoutArgs } from '../hooks/useStartLiveWorkout';
 import type { WorkoutPlanSession } from '../types/workoutPlans';
@@ -91,23 +92,14 @@ export function buildWorkoutPlanSessionStart(
   const presetSnapshots = assignments.flatMap((assignment) =>
     assignment.preset_snapshot ? [assignment.preset_snapshot] : []
   );
-  const onlyPreset = presetSnapshots[0];
-  const sameFormat = presetSnapshots.every(
-    (snapshot) => snapshot.workout_format === onlyPreset?.workout_format
-  );
-  const commonTimeCap = onlyPreset?.time_cap_seconds ?? null;
-  const sameTimeCap = presetSnapshots.every(
-    (snapshot) => (snapshot.time_cap_seconds ?? null) === commonTimeCap
-  );
+  const timing = resolveWorkoutSessionTiming(presetSnapshots);
   return {
     workoutSessionId: session.id,
     name: session.name,
     exercises,
     exerciseConfigs,
     workoutPlanAssignmentId: assignments[0]?.id,
-    workoutFormat: sameFormat
-      ? (onlyPreset?.workout_format ?? 'standard')
-      : 'standard',
-    timeCapSeconds: sameFormat && sameTimeCap ? commonTimeCap : null,
+    workoutFormat: timing.workoutFormat,
+    timeCapSeconds: timing.timeCapSeconds,
   };
 }
