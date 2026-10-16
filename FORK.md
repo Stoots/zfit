@@ -70,6 +70,8 @@ Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded her
 #### Bug fixes
 
 - Allow Workout Program consolidation when a Program includes Cardio Tests, preserving assessment and attempt links; assessment-only Programs return no workout proposal.
+- Prevent exercise replacement in web Training Program playback and recover older substituted drafts as separate, unlinked workouts.
+- Preserve a Workout Session's shared interval format and time cap across matching frozen presets on web, consistent with mobile.
 - Show the next three pending Training Program workouts on the web dashboard and the next one on mobile (ordered by effective date), keeping the session picker for standalone Workout Plans and falling back to all plans if Programs fail to load.
 - Reject `missed` outcomes for future Planned Sessions so an accidental click cannot trigger an irreversible auto-shift; index Program session diary links.
 - Restore per-set RPE entry in started workouts, including timed cardio, with decimal effort values retained in resumed drafts and workout save requests.

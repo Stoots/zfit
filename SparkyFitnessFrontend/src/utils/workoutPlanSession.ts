@@ -5,6 +5,7 @@ import type {
   WorkoutPresetExercise,
 } from '@/types/workout';
 import type { Exercise } from '@/types/exercises';
+import { resolveWorkoutSessionTiming } from '@workspace/shared';
 
 /** Resolve by UUID only. Labels, weekday, and standalone progression are not identity. */
 export async function buildWorkoutPlanSessionPreset(
@@ -55,8 +56,11 @@ export async function buildWorkoutPlanSessionPreset(
     throw new Error(
       'No exercises are prescribed in the selected Workout Session.'
     );
-  // A single preset retains its interval format/time cap. Mixed assignments form
-  // an ordered standard workout rather than applying one preset's format to all.
+  const timing = resolveWorkoutSessionTiming(
+    assignments.flatMap((assignment) =>
+      assignment.preset_snapshot ? [assignment.preset_snapshot] : []
+    )
+  );
   const snapshot =
     assignments.length === 1 ? assignments[0]?.preset_snapshot : null;
   return {
@@ -64,8 +68,8 @@ export async function buildWorkoutPlanSessionPreset(
     user_id: userId,
     name: session.name,
     description: snapshot?.description ?? plan.description,
-    workout_format: snapshot?.workout_format ?? 'standard',
-    time_cap_seconds: snapshot?.time_cap_seconds ?? null,
+    workout_format: timing.workoutFormat,
+    time_cap_seconds: timing.timeCapSeconds,
     workout_session_id: session.id,
     exercises,
   };
