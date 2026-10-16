@@ -266,9 +266,7 @@ describe('Cooper run Test Attempts', () => {
     expect(
       await screen.findByRole('img', { name: /Ramp Test trend by date/ })
     ).toBeInTheDocument();
-    expect(
-      screen.getByText(/280 W.*181 bpm.*145 bpm.*36 bpm/)
-    ).toBeInTheDocument();
+    expect(screen.getByText('280 W')).toBeInTheDocument();
   });
 
   it('accepts decimal commas for ramp watts and preserves a negative recovery', async () => {
@@ -341,16 +339,23 @@ describe('Cooper run Test Attempts', () => {
       .mocked(getTrainingPrograms)
       .mockResolvedValue([scheduledProgram('ramp', sessionId)]);
     renderWithClient(<CooperRunTests />);
-    const history = await screen.findByText(/280 W.*181 bpm.*145 bpm.*36 bpm/);
+    const history = (await screen.findByText('280 W')).closest('li')!;
+    for (const [label, value] of [
+      ['Peak heart rate (bpm)', '181 bpm'],
+      ['One-minute heart rate (bpm)', '145 bpm'],
+      ['Heart-rate recovery', '36 bpm'],
+    ]) {
+      expect(
+        within(history).getByText(label!).nextElementSibling
+      ).toHaveTextContent(value!);
+    }
     const chart = screen.getByRole('img', { name: 'Ramp Test trend by date' });
     await waitFor(() =>
       expect(chart.querySelectorAll('.recharts-line-dot')).toHaveLength(4)
     );
     expect(within(chart).getByText('2026-09-27')).toBeInTheDocument();
     expect(within(chart).getByText('2026-10-10')).toBeInTheDocument();
-    fireEvent.click(
-      within(history.closest('li')!).getByRole('button', { name: 'Edit' })
-    );
+    fireEvent.click(within(history).getByRole('button', { name: 'Edit' }));
     expect(screen.getByLabelText('Maximum watts (W)')).toHaveValue('280');
     expect(screen.getByLabelText('Peak heart rate (bpm)')).toHaveValue(181);
     expect(screen.getByLabelText('One-minute heart rate (bpm)')).toHaveValue(

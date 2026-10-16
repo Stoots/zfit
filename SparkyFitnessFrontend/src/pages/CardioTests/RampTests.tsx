@@ -21,6 +21,7 @@ import { useProtocolAttempts } from '@/hooks/CardioTests/useCooperRunAttempts';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { StatRows } from '@/components/ui/stat-rows';
 import { trendChartTheme } from '@/components/ui/trend-chart';
 import { parseWattsInput } from './wattsInput';
 
@@ -347,18 +348,46 @@ function RampProfile({
                 key={attempt.id}
                 className="flex flex-wrap items-center justify-between gap-3 p-3"
               >
-                <div className="min-w-0 break-words">
+                <div className="min-w-0 flex-1 basis-full break-words">
                   <time dateTime={attempt.attempt_date}>
                     {attempt.attempt_date}
                   </time>
-                  <p>
-                    {attempt.results.maximum_watts} W ·{' '}
-                    {attempt.results.peak_heart_rate} bpm ·{' '}
-                    {attempt.results.one_minute_heart_rate} bpm ·{' '}
-                    {attempt.results.peak_heart_rate -
-                      attempt.results.one_minute_heart_rate}{' '}
-                    bpm {t('cardioTests.ramp.recovery', 'Heart-rate recovery')}
-                  </p>
+                  <StatRows
+                    rows={[
+                      {
+                        id: 'watts',
+                        label: t(
+                          'cardioTests.ramp.maximumWatts',
+                          'Maximum watts (W)'
+                        ),
+                        value: `${attempt.results.maximum_watts} W`,
+                      },
+                      {
+                        id: 'peak',
+                        label: t(
+                          'cardioTests.ramp.peakHeartRate',
+                          'Peak heart rate (bpm)'
+                        ),
+                        value: `${attempt.results.peak_heart_rate} bpm`,
+                      },
+                      {
+                        id: 'one-minute',
+                        label: t(
+                          'cardioTests.ramp.oneMinuteHeartRate',
+                          'One-minute heart rate (bpm)'
+                        ),
+                        value: `${attempt.results.one_minute_heart_rate} bpm`,
+                      },
+                      {
+                        id: 'recovery',
+                        label: t(
+                          'cardioTests.ramp.recovery',
+                          'Heart-rate recovery'
+                        ),
+                        value: `${attempt.results.peak_heart_rate - attempt.results.one_minute_heart_rate} bpm`,
+                      },
+                    ]}
+                  />
                 </div>
                 {canWrite && (
                   <Button
