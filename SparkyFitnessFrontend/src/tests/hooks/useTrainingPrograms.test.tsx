@@ -182,3 +182,140 @@ it.each(['complete', 'link', 'playback'] as const)(
     client.clear();
   }
 );
+
+it.each([
+  ['complete', 'planned'],
+  ['outcome', 'planned'],
+  ['complete', 'omitted'],
+] as const)(
+  '%s keeps both completions when the earlier response arrives last with a %s session',
+  async (path, earlierStatus) => {
+    jest.clearAllMocks();
+    const before = program();
+    const earlier = program();
+    earlier.phases[0]!.weeks[0]!.sessions[0]!.status = 'completed';
+    earlier.phases[0]!.weeks[0]!.sessions[1]!.status = earlierStatus;
+    const later = program();
+    later.phases[0]!.weeks[0]!.sessions[0]!.status = 'completed';
+    later.phases[0]!.weeks[0]!.sessions[1]!.status = 'completed';
+    if (earlierStatus === 'omitted') {
+      for (const snapshot of [before, earlier, later]) {
+        snapshot.phases[0]!.weeks[0]!.sessions[1]!.is_optional = true;
+      }
+    }
+    const client = new QueryClient({
+      defaultOptions: { mutations: { retry: false } },
+    });
+    const listKey = trainingProgramKeys.list('athlete');
+    const detailKey = trainingProgramKeys.detail('athlete', 'program');
+    client.setQueryData(listKey, [before]);
+    client.setQueryData(detailKey, before);
+    let resolveEarlier!: (value: TrainingProgram) => void;
+    let resolveLater!: (value: TrainingProgram) => void;
+    const mutation =
+      path === 'complete'
+        ? jest.mocked(api.completeTrainingProgramSession)
+        : jest.mocked(api.recordTrainingProgramOutcome);
+    mutation
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveEarlier = resolve;
+          })
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveLater = resolve;
+          })
+      );
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const { result, unmount } = renderHook(
+      () => useTrainingPrograms('', false),
+      { wrapper }
+    );
+    const complete = (sessionId: string) =>
+      path === 'complete'
+        ? result.current.complete.mutateAsync({
+            programId: 'program',
+            sessionId,
+            input: { entry_date: '2026-10-14' },
+          })
+        : result.current.outcome.mutateAsync({
+            programId: 'program',
+            sessionId,
+            input: {
+              status: 'completed',
+              workout: { type: 'preset', id: sessionId },
+            },
+          });
+    let first!: Promise<TrainingProgram>;
+    let second!: Promise<TrainingProgram>;
+    act(() => {
+      first = complete('occurrence-1');
+      second = complete('occurrence-2');
+    });
+    await waitFor(() => expect(resolveLater).toBeDefined());
+    await act(async () => {
+      resolveLater(later);
+      await second;
+    });
+    await act(async () => {
+      resolveEarlier(earlier);
+      await first;
+    });
+    expect(queue(client.getQueryData<TrainingProgram[]>(listKey)!)).toEqual([
+      'occurrence-3',
+      'occurrence-4',
+      'occurrence-5',
+      'occurrence-6',
+    ]);
+    expect(client.getQueryData<TrainingProgram>(detailKey)).toEqual(later);
+    unmount();
+    client.clear();
+  }
+);
+
+it.each(['completed', 'missed', 'omitted'] as const)(
+  'preserves another %s session but accepts a reset for the response session and an edited Program',
+  async (status) => {
+    jest.clearAllMocks();
+    const cached = program();
+    cached.phases[0]!.weeks[0]!.sessions[0]!.status = status;
+    cached.phases[0]!.weeks[0]!.sessions[1]!.status = status;
+    const saved = program();
+    const client = new QueryClient();
+    const listKey = trainingProgramKeys.list('athlete');
+    const detailKey = trainingProgramKeys.detail('athlete', 'program');
+    client.setQueryData(listKey, [cached]);
+    client.setQueryData(detailKey, cached);
+    jest.mocked(api.recordTrainingProgramOutcome).mockResolvedValue(saved);
+    jest.mocked(api.saveTrainingProgram).mockResolvedValue(saved);
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    );
+    const { result, unmount } = renderHook(
+      () => useTrainingPrograms('athlete', false),
+      { wrapper }
+    );
+    await act(async () => {
+      await result.current.outcome.mutateAsync({
+        programId: 'program',
+        sessionId: 'occurrence-1',
+        input: { status: 'missed' },
+      });
+    });
+    const expected = program();
+    expected.phases[0]!.weeks[0]!.sessions[1]!.status = status;
+    expect(client.getQueryData(listKey)).toEqual([expected]);
+    expect(client.getQueryData(detailKey)).toEqual(expected);
+    await act(async () => {
+      await result.current.save.mutateAsync({ id: 'program', input: saved });
+    });
+    expect(client.getQueryData(detailKey)).toEqual(saved);
+    unmount();
+    client.clear();
+  }
+);

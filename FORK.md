@@ -72,7 +72,7 @@ Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded her
 
 #### Bug fixes
 
-- Show four pending Program workouts on the web dashboard and refresh the queue immediately after completing or linking any occurrence, preserving earlier unfinished sessions (#49).
+- Show four pending Program workouts on the web dashboard and refresh the queue immediately after completing or linking any occurrence, preserving earlier unfinished sessions and completed outcomes when mutation responses arrive out of order (#49).
 
 - Allow Workout Program consolidation when a Program includes Cardio Tests, preserving assessment and attempt links; assessment-only Programs return no workout proposal.
 - Prevent exercise replacement in web Training Program playback and recover older substituted drafts as separate, unlinked workouts.
