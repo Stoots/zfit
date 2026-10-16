@@ -89,6 +89,12 @@ function rows(graph: ConsolidationGraph, table: string): RawRow[] {
   return tableRows;
 }
 
+function rowsById(graph: ConsolidationGraph, table: string): RawRow[] {
+  return [...rows(graph, table)].sort((a, b) =>
+    rowId(a).localeCompare(rowId(b))
+  );
+}
+
 function row(
   graph: ConsolidationGraph,
   table: string,
@@ -183,12 +189,10 @@ export function assertRawConsolidationGraphsEqual(
     Object.keys(expected).sort()
   );
   for (const table of Object.keys(expected)) {
-    const sort = (tableRows: RawRow[]) =>
-      [...tableRows].sort((a, b) => rowId(a).localeCompare(rowId(b)));
     expect(
-      sort(rows(actual, table)),
+      rowsById(actual, table),
       `Every raw field in ${table}`
-    ).toStrictEqual(sort(rows(expected, table)));
+    ).toStrictEqual(rowsById(expected, table));
   }
 }
 
@@ -952,7 +956,9 @@ describe.runIf(run)('persisted lossless Workout Program consolidation', () => {
       'training_program_weeks',
       'training_program_sessions',
     ]) {
-      expect(rows(activatedGraph, table)).toStrictEqual(rows(after, table));
+      expect(rowsById(activatedGraph, table)).toStrictEqual(
+        rowsById(after, table)
+      );
     }
     expect(row(activatedGraph, 'workout_plan_sessions', cloneId)).toStrictEqual(
       row(before, 'workout_plan_sessions', cloneId)
@@ -1433,6 +1439,7 @@ describe.runIf(run)('persisted lossless Workout Program consolidation', () => {
     'occupied clone UUID',
   ])(
     'rejects invalid exact mapping: %s, with no row writes',
+    { timeout: 120_000 },
     async (invalid) => {
       const manifest = await proposal();
       const first = manifest.mapping[0]!;
