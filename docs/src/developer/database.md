@@ -610,7 +610,7 @@ An unrecorded old manifest missing `target_day_of_week` is rejected with status
 path. Never patch an approved manifest or rewrite a journal to recover a receipt.
 Preserve the exact original input and use a new private output path.
 
-The isolated disposable-Postgres consolidation regression suite passed 37 tests
+The isolated disposable-Postgres consolidation regression suite passed 39 tests
 with no failures, skips or pending cases. The existing RLS matrix ran separately
 through the migration-check suite; its 26 pre-existing skipped cases remain
 skips, not passes. These database checks do not constitute browser or production

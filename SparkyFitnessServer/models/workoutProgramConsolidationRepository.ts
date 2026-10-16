@@ -244,6 +244,9 @@ function selected(inventory: Inventory, programId: string): Row[] {
       );
     });
 }
+function workoutBindings(bindings: Row[]): Row[] {
+  return bindings.filter((s) => s.workout_session_id !== null);
+}
 function protections(
   inventory: Inventory,
   bindings: Row[]
@@ -417,9 +420,16 @@ function report(
     );
     return output;
   }
-  output.protections = protections(inventory, bindings);
+  const selectedWorkouts = workoutBindings(bindings);
+  if (!selectedWorkouts.length) {
+    output.blockers.push(
+      'Selected Program has no Workout Sessions to consolidate.'
+    );
+    return output;
+  }
+  output.protections = protections(inventory, selectedWorkouts);
   const sourceIds = [
-    ...new Set(bindings.map((s) => String(s.workout_session_id))),
+    ...new Set(selectedWorkouts.map((s) => String(s.workout_session_id))),
   ];
   const counters = {
     assignment: next(inventory, 'workout_plan_template_assignments'),
@@ -438,7 +448,7 @@ function report(
         target_day_of_week: null,
         mode,
         sort_order,
-        planned_session_ids: bindings
+        planned_session_ids: selectedWorkouts
           .filter((s) => s.workout_session_id === sourceId)
           .map((s) => String(s.id))
           .sort(),
@@ -538,7 +548,7 @@ function validateManifest(
 ): void {
   if (inventoryRevision(inventory) !== manifest.revision)
     fail(409, 'Preflight is stale; export and approve a new manifest.');
-  const bindings = selected(inventory, manifest.program_id);
+  const bindings = workoutBindings(selected(inventory, manifest.program_id));
   const sourceIds = new Set(bindings.map((s) => s.workout_session_id));
   const protection = protections(inventory, bindings);
   if (

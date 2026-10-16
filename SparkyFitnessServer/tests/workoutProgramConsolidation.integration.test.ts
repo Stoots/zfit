@@ -42,6 +42,7 @@ const RAW_GRAPH_QUERIES = {
   training_program_weeks: 'FROM training_program_weeks t WHERE t.user_id = $1',
   training_program_sessions:
     'FROM training_program_sessions t WHERE t.user_id = $1',
+  cardio_test_attempts: 'FROM cardio_test_attempts t WHERE t.user_id = $1',
   workout_plan_templates: 'FROM workout_plan_templates t WHERE t.user_id = $1',
   workout_plan_sessions: 'FROM workout_plan_sessions t WHERE t.user_id = $1',
   workout_plan_template_assignments:
@@ -1371,6 +1372,89 @@ describe.runIf(run)('persisted lossless Workout Program consolidation', () => {
       row(after, 'training_program_sessions', aId).workout_session_id
     ).toBe(row(after, 'training_program_sessions', bId).workout_session_id);
   });
+
+  it('consolidates workout sessions alongside a linked Cardio Test without changing the assessment', async () => {
+    const f = currentFixture();
+    const plannedId = randomUUID();
+    const attemptId = randomUUID();
+    await mutate(
+      `INSERT INTO training_program_sessions
+       (id, program_id, week_id, user_id, name, scheduled_date, effective_date, cardio_test_type, sort_order)
+       VALUES ($1, $2, $3, $4, 'Cooper assessment', $5, $5, 'cooper_run', 99)`,
+      [plannedId, f.programId, f.weekIds[0], f.ownerId, f.startDate]
+    );
+    await mutate(
+      `INSERT INTO cardio_test_attempts
+       (id, user_id, test_type, attempt_date, results, planned_session_id)
+       VALUES ($1, $2, 'cooper_run', $3, '{"distance_meters":2500}'::jsonb, $4)`,
+      [attemptId, f.ownerId, f.startDate, plannedId]
+    );
+    const before = await captureRawConsolidationGraph(f);
+    const manifest = await proposal();
+    expect(manifest.mapping).toHaveLength(f.sourceSessionIds.length);
+    expect(
+      manifest.mapping.flatMap((mapping) => mapping.planned_session_ids)
+    ).not.toContain(plannedId);
+    const result = await repository.applyWorkoutProgramConsolidation(
+      f.ownerId,
+      manifest
+    );
+    const after = await captureRawConsolidationGraph(f);
+    assertConsolidationGraphPreserved(before, after, manifest, result);
+    expect(row(after, 'training_program_sessions', plannedId)).toStrictEqual(
+      row(before, 'training_program_sessions', plannedId)
+    );
+    expect(row(after, 'cardio_test_attempts', attemptId)).toStrictEqual(
+      row(before, 'cardio_test_attempts', attemptId)
+    );
+  }, 120_000);
+
+  it('reports that an assessment-only Program has no workouts to consolidate', async () => {
+    const { saveProgram } =
+      await import('../services/trainingProgramService.js');
+    const f = currentFixture();
+    const end = new Date(`${f.startDate}T00:00:00Z`);
+    end.setUTCDate(end.getUTCDate() + 6);
+    const program = await saveProgram(f.ownerId, {
+      name: 'Assessments only',
+      goal: 'Measure progress',
+      start_date: f.startDate,
+      end_date: end.toISOString().slice(0, 10),
+      phases: [
+        {
+          name: 'Baseline',
+          goal: 'Measure progress',
+          weeks: [
+            {
+              start_date: f.startDate,
+              end_date: end.toISOString().slice(0, 10),
+              sessions: [
+                {
+                  name: 'Cooper assessment',
+                  scheduled_date: f.startDate,
+                  cardio_test_type: 'cooper_run',
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    extraProgramIds.push(program.id);
+    await withoutDataWrites(async () => {
+      const preflight = await repository.preflightWorkoutProgramConsolidation(
+        f.ownerId,
+        {
+          program_id: program.id,
+          target_plan_name: 'No workout target needed',
+        }
+      );
+      expect(preflight.blockers).toStrictEqual([
+        'Selected Program has no Workout Sessions to consolidate.',
+      ]);
+      expect(preflight.proposal).toBeNull();
+    });
+  }, 120_000);
 
   it('rejects an approved target ID occupied by an unrelated actual library write, without undoing that write', async () => {
     const f = currentFixture();
