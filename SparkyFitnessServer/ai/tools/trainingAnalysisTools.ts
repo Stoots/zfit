@@ -78,6 +78,14 @@ export function buildTrainingAnalysisTools(
                           (s) => s.id === session.workout_session_id
                         )
                     : undefined;
+                  const attempt = session.completed_test_attempt;
+                  const discloseAttemptResults =
+                    attempt &&
+                    scope.test_types.some(
+                      (type) => type === attempt.test_type
+                    ) &&
+                    attempt.attempt_date >= scope.start_date &&
+                    attempt.attempt_date <= scope.end_date;
                   rows.push({
                     program: {
                       id: program.id,
@@ -86,7 +94,30 @@ export function buildTrainingAnalysisTools(
                     },
                     phase: { id: phase.id, name: phase.name, goal: phase.goal },
                     week_id: week.id,
-                    ...session,
+                    id: session.id,
+                    name: session.name,
+                    scheduled_date: session.scheduled_date,
+                    effective_date: session.effective_date,
+                    status: session.status,
+                    is_optional: session.is_optional,
+                    outcome_at: session.outcome_at,
+                    sort_order: session.sort_order,
+                    workout_plan_id: session.workout_plan_id,
+                    workout_plan_name: session.workout_plan_name,
+                    workout_session_id: session.workout_session_id,
+                    workout_session_name: session.workout_session_name,
+                    cardio_test_type: session.cardio_test_type,
+                    completed_workout: session.completed_workout,
+                    completed_test_attempt: attempt
+                      ? {
+                          id: attempt.id,
+                          test_type: attempt.test_type,
+                          attempt_date: attempt.attempt_date,
+                          ...(discloseAttemptResults
+                            ? { results: attempt.results }
+                            : {}),
+                        }
+                      : null,
                     prescription: prescription ?? null,
                   });
                 }

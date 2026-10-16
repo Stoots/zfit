@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { buildTrainingAnalysisTools } from '../ai/tools/trainingAnalysisTools.js';
 import { toolOpts } from './helpers/toolExecutionOptions.js';
+import type { TrainingAnalysisScope } from '@workspace/shared';
 
 const { query, release } = vi.hoisted(() => ({
   query: vi.fn(),
@@ -22,6 +23,123 @@ import workoutPlanTemplateRepository from '../models/workoutPlanTemplateReposito
 import { getClient } from '../db/poolManager.js';
 
 describe('training analysis read tools', () => {
+  it.each<{
+    label: string;
+    testTypes: TrainingAnalysisScope['test_types'];
+    attemptDate: string;
+    discloseResults: boolean;
+  }>([
+    {
+      label: 'unselected tests',
+      testTypes: [],
+      attemptDate: '2026-10-02',
+      discloseResults: false,
+    },
+    {
+      label: 'another selected protocol',
+      testTypes: ['cooper_run'],
+      attemptDate: '2026-10-02',
+      discloseResults: false,
+    },
+    {
+      label: 'a late linked attempt',
+      testTypes: ['ramp'],
+      attemptDate: '2026-10-12',
+      discloseResults: false,
+    },
+    {
+      label: 'an earlier linked attempt',
+      testTypes: ['ramp'],
+      attemptDate: '2026-09-30',
+      discloseResults: false,
+    },
+    {
+      label: 'a selected in-range attempt',
+      testTypes: ['ramp'],
+      attemptDate: '2026-10-07',
+      discloseResults: true,
+    },
+    {
+      label: 'an attempt on the first selected day',
+      testTypes: ['ramp'],
+      attemptDate: '2026-10-01',
+      discloseResults: true,
+    },
+  ])(
+    'keeps linked attempt identity but scopes results for $label',
+    async ({ testTypes, attemptDate, discloseResults }) => {
+      const attempt = {
+        id: 'attempt',
+        test_type: 'ramp',
+        attempt_date: attemptDate,
+        results: {
+          maximum_watts: 340,
+          peak_heart_rate: 180,
+          one_minute_heart_rate: 145,
+        },
+      };
+      vi.mocked(getTrainingPrograms).mockResolvedValue([
+        {
+          id: 'program',
+          name: 'Build',
+          goal: 'Fitness',
+          phases: [
+            {
+              id: 'phase',
+              name: 'Base',
+              goal: 'Consistency',
+              weeks: [
+                {
+                  id: 'week',
+                  sessions: [
+                    {
+                      id: 'session',
+                      name: 'Ramp',
+                      effective_date: '2026-10-02',
+                      status: 'completed',
+                      workout_plan_id: null,
+                      cardio_test_type: 'ramp',
+                      completed_test_attempt: attempt,
+                    },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+      ] as unknown as Awaited<ReturnType<typeof getTrainingPrograms>>);
+      const tools = buildTrainingAnalysisTools('owner', {
+        start_date: '2026-10-01',
+        end_date: '2026-10-07',
+        programs: true,
+        test_types: testTypes,
+        health_metrics: [],
+      });
+      const result = JSON.parse(
+        String(
+          await tools.sparky_read_training_programs!.execute!({}, toolOpts)
+        )
+      );
+      expect(result.sessions[0]).toMatchObject({
+        id: 'session',
+        status: 'completed',
+        completed_test_attempt: {
+          id: 'attempt',
+          test_type: 'ramp',
+          attempt_date: attemptDate,
+        },
+      });
+      if (discloseResults)
+        expect(result.sessions[0].completed_test_attempt.results).toEqual(
+          attempt.results
+        );
+      else
+        expect(result.sessions[0].completed_test_attempt).not.toHaveProperty(
+          'results'
+        );
+    }
+  );
+
   it('preserves canonical outcomes and only the exact bound session prescription within the selected range', async () => {
     vi.mocked(getTrainingPrograms).mockResolvedValue([
       {

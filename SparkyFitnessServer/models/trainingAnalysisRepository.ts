@@ -14,8 +14,21 @@ const CUSTOM_CATEGORIES: Record<
   active_calories: [],
   resting_heart_rate: ['resting_heart_rate', 'RestingHeartRate'],
   vo2_max: ['vo2_max', 'Vo2Max'],
-  heart_rate: ['heart_rate', 'HeartRate'],
-  hrv: ['HRV', 'HRV_SDNN', 'HeartRateVariabilitySDNN'],
+  heart_rate: [
+    'heart_rate',
+    'HeartRate',
+    'heart_rate_min',
+    'heart_rate_max',
+    'heart_rate_avg',
+  ],
+  hrv: [
+    'HRV',
+    'HRV_SDNN',
+    'HeartRateVariabilitySDNN',
+    'HRV_SDNN_min',
+    'HRV_SDNN_max',
+    'HRV_SDNN_avg',
+  ],
 };
 
 const DAILY_COLUMNS = new Set([
