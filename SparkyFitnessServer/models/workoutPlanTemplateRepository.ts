@@ -790,20 +790,16 @@ async function deleteWorkoutPlanTemplate(
       await client.query('ROLLBACK');
       return null;
     }
-    const references = await client.query<{ kind: string }>(
-      `SELECT 'program' AS kind FROM training_program_sessions ps JOIN workout_plan_sessions s ON s.id = ps.workout_session_id
-      WHERE s.template_id = $1 AND s.user_id = $2
-      UNION ALL SELECT 'consolidation' AS kind FROM workout_program_consolidations
-      WHERE target_plan_id = $1 AND user_id = $2 LIMIT 1`,
+    const references = await client.query(
+      `SELECT 1 FROM training_program_sessions ps JOIN workout_plan_sessions s ON s.id = ps.workout_session_id
+      WHERE s.template_id = $1 AND s.user_id = $2 LIMIT 1`,
       [templateId, userId]
     );
-    if (references.rowCount) {
-      const message =
-        references.rows[0]?.kind === 'consolidation'
-          ? 'This Workout Plan retains a private consolidation rollback receipt; keep it until that operation is accepted.'
-          : 'Remove this Workout Plan’s exact session references from Training Programs before deleting it.';
-      throw new HttpError(message, 409);
-    }
+    if (references.rowCount)
+      throw new HttpError(
+        'Remove this Workout Plan’s exact session references from Training Programs before deleting it.',
+        409
+      );
     const assignmentIds = await client.query<{ id: number }>(
       'SELECT id FROM workout_plan_template_assignments WHERE template_id = $1 AND user_id = $2 ORDER BY id FOR UPDATE',
       [templateId, userId]

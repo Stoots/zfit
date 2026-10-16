@@ -11,7 +11,7 @@ Concrete examples for testing each layer of the application. Use these patterns 
 | **Isolated route** (endpoint) | Vitest + supertest | Request/response, status codes, validation errors | Mock service/auth boundaries, isolate HTTP behavior | `SparkyFitnessServer/tests/<domain>Routes.test.ts` |
 | **Isolated service** (business logic) | Vitest | Calculations, decisions, error handling | Mock repository, assert meaningful behavior | `SparkyFitnessServer/tests/<domain>Service.test.ts` |
 | **Repository** (database) | Vitest | Mapping, persistence invariants and errors | Existing fake-client tests isolate mapping/errors; real DB workflows prove persistence | `SparkyFitnessServer/tests/<domain>Repository.test.ts` and persisted suites below |
-| **Persisted workflow / RLS** | Vitest + disposable PostgreSQL | Authenticated workflows, transactions, identity/history preservation, owner/delegate isolation | Real auth/HTTP where applicable; non-superuser app-role reads/writes | `trainingPrograms.integration.test.ts`, `workoutPlanBulk.integration.test.ts`, `workoutProgramConsolidation.integration.test.ts`, `rlsPermissionMatrix.integration.test.ts` in server tests |
+| **Persisted workflow / RLS** | Vitest + disposable PostgreSQL | Authenticated workflows, transactions, identity/history preservation, owner/delegate isolation | Real auth/HTTP where applicable; non-superuser app-role reads/writes | `trainingPrograms.integration.test.ts`, `workoutPlanBulk.integration.test.ts`, `rlsPermissionMatrix.integration.test.ts` in server tests |
 | **React Query** (frontend) | Jest + @testing-library | Hook state, cache invalidation, error handling | Mock API module with `jest.mock`, test query lifecycle | `SparkyFitnessFrontend/src/tests/hooks/*.test.tsx` (flat) |
 | **Component** (UI) | Jest + @testing-library | Rendering, user interactions, form submission | Mock API hooks, test user flows | `SparkyFitnessFrontend/src/tests/components/` |
 | **Integration** (mobile) | Jest (jest-expo) | API calls, state updates, permissions | Mock `apiFetch`, test with real auth context | `SparkyFitnessMobile/__tests__/services/` (organized by layer) |
@@ -180,26 +180,21 @@ Use these real PostgreSQL seams for persisted behavior:
   authenticated HTTP, persisted Program structure, outcomes and owner isolation.
 - `tests/workoutPlanBulk.integration.test.ts`: authenticated preview/apply,
   selected-field preservation, eligibility/staleness and atomic rollback.
-- `tests/workoutProgramConsolidation.integration.test.ts` and
-  `tests/fixtures/workoutProgramConsolidation.ts`: real authenticated account
-  setup, owner-scoped repository apply, full raw graph preservation,
-  protected sources, fault/replay and journal behavior. Consolidation itself
-  is an operator repository/CLI action, not a new public HTTP endpoint.
 - `tests/rlsPermissionMatrix.integration.test.ts`: non-superuser app-role
   row filtering across owner, delegate and unrelated-user contexts.
 
 For Program/bulk harnesses and their database gates, read
 `docs/src/features/exercises/training-programs.md` → “Focused verification”.
-For consolidation backup/restore, explicit mapping and recovery, read
-`docs/src/developer/database.md` → “Selected-Program consolidation operator
-runbook”. Start the isolated schema through normal migrations/grants/RLS before
-these suites. Keep each opt-in suite's host, database-name and environment guards
-intact; fault-trigger suites belong only in explicitly disposable databases.
+The one-off consolidation tool and acceptance suite were retired after cutover (#50).
+The retained journal still has owner/delegate coverage in the RLS matrix.
+Start the isolated schema through normal migrations/grants/RLS before these suites.
+Keep bulk acceptance opt-in guards intact; fault-trigger suites belong only in
+explicitly disposable databases.
 Serialize fixtures that initialize/reapply schema or RLS. A missing database,
 disabled opt-in or skipped suite is not a passing acceptance run.
 
 General CI selection and migration database setup live in
-`.github/workflows/ci-tests.yml`; guarded consolidation and bulk acceptance
+`.github/workflows/ci-tests.yml`; guarded bulk acceptance
 run in `.github/workflows/fork-guarded-acceptance.yml`. Required-suite JSON
 report checks live in `.github/scripts/assert-acceptance-report.mjs`. Use those
 files as the source of truth for job selection and missing/skipped-case enforcement.
@@ -529,7 +524,7 @@ describe('meals API', () => {
 
 Read the root and affected workspace `package.json` scripts for current test and
 validation commands. Choose the nearest existing behavior suite and follow its
-setup/opt-in guards; use the Program guide and consolidation runbook above for
+setup/opt-in guards; use the Program guide above for
 database workflows. `.github/workflows/ci-tests.yml` defines CI coverage and
 database setup. Jest component/mobile tests do not replace actual browser or
 native workout runtime verification.

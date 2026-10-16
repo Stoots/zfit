@@ -38,34 +38,6 @@ import exerciseEntryDb from '../models/exerciseEntry.js';
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import { getClient, getSystemClient, endPool } from '../db/poolManager.js';
 
-function assertDisposableJournalDatabase() {
-  const database = process.env.SPARKY_FITNESS_DB_NAME ?? '';
-  const host = process.env.SPARKY_FITNESS_DB_HOST ?? '';
-  if (
-    process.env.RUN_CONSOLIDATION_DB !== '1' ||
-    !/^zfit_consolidation14_disposable(?:_[a-z0-9]+)?$/.test(database) ||
-    !['localhost', '127.0.0.1', '::1'].includes(host)
-  ) {
-    throw new Error(
-      'Journal fixtures require RUN_CONSOLIDATION_DB=1 and a loopback zfit_consolidation14_disposable database'
-    );
-  }
-}
-
-if (process.env.RUN_CONSOLIDATION_DB === '1') {
-  assertDisposableJournalDatabase();
-}
-
-async function assertDisposableJournalConnection(client: PoolClient) {
-  assertDisposableJournalDatabase();
-  const result = await client.query<{ database: string }>(
-    'SELECT current_database() AS database'
-  );
-  expect(result.rows).toStrictEqual([
-    { database: process.env.SPARKY_FITNESS_DB_NAME },
-  ]);
-}
-
 // Probe the app role RLS actually needs, with a short timeout, using a
 // standalone client. Returns false on any failure so the suite skips rather
 // than erroring when no DB is reachable.
@@ -130,9 +102,6 @@ describe.runIf(RUN)('RLS permission matrix', () => {
   beforeAll(async () => {
     const sys = await getSystemClient();
     try {
-      if (process.env.RUN_CONSOLIDATION_DB === '1') {
-        await assertDisposableJournalConnection(sys);
-      }
       // Idempotent clean slate (cascades remove family_access).
       await sys.query('DELETE FROM public."user" WHERE id = ANY($1::uuid[])', [
         ALL_IDS,
@@ -164,9 +133,6 @@ describe.runIf(RUN)('RLS permission matrix', () => {
   afterAll(async () => {
     const sys = await getSystemClient();
     try {
-      if (process.env.RUN_CONSOLIDATION_DB === '1') {
-        await assertDisposableJournalConnection(sys);
-      }
       await sys.query('DELETE FROM public."user" WHERE id = ANY($1::uuid[])', [
         ALL_IDS,
       ]);
@@ -1154,177 +1120,166 @@ describe.runIf(RUN)('RLS permission matrix', () => {
         });
       }
 
-      describe.runIf(process.env.RUN_CONSOLIDATION_DB === '1')(
-        'consolidation journal owner-only access',
-        () => {
-          const journalId = randomUUID();
-          const initialResult = { acceptance_note: 'original journal result' };
+      describe('consolidation journal owner-only access', () => {
+        const journalId = randomUUID();
+        const initialResult = { acceptance_note: 'original journal result' };
 
-          beforeAll(async () => {
-            assertDisposableJournalDatabase();
-            const client = await getClient(OWNER, OWNER);
-            try {
-              await assertDisposableJournalConnection(client);
-              await client.query(
-                `INSERT INTO workout_program_consolidations
+        beforeAll(async () => {
+          const client = await getClient(OWNER, OWNER);
+          try {
+            await client.query(
+              `INSERT INTO workout_program_consolidations
                    (id, user_id, program_id, target_plan_id, manifest, result)
                  VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb)`,
-                [
-                  journalId,
-                  OWNER,
-                  program.programId,
-                  plan.planId,
-                  JSON.stringify({ operation_id: journalId }),
-                  JSON.stringify(initialResult),
-                ]
-              );
-            } finally {
-              client.release();
-            }
-          });
+              [
+                journalId,
+                OWNER,
+                program.programId,
+                plan.planId,
+                JSON.stringify({ operation_id: journalId }),
+                JSON.stringify(initialResult),
+              ]
+            );
+          } finally {
+            client.release();
+          }
+        });
 
-          afterAll(async () => {
-            assertDisposableJournalDatabase();
-            const client = await getClient(OWNER, OWNER);
-            try {
-              await client.query(
-                'DELETE FROM workout_program_consolidations WHERE id = $1',
-                [journalId]
-              );
-            } finally {
-              client.release();
-            }
-          });
+        afterAll(async () => {
+          const client = await getClient(OWNER, OWNER);
+          try {
+            await client.query(
+              'DELETE FROM workout_program_consolidations WHERE id = $1',
+              [journalId]
+            );
+          } finally {
+            client.release();
+          }
+        });
 
-          it('owner can create, read, genuinely edit and delete a journal row', async () => {
-            assertDisposableJournalDatabase();
-            const client = await getClient(OWNER, OWNER);
-            const id = randomUUID();
-            const editedResult = {
-              acceptance_note: 'owner edited the stored result',
-              target_plan_id: plan.planId,
-            };
-            try {
-              await client.query('BEGIN');
-              await client.query(
-                `INSERT INTO workout_program_consolidations
+        it('owner can create, read, genuinely edit and delete a journal row', async () => {
+          const client = await getClient(OWNER, OWNER);
+          const id = randomUUID();
+          const editedResult = {
+            acceptance_note: 'owner edited the stored result',
+            target_plan_id: plan.planId,
+          };
+          try {
+            await client.query('BEGIN');
+            await client.query(
+              `INSERT INTO workout_program_consolidations
                    (id, user_id, program_id, target_plan_id, manifest, result)
                  VALUES ($1, $2, $3, $4, '{}'::jsonb, $5::jsonb)`,
-                [
-                  id,
-                  OWNER,
-                  program.programId,
-                  plan.planId,
-                  JSON.stringify(initialResult),
-                ]
-              );
-              const original = await client.query(
-                'SELECT id, user_id, program_id, target_plan_id, result FROM workout_program_consolidations WHERE id = $1',
-                [id]
-              );
-              expect(original.rows).toEqual([
-                {
-                  id,
-                  user_id: OWNER,
-                  program_id: program.programId,
-                  target_plan_id: plan.planId,
-                  result: initialResult,
-                },
-              ]);
-              const edited = await client.query(
-                'UPDATE workout_program_consolidations SET result = $2::jsonb WHERE id = $1 RETURNING result',
-                [id, JSON.stringify(editedResult)]
-              );
-              expect(edited.rows).toEqual([{ result: editedResult }]);
-              const stored = await client.query(
-                'SELECT result FROM workout_program_consolidations WHERE id = $1',
-                [id]
-              );
-              expect(stored.rows).toEqual([{ result: editedResult }]);
-              const deleted = await client.query(
-                'DELETE FROM workout_program_consolidations WHERE id = $1 RETURNING id',
-                [id]
-              );
-              expect(deleted.rows).toEqual([{ id }]);
-              expect(
-                (
-                  await client.query(
-                    'SELECT id FROM workout_program_consolidations WHERE id = $1',
-                    [id]
-                  )
-                ).rows
-              ).toEqual([]);
-            } finally {
-              await client.query('ROLLBACK');
-              client.release();
-            }
-          });
+              [
+                id,
+                OWNER,
+                program.programId,
+                plan.planId,
+                JSON.stringify(initialResult),
+              ]
+            );
+            const original = await client.query(
+              'SELECT id, user_id, program_id, target_plan_id, result FROM workout_program_consolidations WHERE id = $1',
+              [id]
+            );
+            expect(original.rows).toEqual([
+              {
+                id,
+                user_id: OWNER,
+                program_id: program.programId,
+                target_plan_id: plan.planId,
+                result: initialResult,
+              },
+            ]);
+            const edited = await client.query(
+              'UPDATE workout_program_consolidations SET result = $2::jsonb WHERE id = $1 RETURNING result',
+              [id, JSON.stringify(editedResult)]
+            );
+            expect(edited.rows).toEqual([{ result: editedResult }]);
+            const stored = await client.query(
+              'SELECT result FROM workout_program_consolidations WHERE id = $1',
+              [id]
+            );
+            expect(stored.rows).toEqual([{ result: editedResult }]);
+            const deleted = await client.query(
+              'DELETE FROM workout_program_consolidations WHERE id = $1 RETURNING id',
+              [id]
+            );
+            expect(deleted.rows).toEqual([{ id }]);
+            expect(
+              (
+                await client.query(
+                  'SELECT id FROM workout_program_consolidations WHERE id = $1',
+                  [id]
+                )
+              ).rows
+            ).toEqual([]);
+          } finally {
+            await client.query('ROLLBACK');
+            client.release();
+          }
+        });
 
-          it.for(KEYS)(
-            'delegate %s cannot access owner journals with or without switched context',
-            async (key) => {
-              assertDisposableJournalDatabase();
-              for (const switched of [false, true]) {
-                const client = await getClient(
-                  switched ? OWNER : D[key],
-                  D[key]
-                );
-                try {
-                  await client.query('BEGIN');
-                  expect(
-                    (
-                      await client.query(
-                        'SELECT id, manifest, result FROM workout_program_consolidations WHERE id = $1',
-                        [journalId]
-                      )
-                    ).rows
-                  ).toEqual([]);
-                  expect(
-                    (
-                      await client.query(
-                        'UPDATE workout_program_consolidations SET result = \'{"acceptance_note":"delegate overwrite"}\'::jsonb WHERE id = $1 RETURNING id',
-                        [journalId]
-                      )
-                    ).rows
-                  ).toEqual([]);
-                  expect(
-                    (
-                      await client.query(
-                        'DELETE FROM workout_program_consolidations WHERE id = $1 RETURNING id',
-                        [journalId]
-                      )
-                    ).rows
-                  ).toEqual([]);
-                  await expect(
-                    client.query(
-                      `INSERT INTO workout_program_consolidations
-                         (id, user_id, program_id, target_plan_id, manifest, result)
-                       VALUES ($1, $2, $3, $4, '{}'::jsonb, '{}'::jsonb)`,
-                      [randomUUID(), OWNER, program.programId, plan.planId]
-                    )
-                  ).rejects.toMatchObject({ code: RLS_DENIED });
-                } finally {
-                  await client.query('ROLLBACK');
-                  client.release();
-                }
-              }
-              const ownerClient = await getClient(OWNER, OWNER);
+        it.for(KEYS)(
+          'delegate %s cannot access owner journals with or without switched context',
+          async (key) => {
+            for (const switched of [false, true]) {
+              const client = await getClient(switched ? OWNER : D[key], D[key]);
               try {
+                await client.query('BEGIN');
                 expect(
                   (
-                    await ownerClient.query(
-                      'SELECT result FROM workout_program_consolidations WHERE id = $1',
+                    await client.query(
+                      'SELECT id, manifest, result FROM workout_program_consolidations WHERE id = $1',
                       [journalId]
                     )
                   ).rows
-                ).toEqual([{ result: initialResult }]);
+                ).toEqual([]);
+                expect(
+                  (
+                    await client.query(
+                      'UPDATE workout_program_consolidations SET result = \'{"acceptance_note":"delegate overwrite"}\'::jsonb WHERE id = $1 RETURNING id',
+                      [journalId]
+                    )
+                  ).rows
+                ).toEqual([]);
+                expect(
+                  (
+                    await client.query(
+                      'DELETE FROM workout_program_consolidations WHERE id = $1 RETURNING id',
+                      [journalId]
+                    )
+                  ).rows
+                ).toEqual([]);
+                await expect(
+                  client.query(
+                    `INSERT INTO workout_program_consolidations
+                         (id, user_id, program_id, target_plan_id, manifest, result)
+                       VALUES ($1, $2, $3, $4, '{}'::jsonb, '{}'::jsonb)`,
+                    [randomUUID(), OWNER, program.programId, plan.planId]
+                  )
+                ).rejects.toMatchObject({ code: RLS_DENIED });
               } finally {
-                ownerClient.release();
+                await client.query('ROLLBACK');
+                client.release();
               }
             }
-          );
-        }
-      );
+            const ownerClient = await getClient(OWNER, OWNER);
+            try {
+              expect(
+                (
+                  await ownerClient.query(
+                    'SELECT result FROM workout_program_consolidations WHERE id = $1',
+                    [journalId]
+                  )
+                ).rows
+              ).toEqual([{ result: initialResult }]);
+            } finally {
+              ownerClient.release();
+            }
+          }
+        );
+      });
 
       it('public sources neither expose their consuming hierarchy nor permit another owner Program binding', async () => {
         for (const [table, id] of [

@@ -7,8 +7,8 @@ import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { assertAcceptanceReport } from "./assert-acceptance-report.mjs";
 
-const suitePath = "tests/workoutProgramConsolidation.integration.test.ts";
-const otherPath = "tests/workoutPlanBulk.integration.test.ts";
+const suitePath = "tests/workoutPlanBulk.integration.test.ts";
+const otherPath = "tests/trainingPrograms.integration.test.ts";
 
 function suite(
   path = suitePath,
@@ -106,7 +106,7 @@ test("rejects missing, empty, duplicate, unexpected, and ambiguous suites", () =
     () =>
       assertAcceptanceReport(report(), collected(), [
         suitePath,
-        "workoutProgramConsolidation.integration.test.ts",
+        "workoutPlanBulk.integration.test.ts",
       ]),
     /ambiguous|Missing expected/,
   );

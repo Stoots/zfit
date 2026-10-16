@@ -1,6 +1,6 @@
 # Handover
 
-_Last updated: 2026-10-16_
+_Last updated: 2026-10-17_
 
 Read this after `AGENTS.md` and `FORK.md`. It records the landing state and the next work. Verify live issue and branch status before starting a ticket.
 
@@ -22,11 +22,13 @@ Deployment targets, rollback files, Penpot design-file IDs and local tool setup 
 
 The issue queue is on `Stoots/zfit` (`docs/agents/issue-tracker.md`). Specs #1 and #9 and ADR 0003 set the accepted design; #9 supersedes #1 for session identity.
 
-1. #50: remove the one-off consolidation tool now that #14 has run.
-2. #6 ramp Tests, then #8 AI queries.
-3. Cleanup tickets #16, #19 and #21.
-4. #37 iPhone web app ease-of-use audit (low priority).
-5. Upstream sync (`FORK.md` procedure).
+The #50 cleanup retires the completed one-off consolidation tool; the historical
+journal, migration, schema and RLS coverage remain.
+
+1. #6 ramp Tests, then #8 AI queries.
+2. Cleanup tickets #16, #19 and #21.
+3. #37 iPhone web app ease-of-use audit (low priority).
+4. Upstream sync (`FORK.md` procedure).
 
 Owner items: a walkthrough of the #18 delegate access decision (closed by #24; the owner has asked for an explanation). Keep private cutover identifiers out of the issue tracker.
 
