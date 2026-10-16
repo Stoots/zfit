@@ -91,11 +91,13 @@ Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded her
 - Bind Program Planned Sessions to exact Workout Sessions and retain session-level prescriptions (#11).
 - Support optional sessions and linking a completed workout after its scheduled date (#12).
 - Preview and apply selected future prescriptions in bulk with Program-aware conflict checks (#13).
-- Add owner-scoped Workout Plan consolidation preflight, explicit mappings, replay-safe transactions, and private rollback receipts (#14). Live cutover remains separately approval-gated.
+- Add owner-scoped Workout Plan consolidation preflight, explicit mappings, replay-safe transactions, and private rollback receipts (#14). Live cutover completed on 2026-10-15; the one-off tool was retired in #50.
 - Training Programs: authoring, outcomes, and optional auto-shift (issues #2, #3). See `docs/src/features/exercises/training-programs.md` and `docs/adr/`.
 
 #### Developer tooling
 
+- Retire the completed one-off Program consolidation tool and its acceptance job (#50); retain the historical journal, migration, schema and owner-only RLS coverage.
+
 - Add a warm-cache deployment smoke command that verifies the browser's loaded frontend asset and live upcoming-workout order, with private JSON/screenshot evidence and CI acceptance checks (`agent-docs/deployment-smoke.md`).
 - Run the Training Program integration suite in CI against Postgres; trigger consumer checks for shared-contract changes.
-- Add guarded, isolated PostgreSQL acceptance jobs for consolidation and bulk workflows; require the JSON report checker to reject missing, skipped or incomplete suites. The existing migration-check job runs the RLS matrix.
+- Add guarded, isolated PostgreSQL acceptance jobs for bulk workflows (the completed consolidation slice was retired in #50); require the JSON report checker to reject missing, skipped or incomplete suites. The existing migration-check job runs the RLS matrix.

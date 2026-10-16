@@ -92,15 +92,11 @@ assignment IDs and diary links, including when switching weekly/sequential
 scheduling. Removing a session still used by a Program, or an assignment still
 linked to diary history, is refused without saving partial changes.
 
-An explicitly approved operator consolidation groups one owner's Program workouts
-into an inactive reusable plan; it is not a delegate action. The new plan keeps
-normal library-sharing rules, but has no start/end dates copied from the private
-Program calendar. Active family exercise-library/report readers protect the
-source sessions: consolidation clones the selected prescriptions and retains
-the original shared containers rather than moving their sessions away. Other
-Programs, standalone workouts and diary history are also protected. Deleting a
-plan retained by a consolidation journal is refused; the journal is private
-and does not grant additional access to either the Program or workout history.
+The one-off Program consolidation tool was retired after cutover (#50).
+Its retained journal is a private owner-only audit record and grants no extra
+access to Programs or workout history. The resulting plan keeps normal library
+sharing rules; the private Program calendar was not copied to its dates.
+Deleting a plan retained by the journal remains refused by its foreign key.
 
 ### 5. Automatic Token Validation & Expiry
 
