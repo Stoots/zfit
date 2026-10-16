@@ -5,13 +5,16 @@
 - `FORK.md` (this file)
 - `agent-docs/` (fork additions: `HANDOVER.md`, `deployment-smoke.md`)
 - `docs/adr/`, `docs/agents/`
-- `scripts/deployment-smoke*`, `scripts/fork-check-commits*`, `scripts/fork-check-pr-body*`, `.github/workflows/deployment-smoke-checks.yml`, `.github/workflows/fork-guarded-acceptance.yml`
+- `scripts/deployment-smoke*`, `scripts/fork-check-commits*`, `scripts/fork-check-pr-body*`, `.github/scripts/assert-acceptance-report*`, `.github/workflows/deployment-smoke-checks.yml`, `.github/workflows/fork-*.yml`
+
+The native app (`SparkyFitnessMobile/`) stays at upstream behaviour: the owner's iPhone runs the upstream App Store app plus the fork's web app from the Home Screen, so fork features ship to web. `fork-check-commits` warns on native-app changes.
 
 ## Where to start
 
 - Current state and next steps: `agent-docs/HANDOVER.md`.
-- Work queue: GitHub issues on `Stoots/zfit` (see `docs/agents/issue-tracker.md`). #5 and #7 have active preparatory branches, but implementation remains blocked until open issue #4 is resolved; #6 and #8 follow. Specs: #1 and #9 (#9 supersedes #1 for session identity).
+- Work queue: GitHub issues on `Stoots/zfit` (see `docs/agents/issue-tracker.md`); the current order is in `agent-docs/HANDOVER.md`. Specs: #1 and #9 (#9 supersedes #1 for session identity).
 - Deployment verification: `agent-docs/deployment-smoke.md`.
+- Every PR runs `.github/workflows/fork-checks.yml` (commit and PR-text rules: no assistant or bot attribution, no `db_schema_backup.sql` edits).
 - Before delivery: review changes against `main` on both repo standards and the originating issue/spec (`agent-docs/pr-review-checklist.md`), then verify each commit's affected package typecheck. Green tests alone did not catch the PR #20 spec gaps.
 - Local verification: run multi-file database suites with Vitest `--no-file-parallelism`; place mobile Jest caches under `~/.cache` via `--cacheDirectory`. The `jest-expo` runtime lacks `Promise.withResolvers`.
 

@@ -116,6 +116,27 @@ uses; explicit `delete_with_history` deletes every diary entry for this exercise
 owned by the user, even if an entry links to a different exercise's assignment.
 It also removes empty parent preset entries.
 
+### ✅ RIGHT: Cleanups that delete generated diary rows prove provenance
+
+Any automatic cleanup that deletes diary rows (plan edit or delete, regeneration,
+sync replacement) treats every row as history unless all of these hold. Weekly
+prefill (#45, `is_weekly_prefill`) is the reference implementation:
+
+- **Provenance:** select only rows the generator positively marked. Source,
+  date and assignment link cannot tell a generated row from one the user
+  started explicitly. Legacy rows without the marker stay protected.
+- **Touched is history:** an edit, a completed set, feedback, or an in-progress
+  save on any child protects the whole group, so 409 beats a partial delete.
+- **Under lock:** lock the plan, then the group and its children (`NOWAIT` →
+  409 when a player holds them), then re-check eligibility and compute the
+  user's day inside the transaction.
+- **Appends too:** adding to an existing group follows the same rules, so a new
+  exercise never lands in a completed or edited workout.
+
+A stale client save after such a cleanup returns 409 rather than rewriting the
+replacement. See `models/workoutPlanTemplateRepository.ts` and
+`tests/trainingPrograms.integration.test.ts`.
+
 ---
 
 ## React Query (Frontend & Mobile)

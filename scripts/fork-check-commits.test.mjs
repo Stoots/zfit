@@ -65,6 +65,36 @@ test("passes valid paths and reports upstream-owned edits as warnings", () => {
   }
 });
 
+test("does not warn about fork-owned GitHub files", () => {
+  const { cwd, base } = fixture();
+  try {
+    write(cwd, ".github/workflows/fork-checks.yml", "on: push\n");
+    write(cwd, ".github/scripts/assert-acceptance-report.mjs", "changed\n");
+    commit(cwd, "update fork CI");
+    const result = check(cwd, base);
+    assert.equal(result.status, 0, result.stderr);
+    assert.doesNotMatch(result.stdout, /WARNING/);
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("warns when a commit changes the frozen native app", () => {
+  const { cwd, base } = fixture();
+  try {
+    write(cwd, "SparkyFitnessMobile/src/utils/session.ts", "changed\n");
+    commit(cwd, "refactor session builder");
+    const result = check(cwd, base);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(
+      result.stdout,
+      /WARNING.*native app.*SparkyFitnessMobile\/src\/utils\/session\.ts/,
+    );
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
 test("finds a workflow test reference missing from that commit", () => {
   const { cwd, base } = fixture();
   try {
