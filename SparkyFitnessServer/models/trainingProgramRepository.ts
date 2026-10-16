@@ -746,6 +746,11 @@ export async function completeTrainingProgramSession(
       throw new HttpError('Planned Session not found.', 404);
     const current = (await readPrograms(client, userId, programId))[0]!;
     const session = findSession(current, sessionId)!;
+    if (!session.workout_session_id)
+      throw new HttpError(
+        'This Planned Session has no bound Workout Session.',
+        409
+      );
     if (session.status === 'completed') {
       if (performedExercises) {
         const linked = session.completed_workout;
@@ -777,11 +782,6 @@ export async function completeTrainingProgramSession(
       !(session.status === 'omitted' && session.is_optional)
     )
       throw new HttpError('This session already has a recorded outcome.', 409);
-    if (!session.workout_session_id)
-      throw new HttpError(
-        'This Planned Session has no bound Workout Session.',
-        409
-      );
 
     const created = await logWorkoutPlanSession(
       userId,

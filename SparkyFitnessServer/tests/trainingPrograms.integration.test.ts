@@ -406,6 +406,8 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
       await import('../routes/trainingProgramRoutes.js');
     const { default: workoutRoutes } =
       await import('../routes/workoutPlanTemplateRoutes.js');
+    const { default: cardioRoutes } =
+      await import('../routes/cardioTestRoutes.js');
     // These imports transitively load Better Auth's schema checks; defer them
     // until the disposable DB probe succeeds, as with the existing routers.
     const { default: completionRoutes } =
@@ -418,6 +420,7 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
     app.use(express.json(), cookieParser());
     app.use('/api/training-programs', routes);
     app.use('/api/workout-plan-templates', workoutRoutes);
+    app.use('/api/cardio-tests', cardioRoutes);
     app.use('/api/exercise-preset-entries', authenticate, completionRoutes);
     app.use('/api/exercise-entries', diaryRoutes);
     app.use('/api/v2/exercise-entries', authenticate, historyRoutes);
@@ -1513,7 +1516,51 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
       program = trainingProgramSchema.parse(updated.body);
       const result = await complete(sessions(program)[0]!.id);
       expect(result.status).toBe(409);
+      expect(result.body.error).toBe(
+        'This Planned Session has no bound Workout Session.'
+      );
       expect(sessions(await reload())[0]!.status).toBe('planned');
+    });
+
+    it('rejects workout completion of an already completed Cardio Test session', async () => {
+      const edit = editable(program);
+      edit.phases[0]!.weeks[0]!.sessions[0]!.workout_session_id = null;
+      edit.phases[0]!.weeks[0]!.sessions[0]!.cardio_test_type = 'cooper_run';
+      const updated = await update(edit);
+      expect(updated.status).toBe(200);
+      program = trainingProgramSchema.parse(updated.body);
+      const session = sessions(program)[0]!;
+      const attempt = await request(app)
+        .post('/api/cardio-tests/cooper-run/attempts')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({
+          attempt_date: '2026-10-25',
+          distance_meters: 2500,
+          planned_session_id: session.id,
+        });
+      expect(attempt.status).toBe(201);
+      expect(sessions(await reload())[0]!.status).toBe('completed');
+
+      const result = await complete(session.id);
+      expect(result.status).toBe(409);
+      expect(result.body.error).toBe(
+        'This Planned Session has no bound Workout Session.'
+      );
+      const withPerformed = await complete(
+        session.id,
+        '2026-10-25',
+        ownerToken,
+        [
+          {
+            exercise_id: randomUUID(),
+            workout_plan_assignment_id: 1,
+            sets: [{ set_number: 1, reps: 1 }],
+          },
+        ]
+      );
+      expect(withPerformed.status).toBe(409);
+      expect(withPerformed.body.error).toBe(result.body.error);
+      expect(sessions(await reload())[0]!.status).toBe('completed');
     });
 
     it('rejects performed exercises outside the bound session', async () => {
