@@ -225,6 +225,43 @@ describe('WorkoutPlaybackPage', () => {
     });
   });
 
+  it('reports a rejected separate save as a save failure, not a Program rejection', async () => {
+    const draft = createWorkoutPlaybackDraftFromPreset(
+      presetFixture,
+      '2026-04-27'
+    );
+    draft.training_program = {
+      program_id: 'program-1',
+      session_id: 'planned-1',
+    };
+    draft.exercises[0]!.exercise_id = 'replacement-exercise';
+    draft.exercises[0]!.workout_plan_assignment_id = 17;
+    draft.exercises[0]!.sets[0]!.completed = true;
+    saveWorkoutPlaybackDraftToStorage(draft);
+    mockLocationState = null;
+    mockCompleteProgramSession.mockRejectedValue(
+      new HttpApiError(
+        'Performed exercises must belong to the bound Workout Session.',
+        400
+      )
+    );
+    mockCreatePresetSession.mockRejectedValue(
+      new HttpApiError('Invalid workout.', 400)
+    );
+
+    render(<WorkoutPlaybackPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'Finish Workout' }));
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Save as a separate workout' })
+    );
+    expect(
+      await screen.findByText(/Failed to save workout/)
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(/cannot complete the Planned Session/)
+    ).not.toBeInTheDocument();
+  });
+
   it('keeps a failed Program draft for an idempotent retry and blocks double submission', async () => {
     const draft = createWorkoutPlaybackDraftFromPreset(
       presetFixture,

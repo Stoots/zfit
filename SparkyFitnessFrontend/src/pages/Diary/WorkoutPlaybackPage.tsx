@@ -1110,6 +1110,7 @@ const WorkoutPlaybackPage = () => {
             )
           );
         } else if (
+          !saveSeparately &&
           draft.training_program &&
           error &&
           typeof error === 'object' &&
