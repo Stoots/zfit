@@ -16,6 +16,9 @@ on:
       - ".github/scripts/assert-acceptance-report*"
       - ".github/workflows/fork-guarded-acceptance.yml"
 
+permissions:
+  contents: read
+
 jobs:
   guarded-acceptance:
     name: Guarded ${{ matrix.slice }} Acceptance
