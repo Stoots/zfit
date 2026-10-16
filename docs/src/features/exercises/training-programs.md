@@ -91,6 +91,10 @@ phase, week and Planned Session identities, dates, same-day order, optional
 overrides and recorded outcomes stay intact. No workouts or absent deload
 sessions are created.
 
+Cardio Test Planned Sessions and their linked Test Attempts stay unchanged;
+only workout-bound sessions enter the mapping. A Program containing only
+assessments has no workouts to consolidate, so preflight returns no proposal.
+
 The operator first reviews a read-only inventory and exact identity mapping.
 Unshared, unprotected sessions move with their Session/assignment/set IDs
 retained. Sessions still needed by another Program, standalone plan, family
