@@ -156,7 +156,7 @@ function expectTrend(dates: string[], distances: number[]) {
 }
 
 function scheduledProgram(
-  protocol: 'cooper_run' | 'sprint_6s' | 'power_30s',
+  protocol: 'cooper_run' | 'sprint_6s' | 'power_30s' | 'ramp',
   sessionId: string
 ): TrainingProgram {
   return {
@@ -217,6 +217,191 @@ describe('Cooper run Test Attempts', () => {
     jest.clearAllMocks();
     mockActiveUserId = '00000000-0000-4000-a000-000000000001';
     jest.mocked(getTrainingPrograms).mockResolvedValue([]);
+  });
+
+  it('records a scheduled ramp attempt and plots maximum watts and heart-rate recovery', async () => {
+    const sessionId = '00000000-0000-4000-a000-000000000099';
+    window.history.replaceState(
+      {},
+      '',
+      `/cardio-tests?planned_session_id=${sessionId}&protocol=ramp`
+    );
+    jest
+      .mocked(getTrainingPrograms)
+      .mockResolvedValue([scheduledProgram('ramp', sessionId)]);
+    renderWithClient(<CooperRunTests />);
+    expect(screen.getByText(/100 W.*20 W per minute/)).toBeInTheDocument();
+    expect(
+      screen.queryByRole('region', { name: /5 × 6-second sprint/ })
+    ).toBeNull();
+    await waitFor(() =>
+      expect(screen.getByLabelText('Date')).toHaveValue('2026-09-27')
+    );
+    fireEvent.change(screen.getByLabelText('Maximum watts (W)'), {
+      target: { value: '280' },
+    });
+    fireEvent.change(screen.getByLabelText('Peak heart rate (bpm)'), {
+      target: { value: '181' },
+    });
+    fireEvent.change(screen.getByLabelText('One-minute heart rate (bpm)'), {
+      target: { value: '145' },
+    });
+    expect(screen.getByText(/36 bpm/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Record Ramp Test' }));
+    await waitFor(() =>
+      expect(saveProtocolAttempt).toHaveBeenCalledWith(
+        {
+          test_type: 'ramp',
+          attempt_date: '2026-09-27',
+          results: {
+            maximum_watts: 280,
+            peak_heart_rate: 181,
+            one_minute_heart_rate: 145,
+          },
+          planned_session_id: sessionId,
+        },
+        undefined
+      )
+    );
+    expect(
+      await screen.findByRole('img', { name: /Ramp Test trend by date/ })
+    ).toBeInTheDocument();
+    expect(screen.getByText('280 W')).toBeInTheDocument();
+  });
+
+  it('accepts decimal commas for ramp watts and preserves a negative recovery', async () => {
+    window.history.replaceState({}, '', '/cardio-tests?protocol=ramp');
+    renderWithClient(<CooperRunTests />);
+    fireEvent.change(screen.getByLabelText('Date'), {
+      target: { value: '2026-10-16' },
+    });
+    fireEvent.change(screen.getByLabelText('Maximum watts (W)'), {
+      target: { value: '280,5' },
+    });
+    fireEvent.change(screen.getByLabelText('Peak heart rate (bpm)'), {
+      target: { value: '145' },
+    });
+    fireEvent.change(screen.getByLabelText('One-minute heart rate (bpm)'), {
+      target: { value: '150' },
+    });
+    expect(screen.getByText(/-5 bpm/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Record Ramp Test' }));
+    await waitFor(() =>
+      expect(saveProtocolAttempt).toHaveBeenCalledWith(
+        {
+          test_type: 'ramp',
+          attempt_date: '2026-10-16',
+          results: {
+            maximum_watts: 280.5,
+            peak_heart_rate: 145,
+            one_minute_heart_rate: 150,
+          },
+        },
+        undefined
+      )
+    );
+  });
+
+  it('shows dated ramp trends and edits retrieved results without losing the Program link', async () => {
+    window.history.replaceState({}, '', '/cardio-tests?protocol=ramp');
+    const sessionId = '00000000-0000-4000-a000-000000000099';
+    mockProtocolRecords = [
+      {
+        id: 'ramp-one',
+        user_id: mockActiveUserId,
+        test_type: 'ramp',
+        attempt_date: '2026-09-27',
+        planned_session_id: sessionId,
+        results: {
+          maximum_watts: 280,
+          peak_heart_rate: 181,
+          one_minute_heart_rate: 145,
+        },
+        created_at: '2026-09-27T12:00:00Z',
+        updated_at: '2026-09-27T12:00:00Z',
+      },
+      {
+        id: 'ramp-two',
+        user_id: mockActiveUserId,
+        test_type: 'ramp',
+        attempt_date: '2026-10-10',
+        planned_session_id: null,
+        results: {
+          maximum_watts: 300,
+          peak_heart_rate: 180,
+          one_minute_heart_rate: 140,
+        },
+        created_at: '2026-10-10T12:00:00Z',
+        updated_at: '2026-10-10T12:00:00Z',
+      },
+    ];
+    jest
+      .mocked(getTrainingPrograms)
+      .mockResolvedValue([scheduledProgram('ramp', sessionId)]);
+    renderWithClient(<CooperRunTests />);
+    const history = (await screen.findByText('280 W')).closest('li')!;
+    for (const [label, value] of [
+      ['Peak heart rate (bpm)', '181 bpm'],
+      ['One-minute heart rate (bpm)', '145 bpm'],
+      ['Heart-rate recovery', '36 bpm'],
+    ]) {
+      expect(
+        within(history).getByText(label!).nextElementSibling
+      ).toHaveTextContent(value!);
+    }
+    const chart = screen.getByRole('img', { name: 'Ramp Test trend by date' });
+    await waitFor(() =>
+      expect(chart.querySelectorAll('.recharts-line-dot')).toHaveLength(4)
+    );
+    expect(within(chart).getByText('2026-09-27')).toBeInTheDocument();
+    expect(within(chart).getByText('2026-10-10')).toBeInTheDocument();
+    fireEvent.click(within(history).getByRole('button', { name: 'Edit' }));
+    expect(screen.getByLabelText('Maximum watts (W)')).toHaveValue('280');
+    expect(screen.getByLabelText('Peak heart rate (bpm)')).toHaveValue(181);
+    expect(screen.getByLabelText('One-minute heart rate (bpm)')).toHaveValue(
+      145
+    );
+    fireEvent.change(screen.getByLabelText('One-minute heart rate (bpm)'), {
+      target: { value: '140' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() =>
+      expect(saveProtocolAttempt).toHaveBeenCalledWith(
+        {
+          test_type: 'ramp',
+          attempt_date: '2026-09-27',
+          planned_session_id: sessionId,
+          results: {
+            maximum_watts: 280,
+            peak_heart_rate: 181,
+            one_minute_heart_rate: 140,
+          },
+        },
+        'ramp-one'
+      )
+    );
+  });
+
+  it('rejects invalid ramp heart rates before saving', async () => {
+    window.history.replaceState({}, '', '/cardio-tests?protocol=ramp');
+    renderWithClient(<CooperRunTests />);
+    fireEvent.change(screen.getByLabelText('Date'), {
+      target: { value: '2026-10-16' },
+    });
+    fireEvent.change(screen.getByLabelText('Maximum watts (W)'), {
+      target: { value: '280' },
+    });
+    fireEvent.change(screen.getByLabelText('Peak heart rate (bpm)'), {
+      target: { value: '180.5' },
+    });
+    fireEvent.change(screen.getByLabelText('One-minute heart rate (bpm)'), {
+      target: { value: '145' },
+    });
+    fireEvent.submit(screen.getByLabelText('Date').closest('form')!);
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'positive whole-number heart rates'
+    );
+    expect(saveProtocolAttempt).not.toHaveBeenCalled();
   });
 
   it('records a standalone Cooper attempt when planned assessments fail to load', async () => {
