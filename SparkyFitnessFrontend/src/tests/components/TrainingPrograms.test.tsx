@@ -459,6 +459,7 @@ it('schedules a Cardio Test without a Workout Plan and shows its linked attempt 
 it.each([
   ['sprint_6s', 'sprint_6s', '5 × 6-second sprint (54-second rests)'],
   ['power_30s', 'power_30s', '2 × 30-second power (60-second rest)'],
+  ['ramp', 'ramp', 'Ramp Test'],
 ])(
   'links a planned %s assessment to its matching web form',
   async (protocol, routeProtocol, title) => {
@@ -496,7 +497,7 @@ it.each([
   }
 );
 
-it('offers only Cardio Tests that can be recorded on web', async () => {
+it('offers every recordable Cardio Test in the editor', async () => {
   jest.mocked(getWorkoutPlanTemplates).mockResolvedValueOnce([]);
   mount();
   await startProgram();
@@ -507,8 +508,10 @@ it('offers only Cardio Tests that can be recorded on web', async () => {
   const protocol = screen.getByRole('combobox', {
     name: 'Cardio Test protocol',
   });
-  expect(within(protocol).getAllByRole('option')).toHaveLength(3);
-  expect(within(protocol).queryByRole('option', { name: /ramp/i })).toBeNull();
+  expect(within(protocol).getAllByRole('option')).toHaveLength(4);
+  expect(
+    within(protocol).getByRole('option', { name: 'Ramp Test' })
+  ).toBeInTheDocument();
 });
 
 it('does not expose owner data or authoring while acting as a family delegate', () => {

@@ -12,7 +12,12 @@ import SessionRowActions from './SessionRowActions';
 import type { ProgramSession, OutcomeStatus } from './programTypes';
 import { cardioTestTitle } from './cardioTestTitle';
 
-const recordableTests = new Set(['cooper_run', 'sprint_6s', 'power_30s']);
+const recordableTests = new Set([
+  'cooper_run',
+  'sprint_6s',
+  'power_30s',
+  'ramp',
+]);
 
 function recordTestPath(session: ProgramSession): string {
   const params = new URLSearchParams({ planned_session_id: session.id });

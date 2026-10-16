@@ -1,6 +1,6 @@
 # AGENTS.md
 
-_Last updated: 2026-10-15_
+_Last updated: 2026-10-17_
 
 SparkyFitness Frontend is the React web app for the SparkyFitness monorepo. Use this file as the primary guide for work inside `SparkyFitnessFrontend/`.
 
@@ -52,7 +52,7 @@ Features are organized by domain, and the same domain folder name appears in `sr
 - `src/index.css` and `DESIGN.md` - shared visual tokens, self-hosted Figtree text and rounded numerals, light/dark themes. Metric building blocks live in `src/components/ui/{numeral,stat-rows,macro-chips,trend-chart,ambient-glow}.tsx`.
 - `src/main.tsx` - app bootstrap; creates the shared `QueryClient` with global `QueryCache`/`MutationCache` handlers that render toasts from query/mutation `meta` (`errorTitle`, `errorMessage`, `successMessage`).
 - `src/App.tsx` - route registry via `createBrowserRouter`, plus `PrivateRoute` and `PermissionRoute` wrappers (permission-gated areas include `reports` and `admin`).
-- `src/pages/CardioTests/CooperRunTests.tsx` and `PowerTests.tsx`, `src/api/CardioTests/cardioTests.ts`, and `src/hooks/CardioTests/useCooperRunAttempts.ts` - Cooper and power Test Attempt entry/edit, dated history, and trends.
+- `src/pages/CardioTests/{CooperRunTests,PowerTests,RampTests}.tsx`, `src/api/CardioTests/cardioTests.ts`, and `src/hooks/CardioTests/useCooperRunAttempts.ts` - Cooper, power, and ramp Test Attempt entry/edit, dated history, and trends.
 - `src/pages/<Domain>/` - route screens by domain.
 - `src/api/api.ts` - `apiCall(endpoint, options)` helper: base URL `/api`, query `params`, JSON/FormData bodies, `responseType`, error toasts, `suppress404Toast`. Use it for all backend requests.
 - `src/api/<Domain>/` - per-domain API clients built on `apiCall`.
@@ -97,7 +97,7 @@ When searching, ignore `node_modules/`, `dist/`, and every locale except `public
 ## Quick Routing
 
 - Routing/navigation/permission issue: `src/App.tsx` (router, `PrivateRoute`, `PermissionRoute`) and `src/layouts/MainLayout.tsx`.
-- Cardio Test Attempts: `/cardio-tests` is registered in `src/App.tsx` and gated by diary permission; Cooper and power forms are in `src/pages/CardioTests/`, with API and hooks in their matching domains. Cooper, sprint and 30-second power attempts may link an owner-only Program assessment or stand alone.
+- Cardio Test Attempts: `/cardio-tests` is registered in `src/App.tsx` and gated by diary permission; Cooper, power, and ramp forms are in `src/pages/CardioTests/`, with API and hooks in their matching domains. Cooper, sprint, 30-second power, and ramp attempts may link an owner-only Program assessment or stand alone.
 - API/error-toast issue: `src/api/api.ts`, then the domain client in `src/api/<Domain>/`, then the query/mutation `meta` in the calling hook.
 - Auth/session issue: `src/lib/auth-client.ts`, `src/hooks/useAuth.tsx`, `src/pages/Auth/`, and the server's `auth.ts` if it crosses packages.
 - Family-access/acting-user issue: `src/contexts/ActiveUserContext.tsx` and the hooks consuming it.

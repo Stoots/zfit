@@ -13,6 +13,7 @@ import { Label } from '@/components/ui/label';
 import { useActiveUser } from '@/contexts/ActiveUserContext';
 import { useCooperRunAttempts } from '@/hooks/CardioTests/useCooperRunAttempts';
 import PowerTests from './PowerTests';
+import RampTests from './RampTests';
 import { useTrainingProgramsList } from '@/hooks/TrainingPrograms/useTrainingPrograms';
 
 export default function CooperRunTests() {
@@ -31,6 +32,7 @@ function ProfileCooperRunTests() {
   );
   const focusedPowerProtocol =
     requestedProtocol === 'sprint_6s' || requestedProtocol === 'power_30s';
+  const focusedProtocol = focusedPowerProtocol || requestedProtocol === 'ramp';
   const { attempts, create, update } = useCooperRunAttempts(
     activeUserId ?? '',
     canRead
@@ -111,7 +113,7 @@ function ProfileCooperRunTests() {
         <p className="mt-2 max-w-prose text-muted-foreground">
           {t(
             'cardioTests.intro',
-            'Record Cooper and power Test Attempts and compare results over time.'
+            'Record Cooper, power, and ramp Test Attempts and compare results over time.'
           )}
         </p>
       </header>
@@ -123,7 +125,7 @@ function ProfileCooperRunTests() {
             'You do not have access to these attempts.'
           )}
         </p>
-      ) : !focusedPowerProtocol ? (
+      ) : !focusedProtocol ? (
         <>
           {latest && !attempts.isError && (
             <section className="rounded-3xl border bg-card p-5 sm:p-6">
@@ -332,6 +334,7 @@ function ProfileCooperRunTests() {
         </>
       ) : null}
       <PowerTests />
+      <RampTests />
     </main>
   );
 }

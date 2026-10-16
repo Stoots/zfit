@@ -7028,7 +7028,7 @@
   },
   "cardioTests": {
     "title": "Cardio Tests",
-    "intro": "Record Cooper and power Test Attempts and compare results over time.",
+    "intro": "Record Cooper, power, and ramp Test Attempts and compare results over time.",
     "saved": "Test Attempt saved.",
     "noAccess": "You do not have access to these attempts.",
     "readOnly": "You can view this history but do not have permission to edit it.",
@@ -7064,7 +7064,16 @@
       "editA11y": "Edit 30-second power attempt on {{date}}"
     },
     "ramp": {
-      "title": "Ramp Test"
+      "title": "Ramp Test",
+      "protocol": "100 W initially, increasing by 20 W per minute",
+      "maximumWatts": "Maximum watts (W)",
+      "peakHeartRate": "Peak heart rate (bpm)",
+      "oneMinuteHeartRate": "One-minute heart rate (bpm)",
+      "recovery": "Heart-rate recovery",
+      "record": "Record Ramp Test",
+      "invalid": "Enter valid watts and positive whole-number heart rates.",
+      "empty": "No Test Attempts recorded yet.",
+      "chart": "Ramp Test trend by date"
     },
     "unit": {
       "meters": "m"
