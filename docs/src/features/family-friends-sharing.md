@@ -76,6 +76,7 @@ After a workout you can say how it felt (too easy / just right / too hard) and f
 Your custom food library, recipes, custom exercises, and medication inventory are only visible to delegates when they have switched their active profile context to your profile. This prevents their personal libraries/cabinets from being cluttered with your items.
 
 Workout Sessions inherit their standalone Workout Plan's read-sharing boundary.
+Weekly prefill is disposable only before a workout is started, edited or completed. Manually started workouts and older diary entries remain protected from plan edits and deletion under the same diary permissions.
 Only the plan owner can create, rename, reorder or remove a plan or session. A
 **Manage Diary** delegate can add, edit or remove sets within a session and can
 remove exercise/preset assignments. Adding or editing an assignment also needs

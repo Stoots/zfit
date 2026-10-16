@@ -85,17 +85,13 @@ async function updateWorkoutPlanTemplate(
       ),
       { status: 403 }
     );
-  const today = await resolveTemplateStartDay(
-    userId,
-    parsed.data.currentClientDate
-  );
   // Identity checks, disposable prefill cleanup and idempotent insertion
   // share one repository transaction.
   return workoutPlanTemplateRepository.updateWorkoutPlanTemplate(
     templateId,
     userId,
     parsed.data,
-    today
+    parsed.data.currentClientDate
   );
 }
 async function deleteWorkoutPlanTemplate(
@@ -118,13 +114,11 @@ async function deleteWorkoutPlanTemplate(
       ),
       { status: 403 }
     );
-  const today = await resolveTemplateStartDay(userId);
   try {
     const deleted =
       await workoutPlanTemplateRepository.deleteWorkoutPlanTemplate(
         templateId,
-        userId,
-        today
+        userId
       );
     if (!deleted) {
       throw new Error(

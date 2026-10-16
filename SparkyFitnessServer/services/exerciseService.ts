@@ -1,5 +1,6 @@
 import { getClient } from '../db/poolManager.js';
 import type { PoolClient } from 'pg';
+import type { z } from 'zod';
 import type {
   CreatePresetSessionRequest,
   PresetSessionExerciseRequest,
@@ -7,7 +8,10 @@ import type {
   WorkoutFormat,
 } from '@workspace/shared';
 import type { CreateExerciseEntryRequest } from '@workspace/shared';
-import { workoutPlanSessionResponseSchema } from '@workspace/shared';
+import {
+  workoutPlanSessionResponseSchema,
+  updatePresetSessionRequestSchema,
+} from '@workspace/shared';
 import {
   getWorkoutSessionForExecution,
   getWorkoutSessionForAssignments,
@@ -2339,14 +2343,10 @@ function parseMeasuredCalories(raw: unknown): number | undefined {
 }
 
 async function updateGroupedWorkoutSession(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  userId: any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  actingUserId: any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  presetEntryId: any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  updateData: any
+  userId: string,
+  actingUserId: string,
+  presetEntryId: string,
+  updateData: z.input<typeof updatePresetSessionRequestSchema>
 ) {
   const client = await getClient(userId, actingUserId);
   try {
@@ -2357,17 +2357,28 @@ async function updateGroupedWorkoutSession(
       presetEntryId,
       // Child rows are about to be rewritten from this snapshot. Lock them
       // so a watch flush cannot commit newer HR or calories in between.
-      updateData.exercises !== undefined
+      true
     );
     if (!existingSession) {
-      throw createServiceError(404, 'Exercise preset entry not found.');
+      throw createServiceError(
+        409,
+        'Workout changed while it was being saved. Reload the diary and retry.'
+      );
     }
+    await client.query(
+      `UPDATE exercise_entries SET is_weekly_prefill = false
+       WHERE user_id = $1 AND exercise_preset_entry_id = $2 AND is_weekly_prefill`,
+      [userId, presetEntryId]
+    );
     const frozenExerciseSnapshots = new Map<
       number,
       readonly WorkoutPlanPresetSnapshot['exercises'][number][]
     >();
+    const prescribedAssignmentIds = new Set<number>();
+    let hasPlanPrescription = false;
     for (const detail of existingSession.activity_details ?? []) {
       if (detail.detail_type !== 'workout_plan_prescription') continue;
+      hasPlanPrescription = true;
       const data: unknown = detail.detail_data;
       if (!data || typeof data !== 'object' || !('assignments' in data))
         continue;
@@ -2381,6 +2392,7 @@ async function updateGroupedWorkoutSession(
           'Stored workout prescription is invalid.'
         );
       for (const assignment of parsed.data) {
+        prescribedAssignmentIds.add(assignment.id);
         if (assignment.preset_snapshot) {
           frozenExerciseSnapshots.set(
             assignment.id,
@@ -2388,6 +2400,22 @@ async function updateGroupedWorkoutSession(
           );
         }
       }
+    }
+    if (
+      hasPlanPrescription &&
+      updateData.exercises?.some(
+        (exercise: { workout_plan_assignment_id?: string | number | null }) =>
+          exercise.workout_plan_assignment_id !== null &&
+          exercise.workout_plan_assignment_id !== undefined &&
+          !prescribedAssignmentIds.has(
+            Number(exercise.workout_plan_assignment_id)
+          )
+      )
+    ) {
+      throw createServiceError(
+        409,
+        'Workout plan changed while this workout was open. Reload the diary and retry.'
+      );
     }
     await exercisePresetEntryRepository.updateExercisePresetEntryWithClient(
       client,
@@ -2408,6 +2436,8 @@ async function updateGroupedWorkoutSession(
       }
     );
     const targetEntryDate = updateData.entry_date || existingSession.entry_date;
+    if (!targetEntryDate)
+      throw createServiceError(400, 'Workout date is required.');
     if (updateData.exercises !== undefined) {
       if (!canEditGroupedWorkout(existingSession.source)) {
         throw createServiceError(
@@ -2482,18 +2512,11 @@ async function updateGroupedWorkoutSession(
         );
       } else {
         const existingExercises = existingSession.exercises || [];
-        const existingById = new Map(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          existingExercises.map((e: any) => [e.id, e])
-        );
+        const existingById = new Map(existingExercises.map((e) => [e.id, e]));
 
-        const incomingIdSet = new Set(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          incomingExercises.map((e: any) => e.id)
-        );
+        const incomingIdSet = new Set(incomingExercises.map((e) => e.id));
         const toDelete = existingExercises.filter(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (e: any) => !incomingIdSet.has(e.id)
+          (e) => !incomingIdSet.has(e.id)
         );
         for (const e of toDelete) {
           await exerciseEntryDb._deleteExerciseEntryWithClient(
@@ -2553,8 +2576,6 @@ async function updateGroupedWorkoutSession(
                 : {}),
               sort_order: ex.sort_order ?? 0,
               superset_group: ex.superset_group ?? null,
-              distance: ex.distance,
-              avg_heart_rate: ex.avg_heart_rate,
             },
             frozenSnapshot
           );

@@ -188,10 +188,8 @@ router.get('/:id', isAuthenticated, async (req, res, next) => {
  *         description: Invalid request body or grouped workout ID.
  *       401:
  *         description: Unauthorized.
- *       404:
- *         description: Grouped workout session not found.
  *       409:
- *         description: Nested exercise edits are not supported for synced/imported grouped workouts.
+ *         description: Workout changed during save, or nested edits are unsupported for a synced/imported workout.
  */
 router.put('/:id', isAuthenticated, async (req, res, next) => {
   try {

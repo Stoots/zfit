@@ -36,6 +36,7 @@ describe('Generic Health & Workout Zod Schemas', () => {
       updated_by_user_id: null,
       category: 'running',
       source: 'garmin',
+      is_weekly_prefill: false,
       source_id: 'GARMIN-12345',
       force: null,
       level: null,
