@@ -1,4 +1,5 @@
 import express from 'express';
+import { TrainingProgramCompletionConflict } from '../utils/errors.js';
 import { authenticate } from '../middleware/authMiddleware.js';
 import onBehalfOfMiddleware from '../middleware/onBehalfOfMiddleware.js';
 import { requireSelfActor } from '../middleware/requireSelfMiddleware.js';
@@ -8,6 +9,7 @@ import {
   saveProgram,
   removeProgram,
   recordProgramOutcome,
+  completeProgramSession,
 } from '../services/trainingProgramService.js';
 
 const router = express.Router();
@@ -301,6 +303,61 @@ router.post('/:id/sessions/:sessionId/outcome', async (req, res, next) => {
       )
     );
   } catch (error) {
+    next(error);
+  }
+});
+/**
+ * @swagger
+ * /training-programs/{id}/sessions/{sessionId}/complete:
+ *   post:
+ *     summary: Atomically log the exact bound Workout Session and record completion
+ *     description: Owner-only. Creates one grouped diary workout on entry_date and links it to the Planned Session in one transaction. Identical player retries return the existing Program; conflicting performed sets return 409 with the existing completion. Zero-set prescriptions require explicit linking. Late optional completions are allowed; recorded misses remain final.
+ *     tags: [Training Programs]
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string, format: uuid } }
+ *       - { in: path, name: sessionId, required: true, schema: { type: string, format: uuid } }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             additionalProperties: false
+ *             required: [entry_date]
+ *             properties:
+ *               entry_date: { type: string, format: date }
+ *               performed_exercises: { type: array, description: Performed exercises and sets from playback. }
+ *     responses:
+ *       200:
+ *         description: Persisted Program with the completion and diary workout snapshot.
+ *         content:
+ *           application/json:
+ *             schema: { $ref: '#/components/schemas/TrainingProgram' }
+ *       400: { description: Invalid identifier or diary date. }
+ *       401: { description: Authentication required. }
+ *       403: { description: Delegated context forbidden. }
+ *       404: { description: Program, session or bound Workout Session not found or not owned. }
+ *       409: { description: Session has a different completion, a final outcome, or no prescribed sets. A performed-set conflict includes the existing Program in completion. }
+ */
+router.post('/:id/sessions/:sessionId/complete', async (req, res, next) => {
+  try {
+    res.json(
+      await completeProgramSession(
+        req.userId,
+        req.params.id,
+        req.params.sessionId,
+        req.body
+      )
+    );
+  } catch (error) {
+    if (error instanceof TrainingProgramCompletionConflict) {
+      res.status(409).json({
+        error: error.message,
+        code: error.code,
+        completion: error.completion,
+      });
+      return;
+    }
     next(error);
   }
 });

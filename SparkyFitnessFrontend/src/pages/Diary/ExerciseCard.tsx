@@ -1,8 +1,18 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import {
   Tooltip,
   TooltipContent,
@@ -41,11 +51,14 @@ import {
   useActiveWorkoutPlans,
   useWorkoutPlanTemplates,
 } from '@/hooks/Exercises/useWorkoutPlans';
-import { useTrainingProgramsList } from '@/hooks/TrainingPrograms/useTrainingPrograms';
+import {
+  useTrainingPrograms,
+  useTrainingProgramsList,
+} from '@/hooks/TrainingPrograms/useTrainingPrograms';
 import {
   resolveExerciseCalories,
   setsDurationMinutes,
-  selectDashboardWorkoutPlans,
+  selectUpcomingDashboardWorkoutPlans,
 } from '@workspace/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { exerciseByIdOptions } from '@/hooks/Exercises/useExercises';
@@ -54,6 +67,8 @@ import {
   createWorkoutPlaybackRouteStateFromExercise,
 } from '@/utils/workoutPlayback';
 import { buildWorkoutPlanSessionPreset } from '@/utils/workoutPlanSession';
+import ProgramSessionOutcome from '@/pages/TrainingPrograms/ProgramSessionOutcome';
+import type { TrainingProgram } from '@workspace/shared';
 import {
   Exercise,
   ExerciseEntry,
@@ -73,6 +88,18 @@ interface ExerciseCardProps {
   initialExercisesToLog?: PresetExercise[];
   onExercisesLogged: () => void;
 }
+
+type PlannedSession =
+  TrainingProgram['phases'][number]['weeks'][number]['sessions'][number];
+
+const hasPrescribedSets = (session: WorkoutPlanSession) =>
+  session.assignments.some(
+    (assignment) =>
+      assignment.sets.length > 0 ||
+      assignment.preset_snapshot?.exercises.some(
+        (exercise) => exercise.sets.length > 0
+      )
+  );
 
 const ExerciseCard = ({
   selectedDate,
@@ -126,6 +153,19 @@ const ExerciseCard = ({
   );
   const { data: trainingPrograms, isError: trainingProgramsError } =
     useTrainingProgramsList(user?.id, !isActingOnBehalf);
+  const { outcome, complete } = useTrainingPrograms(
+    user?.id ?? '',
+    !!user && !isActingOnBehalf
+  );
+  const [completionTarget, setCompletionTarget] = useState<{
+    plan: WorkoutPlanTemplate;
+    programId: string;
+    session: PlannedSession;
+    mode: 'log' | 'link';
+  } | null>(null);
+  const [completionError, setCompletionError] = useState('');
+  const [completing, setCompleting] = useState(false);
+  const completionInFlight = useRef(false);
 
   const { data: allPlans } = useWorkoutPlanTemplates(currentUserId);
 
@@ -148,6 +188,23 @@ const ExerciseCard = ({
         currentUserId ?? '',
         (id) => queryClient.fetchQuery(exerciseByIdOptions(id))
       );
+      const program = trainingPrograms?.find((candidate) =>
+        candidate.phases.some((phase) =>
+          phase.weeks.some((week) =>
+            week.sessions.some(
+              (planned) =>
+                planned.id === targetPlan.training_program_session_id &&
+                planned.workout_session_id === sessionId
+            )
+          )
+        )
+      );
+      if (program && targetPlan.training_program_session_id) {
+        preset.training_program = {
+          program_id: program.id,
+          session_id: targetPlan.training_program_session_id,
+        };
+      }
       navigate(`/workout-playback?date=${selectedDate}`, {
         state: createWorkoutPlaybackRouteState(
           preset,
@@ -170,6 +227,53 @@ const ExerciseCard = ({
     } finally {
       setStartingSession(null);
     }
+  };
+
+  const handleConfirmCompletion = async () => {
+    if (
+      completionInFlight.current ||
+      !completionTarget?.plan.next_session ||
+      !currentUserId
+    )
+      return;
+    completionInFlight.current = true;
+    setCompleting(true);
+    setCompletionError('');
+    try {
+      await complete.mutateAsync({
+        programId: completionTarget.programId,
+        sessionId: completionTarget.session.id,
+        input: { entry_date: selectedDate },
+      });
+      setCompletionTarget(null);
+    } catch (failure) {
+      setCompletionError(
+        failure instanceof Error
+          ? failure.message
+          : t('trainingPrograms.outcomeError', 'Could not record this outcome.')
+      );
+    } finally {
+      completionInFlight.current = false;
+      setCompleting(false);
+    }
+  };
+
+  const handleOpenCompletion = (
+    plan: WorkoutPlanTemplate,
+    programId: string,
+    session: PlannedSession
+  ) => {
+    if (!currentUserId) return;
+    setCompletionError('');
+    setCompletionTarget({
+      plan,
+      programId,
+      session,
+      mode:
+        plan.next_session && hasPrescribedSets(plan.next_session)
+          ? 'log'
+          : 'link',
+    });
   };
 
   // Effect to handle initialExercisesToLog prop
@@ -504,8 +608,11 @@ const ExerciseCard = ({
     return ids;
   }, [exerciseEntries]);
 
-  const { programPlan, standalonePlans } = useMemo(() => {
-    const none = { programPlan: undefined, standalonePlans: [] };
+  const { programPlans, standalonePlans } = useMemo(() => {
+    const none = {
+      programPlans: [] as WorkoutPlanTemplate[],
+      standalonePlans: [] as WorkoutPlanTemplate[],
+    };
     // Without the schedule, linked plans cannot be distinguished from standalone
     // plans. Do not briefly display the entire program while it loads.
     if (!isActingOnBehalf && !trainingPrograms && !trainingProgramsError) {
@@ -520,7 +627,7 @@ const ExerciseCard = ({
     // Programs are owner-only, and a failed schedule lookup falls back to the
     // pre-Program behaviour of listing every eligible plan.
     if (isActingOnBehalf || trainingProgramsError || !trainingPrograms) {
-      return { programPlan: undefined, standalonePlans: standaloneEligible };
+      return { programPlans: [], standalonePlans: standaloneEligible };
     }
     const linkedPlanIds = new Set(
       trainingPrograms.flatMap((program) =>
@@ -540,12 +647,13 @@ const ExerciseCard = ({
           !activePlanIds.has(String(plan.id))
       ),
     ];
-    const selected = selectDashboardWorkoutPlans(
+    const selected = selectUpcomingDashboardWorkoutPlans(
       programCandidates,
-      trainingPrograms
+      trainingPrograms,
+      3
     );
     return {
-      programPlan: selected.programPlan,
+      programPlans: selected.programPlans,
       standalonePlans: selected.standalonePlans.filter((plan) =>
         standaloneEligible.some((candidate) => candidate.id === plan.id)
       ),
@@ -559,20 +667,25 @@ const ExerciseCard = ({
     isActingOnBehalf,
   ]);
 
-  const programContext = trainingPrograms?.flatMap((program) =>
-    program.phases.flatMap((phase) =>
-      phase.weeks.flatMap((week, weekIndex) =>
-        week.sessions
-          .filter(
-            (session) => session.id === programPlan?.training_program_session_id
-          )
-          .map((session) => ({
-            label: `${program.name} · ${phase.name} · ${t('trainingPrograms.weekNumber', 'Week {{number}}', { number: weekIndex + 1 })} · ${session.effective_date}`,
-            date: session.effective_date,
-          }))
+  const programCards = programPlans.map((plan) => {
+    const context = trainingPrograms?.flatMap((program) =>
+      program.phases.flatMap((phase) =>
+        phase.weeks.flatMap((week, weekIndex) =>
+          week.sessions
+            .filter(
+              (session) => session.id === plan.training_program_session_id
+            )
+            .map((session) => ({
+              programId: program.id,
+              session,
+              label: `${program.name} · ${phase.name} · ${t('trainingPrograms.weekNumber', 'Week {{number}}', { number: weekIndex + 1 })} · ${session.effective_date}`,
+              date: session.effective_date,
+            }))
+        )
       )
-    )
-  )[0];
+    )[0];
+    return { plan, context };
+  });
 
   if (loading) {
     return <div>Loading exercises...</div>;
@@ -583,8 +696,8 @@ const ExerciseCard = ({
       <CardHeader className="p-4 pb-2 md:p-6">
         <div className="flex justify-between items-center">
           <CardTitle>
-            {programPlan
-              ? programContext?.date === selectedDate
+            {programPlans.length
+              ? programCards[0]?.context?.date === selectedDate
                 ? t('diary.todaysSession', "Today's session")
                 : t('diary.nextSession', 'Next session')
               : t('exerciseCard.title', 'Exercise')}
@@ -638,16 +751,26 @@ const ExerciseCard = ({
         </div>
       </CardHeader>
       <CardContent className="px-4 pb-4 sm:px-6 sm:pb-6">
-        {programPlan && (
+        {programCards.map(({ plan, context }) => (
           <DashboardPlanCard
-            key={`program-${programPlan.id}`}
-            plan={programPlan}
-            programContext={programContext?.label}
+            key={`program-${plan.training_program_session_id}`}
+            plan={plan}
+            programContext={context?.label}
             allowSessionPicker={false}
             startingSessionId={startingSession}
             onStart={handleStartPlanSession}
+            onComplete={
+              context
+                ? () =>
+                    void handleOpenCompletion(
+                      plan,
+                      context.programId,
+                      context.session
+                    )
+                : undefined
+            }
           />
-        )}
+        ))}
         {standalonePlans.map((plan: WorkoutPlanTemplate) => (
           <DashboardPlanCard
             key={plan.id}
@@ -808,6 +931,81 @@ const ExerciseCard = ({
         convertEnergy={convertEnergy}
         getEnergyUnitString={getEnergyUnitString}
       />
+      <AlertDialog
+        open={!!completionTarget && completionTarget.mode !== 'link'}
+        onOpenChange={(open) => {
+          if (!open && !completing) setCompletionTarget(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t('exerciseCard.confirmCompleteTitle', 'Complete this workout?')}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t(
+                'exerciseCard.confirmCompleteDescription',
+                'Log {{name}} on {{date}} with its prescribed sets and mark the Program session complete.',
+                {
+                  name: completionTarget?.plan.next_session?.name,
+                  date: selectedDate,
+                }
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {completionError && (
+            <p role="alert" className="text-sm text-destructive">
+              {completionError}
+            </p>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={completing}>
+              {t('common.cancel', 'Cancel')}
+            </AlertDialogCancel>
+            <Button
+              variant="outline"
+              disabled={completing}
+              onClick={() =>
+                setCompletionTarget((target) =>
+                  target ? { ...target, mode: 'link' } : target
+                )
+              }
+            >
+              {t('trainingPrograms.linkExisting', 'Link an existing workout')}
+            </Button>
+            <AlertDialogAction
+              disabled={completing || completionTarget?.mode !== 'log'}
+              onClick={(event) => {
+                event.preventDefault();
+                void handleConfirmCompletion();
+              }}
+            >
+              {completing
+                ? t('trainingPrograms.recording', 'Recording…')
+                : t('trainingPrograms.confirmCompletion', 'Confirm completion')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      {completionTarget?.mode === 'link' && currentUserId && (
+        <ProgramSessionOutcome
+          session={completionTarget.session}
+          status="completed"
+          autoShift={false}
+          userId={currentUserId}
+          pending={outcome.isPending}
+          initialDate={selectedDate}
+          onClose={() => setCompletionTarget(null)}
+          onSave={async (input) => {
+            await outcome.mutateAsync({
+              programId: completionTarget.programId,
+              sessionId: completionTarget.session.id,
+              input,
+            });
+            setCompletionTarget(null);
+          }}
+        />
+      )}
     </Card>
   );
 };

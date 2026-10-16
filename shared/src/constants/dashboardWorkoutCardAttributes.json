@@ -1,0 +1,6 @@
+{
+  "sessionId": "data-workout-session-id",
+  "planId": "data-workout-plan-id",
+  "programSessionId": "data-training-program-session-id",
+  "prescription": "data-workout-session-prescription"
+}

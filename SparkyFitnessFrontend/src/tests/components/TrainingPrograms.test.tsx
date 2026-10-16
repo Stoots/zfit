@@ -20,6 +20,7 @@ import { trainingProgramSchema } from '@workspace/shared';
 import ProgramSchedule from '@/pages/TrainingPrograms/ProgramSchedule';
 import { programProgress } from '@/pages/TrainingPrograms/programProgress';
 import TrainingPrograms from '@/pages/TrainingPrograms/TrainingPrograms';
+import WorkoutPlaybackPage from '@/pages/Diary/WorkoutPlaybackPage';
 import * as api from '@/api/TrainingPrograms/trainingPrograms';
 import { getWorkoutPlanTemplates } from '@/api/Exercises/workoutPlanTemplates';
 import { fetchExerciseEntries } from '@/api/Exercises/exerciseEntryService';
@@ -31,6 +32,13 @@ jest.mock('@/api/TrainingPrograms/trainingPrograms');
 jest.mock('@/api/Exercises/workoutPlanTemplates');
 jest.mock('@/api/Exercises/exerciseEntryService');
 jest.mock('@/api/Exercises/exerciseService');
+jest.mock('@/hooks/Exercises/useWorkoutCoaching', () => ({
+  fetchWorkoutCoachingSignals: jest.fn(async () => ({
+    adaptive_suggestions: false,
+    signals: [],
+  })),
+  useWorkoutSessionFeedback: () => ({ isLoading: true }),
+}));
 // The diary hook imports the app singleton; this suite supplies its own locale
 // instance and must not start the singleton's HTTP translation loader.
 jest.mock('@/i18n', () => ({
@@ -38,7 +46,14 @@ jest.mock('@/i18n', () => ({
   default: { t: (key: string, fallback?: string) => fallback || key },
 }));
 jest.mock('@/contexts/PreferencesContext', () => ({
-  usePreferences: () => ({ timezone: 'Australia/Sydney' }),
+  usePreferences: () => ({
+    timezone: 'Australia/Sydney',
+    weightUnit: 'kg',
+    distanceUnit: 'km',
+    energyUnit: 'kcal',
+    convertEnergy: (value: number) => value,
+    getEnergyUnitString: () => 'kcal',
+  }),
 }));
 const mockActor = { delegated: false };
 jest.mock('@/hooks/useAuth', () => ({
@@ -53,12 +68,17 @@ let nextId = 1;
 const workoutSessionId = '10000000-0000-4000-8000-000000000001';
 const laterWorkoutSessionId = '10000000-0000-4000-8000-000000000002';
 let playbackState: WorkoutPlaybackRouteState | undefined;
+let renderRealPlayback = false;
 function PlaybackDestination() {
   const { state } = useLocation();
   useEffect(() => {
     playbackState = state as WorkoutPlaybackRouteState;
   }, [state]);
-  return <h1>Workout Playback</h1>;
+  return renderRealPlayback ? (
+    <WorkoutPlaybackPage />
+  ) : (
+    <h1>Workout Playback</h1>
+  );
 }
 const uuid = () =>
   `00000000-0000-4000-8000-${String(nextId++).padStart(12, '0')}`;
@@ -164,6 +184,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockActor.delegated = false;
   playbackState = undefined;
+  renderRealPlayback = false;
   jest.mocked(getExerciseById).mockResolvedValue({
     id: 'exercise',
     name: 'Renamed library exercise',
@@ -866,10 +887,63 @@ it('starts the exact later repeated-label session after reloading instead of the
     );
   }
   expect(draft.workout_session_id).toBe(laterWorkoutSessionId);
+  expect(draft.training_program).toEqual({
+    program_id: stored!.id,
+    session_id: stored!.phases[0]!.weeks[0]!.sessions[1]!.id,
+  });
   expect(draft.entry_date).toBe('2026-10-30');
   expect(exercise.sets.map((set) => set.reps)).toEqual([8, 8, 8]);
   expect(exercise.exercise_name).toBe('Lunge');
   expect(draft.load_adjustments_applied).toBe(true);
+});
+
+it('starts and finishes a Planned Session from the Program page through atomic completion', async () => {
+  renderRealPlayback = true;
+  stored = scheduleFixture();
+  jest
+    .mocked(api.completeTrainingProgramSession)
+    .mockImplementation(async (programId, sessionId, input) => {
+      expect(programId).toBe(stored!.id);
+      const next = structuredClone(stored!);
+      const target = next.phases
+        .flatMap((phase) => phase.weeks)
+        .flatMap((week) => week.sessions)
+        .find((session) => session.id === sessionId)!;
+      target.status = 'completed';
+      target.outcome_at = '2026-10-30T10:00:00.000Z';
+      target.completed_workout = {
+        type: 'preset',
+        id: '22222222-2222-4222-8222-222222222222',
+        name: 'Strength',
+        entry_date: input.entry_date,
+      };
+      stored = next;
+      return next;
+    });
+  await openStored();
+  const sessionId = stored!.phases[0]!.weeks[0]!.sessions[1]!.id;
+  fireEvent.click(
+    within(sessionRow('Strength')).getByRole('button', {
+      name: 'Start Workout',
+    })
+  );
+  fireEvent.click(await screen.findByRole('button', { name: 'Log set' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Finish Workout' }));
+  await waitFor(() =>
+    expect(api.completeTrainingProgramSession).toHaveBeenCalledWith(
+      stored!.id,
+      sessionId,
+      expect.objectContaining({
+        entry_date: '2026-10-30',
+        performed_exercises: [
+          expect.objectContaining({
+            sets: [expect.objectContaining({ reps: 8 })],
+          }),
+        ],
+      })
+    )
+  );
+  expect(fetchExerciseEntries).not.toHaveBeenCalled();
 });
 
 it('refuses a missing exact binding rather than starting the first available session', async () => {

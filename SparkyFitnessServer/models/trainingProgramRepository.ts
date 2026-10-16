@@ -10,10 +10,17 @@ import {
   type TrainingProgram,
   type TrainingProgramInput,
   type TrainingProgramOutcomeInput,
+  type PresetSessionExerciseRequest,
+  type PresetSessionResponse,
 } from '@workspace/shared';
 import { getClient } from '../db/poolManager.js';
-import { HttpError } from '../utils/errors.js';
+import {
+  HttpError,
+  TrainingProgramCompletionConflict,
+} from '../utils/errors.js';
+import { getGroupedExerciseSessionByIdWithClient } from '../services/exerciseEntryHistoryService.js';
 import { isOptionalProgramSessionOmitted } from '../utils/trainingProgramOptionality.js';
+import { logWorkoutPlanSession } from '../services/exerciseService.js';
 
 type ProgramRow = Omit<
   TrainingProgram,
@@ -649,6 +656,162 @@ export async function recordTrainingProgramOutcome(
         409
       );
     }
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+function matchesPerformedWorkout(
+  saved: PresetSessionResponse,
+  entryDate: string,
+  sessionId: string,
+  performed: PresetSessionExerciseRequest[]
+): boolean {
+  const marker = saved.activity_details.some((detail) => {
+    const data = detail.detail_data;
+    return (
+      detail.detail_type === 'training_program_completion' &&
+      typeof data === 'object' &&
+      data !== null &&
+      'session_id' in data &&
+      data.session_id === sessionId
+    );
+  });
+  if (
+    !marker ||
+    saved.entry_date !== entryDate ||
+    saved.exercises.length !== performed.length
+  )
+    return false;
+  const fields = [
+    'set_number',
+    'set_type',
+    'reps',
+    'weight',
+    'duration',
+    'distance',
+    'rest_time',
+    'notes',
+    'rpe',
+    'rir',
+  ] as const;
+  return performed.every((exercise, index) => {
+    const logged = saved.exercises[index];
+    return (
+      !!logged &&
+      logged.exercise_id === exercise.exercise_id &&
+      Number(logged.workout_plan_assignment_id) ===
+        Number(exercise.workout_plan_assignment_id) &&
+      (logged.notes ?? null) === (exercise.notes ?? null) &&
+      logged.sets.length === exercise.sets.length &&
+      exercise.sets.every((set, setIndex) => {
+        const actual = logged.sets[setIndex];
+        return (
+          !!actual &&
+          fields.every(
+            (field) => (set[field] ?? null) === (actual[field] ?? null)
+          ) &&
+          (!set.completed_at ||
+            Date.parse(set.completed_at) ===
+              Date.parse(actual.completed_at ?? ''))
+        );
+      })
+    );
+  });
+}
+
+/** Creates and links an exact Workout Session under the Program outcome lock. */
+export async function completeTrainingProgramSession(
+  userId: string,
+  programId: string,
+  sessionId: string,
+  entryDate: string,
+  performedExercises?: PresetSessionExerciseRequest[]
+): Promise<TrainingProgram> {
+  const client = await getClient(userId, userId);
+  try {
+    await client.query('BEGIN');
+    const program = await client.query(
+      'SELECT id FROM training_programs WHERE id = $1 AND user_id = $2 FOR UPDATE',
+      [programId, userId]
+    );
+    if (!program.rowCount)
+      throw new HttpError('Training Program not found.', 404);
+    const locked = await client.query(
+      'SELECT id FROM training_program_sessions WHERE id = $1 AND program_id = $2 AND user_id = $3 FOR UPDATE',
+      [sessionId, programId, userId]
+    );
+    if (!locked.rowCount)
+      throw new HttpError('Planned Session not found.', 404);
+    const current = (await readPrograms(client, userId, programId))[0]!;
+    const session = findSession(current, sessionId)!;
+    if (!session.workout_session_id)
+      throw new HttpError(
+        'This Planned Session has no bound Workout Session.',
+        409
+      );
+    if (session.status === 'completed') {
+      if (performedExercises) {
+        const linked = session.completed_workout;
+        const saved =
+          linked?.type === 'preset'
+            ? await getGroupedExerciseSessionByIdWithClient(
+                client,
+                userId,
+                linked.id
+              )
+            : null;
+        if (
+          !saved ||
+          !matchesPerformedWorkout(
+            saved,
+            entryDate,
+            sessionId,
+            performedExercises
+          )
+        ) {
+          throw new TrainingProgramCompletionConflict(current);
+        }
+      }
+      await client.query('COMMIT');
+      return current;
+    }
+    if (
+      session.status !== 'planned' &&
+      !(session.status === 'omitted' && session.is_optional)
+    )
+      throw new HttpError('This session already has a recorded outcome.', 409);
+
+    const created = await logWorkoutPlanSession(
+      userId,
+      userId,
+      session.workout_session_id,
+      entryDate,
+      client,
+      undefined,
+      { programSessionId: sessionId, performedExercises }
+    );
+    if (!created.session)
+      throw new Error('Created diary workout could not be read.');
+    await client.query(
+      `UPDATE exercise_entry_sets SET completed_at = now()
+       WHERE completed_at IS NULL AND exercise_entry_id IN (
+         SELECT id FROM exercise_entries WHERE exercise_preset_entry_id = $1 AND user_id = $2
+       )`,
+      [created.session.id, userId]
+    );
+    const input: TrainingProgramOutcomeInput = {
+      status: 'completed',
+      workout: { type: 'preset', id: created.session.id },
+    };
+    const workout = await lookupDiaryWorkout(client, userId, input.workout);
+    await writeOutcome(client, userId, programId, session, input, workout);
+    const saved = (await readPrograms(client, userId, programId))[0]!;
+    await client.query('COMMIT');
+    return saved;
+  } catch (error) {
+    await client.query('ROLLBACK');
     throw error;
   } finally {
     client.release();

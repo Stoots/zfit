@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { cardioTestTypeSchema } from "../database/CardioTestAttempts.zod.ts";
+import { presetSessionExerciseRequestSchema } from "./ExerciseEntries.api.zod.ts";
 
 const title = z.string().trim().min(1).max(200);
 const goal = z.string().trim().min(1).max(2000);
@@ -135,6 +136,16 @@ export const trainingProgramOutcomeInputSchema = z.discriminatedUnion(
 );
 export type TrainingProgramOutcomeInput = z.infer<
   typeof trainingProgramOutcomeInputSchema
+>;
+export const trainingProgramCompletionInputSchema = z.strictObject({
+  entry_date: day,
+  performed_exercises: z
+    .array(presetSessionExerciseRequestSchema)
+    .min(1)
+    .optional(),
+});
+export type TrainingProgramCompletionInput = z.infer<
+  typeof trainingProgramCompletionInputSchema
 >;
 
 const sessionCommon = {

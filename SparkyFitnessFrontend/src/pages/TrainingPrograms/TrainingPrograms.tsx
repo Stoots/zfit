@@ -89,6 +89,11 @@ function ProgramWorkspace({ userId }: { userId: string }) {
         userId,
         (exerciseId) => queryClient.fetchQuery(exerciseByIdOptions(exerciseId))
       );
+      if (!selected) throw new Error('Training Program is unavailable.');
+      preset.training_program = {
+        program_id: selected.id,
+        session_id: session.id,
+      };
       navigate(`/workout-playback?date=${session.effective_date}`, {
         state: createWorkoutPlaybackRouteState(
           preset,

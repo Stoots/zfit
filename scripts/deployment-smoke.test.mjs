@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import cardAttributes from "../shared/src/constants/dashboardWorkoutCardAttributes.json" with { type: "json" };
 import { test } from "node:test";
 import {
   assertSnapshot,
@@ -124,7 +125,7 @@ const planned = (id, workoutSessionId, date) => ({
 });
 const program = (sessions) => [{ phases: [{ weeks: [{ sessions }] }] }];
 
-test("ranks same-label sessions by exact UUID and date, not plan progression", () => {
+test("ranks upcoming sessions by exact UUID and date, not plan progression", () => {
   const cards = expectedWorkoutCards(
     program([
       planned("planned-a", sessionA, "2026-10-12"),
@@ -133,7 +134,7 @@ test("ranks same-label sessions by exact UUID and date, not plan progression", (
     [plan],
     [],
   );
-  assert.deepEqual(cards, [card(sessionB, 3, "planned-b")]);
+  assert.deepEqual(cards, [card(sessionB, 3, "planned-b"), card(sessionA)]);
 });
 
 test("retains authored same-day order for distinct same-plan same-label sessions", () => {
@@ -147,6 +148,26 @@ test("retains authored same-day order for distinct same-plan same-label sessions
   ]);
   assert.deepEqual(
     expectedWorkoutCards(program([...sessions].reverse()), [plan], []),
+    [card(sessionA), card(sessionB, 3, "planned-b")],
+  );
+});
+
+test("fills three cards past an unavailable nonfirst session", () => {
+  const missing = planned(
+    "missing",
+    "00000000-0000-4000-8000-000000000099",
+    "2026-10-12",
+  );
+  assert.deepEqual(
+    expectedWorkoutCards(
+      program([
+        planned("planned-a", sessionA, "2026-10-11"),
+        missing,
+        planned("planned-b", sessionB, "2026-10-13"),
+      ]),
+      [plan],
+      [],
+    ),
     [card(sessionA), card(sessionB, 3, "planned-b")],
   );
 });
@@ -179,7 +200,7 @@ test("rejects the right UUID with another session's prescription", () => {
   );
 });
 
-test("logged assignments exclude only their session, not the other session in its plan", () => {
+test("planned sessions stay visible until their Program outcome is recorded", () => {
   assert.deepEqual(
     expectedWorkoutCards(
       program([
@@ -189,7 +210,7 @@ test("logged assignments exclude only their session, not the other session in it
       [plan],
       [{ exercises: [{ workout_plan_assignment_id: 1 }] }],
     ),
-    [card(sessionB, 3, "planned-b")],
+    [card(sessionA), card(sessionB, 3, "planned-b")],
   );
 });
 
@@ -237,28 +258,36 @@ test("frozen preset prescription differences fail even with matching session ide
 test("reads stable identity and full prescription from the card, never its label", () => {
   const original = globalThis.document;
   const attributes = {
-    "data-workout-session-id": sessionB,
-    "data-workout-plan-id": "7",
-    "data-training-program-session-id": "planned-b",
-    "data-workout-session-prescription": JSON.stringify(second.assignments),
+    [cardAttributes.sessionId]: sessionB,
+    [cardAttributes.planId]: "7",
+    [cardAttributes.programSessionId]: "planned-b",
+    [cardAttributes.prescription]: JSON.stringify(second.assignments),
   };
   globalThis.document = {
     querySelectorAll: () => [
       {
         textContent: "Start Workout",
         closest: (selector) => {
-          assert.equal(selector, "[data-workout-session-id]");
+          assert.equal(selector, `[${cardAttributes.sessionId}]`);
           return { getAttribute: (key) => attributes[key] ?? null };
         },
       },
     ],
   };
   try {
-    assert.deepEqual(readWorkoutCards(), [card(sessionB, 3, "planned-b")]);
-    assert.equal(readWorkoutCards([card(sessionB, 3, "planned-b")]), true);
-    assert.equal(readWorkoutCards([card(sessionA)]), false);
-    delete attributes["data-workout-session-prescription"];
-    assert.equal(readWorkoutCards([card(sessionB, 3, "planned-b")]), false);
+    assert.deepEqual(readWorkoutCards(cardAttributes), [
+      card(sessionB, 3, "planned-b"),
+    ]);
+    assert.equal(
+      readWorkoutCards(cardAttributes, [card(sessionB, 3, "planned-b")]),
+      true,
+    );
+    assert.equal(readWorkoutCards(cardAttributes, [card(sessionA)]), false);
+    delete attributes[cardAttributes.prescription];
+    assert.equal(
+      readWorkoutCards(cardAttributes, [card(sessionB, 3, "planned-b")]),
+      false,
+    );
   } finally {
     if (original === undefined) delete globalThis.document;
     else globalThis.document = original;
@@ -282,6 +311,7 @@ test("inactive owner-bound sessions include same-day conditioning in authored or
   assert.deepEqual(expectedWorkoutCards(programs, [], [], [inactive]), [
     card(sessionA),
     card(sessionB, 3, "planned-b"),
+    card(sessionA, 2, "later"),
   ]);
   assert.deepEqual(
     expectedWorkoutCards(
@@ -326,7 +356,7 @@ test("active progression is retained when the library also contains that plan", 
   ]);
 });
 
-test("logging the earliest day's sessions does not promote a later Program day", () => {
+test("logging an assignment does not hide another scheduled occurrence", () => {
   assert.deepEqual(
     expectedWorkoutCards(
       program([
@@ -336,7 +366,7 @@ test("logging the earliest day's sessions does not promote a later Program day",
       [plan],
       [{ workout_plan_assignment_id: 1 }],
     ),
-    [],
+    [card(sessionA), card(sessionB, 3, "planned-b")],
   );
 });
 

@@ -41,11 +41,13 @@ interface WorkoutPlaybackSummaryProps {
   restRemaining: string;
   isRestActive: boolean;
   saveError: string | null;
+  completionConflict: boolean;
   isSaving: boolean;
   timezone: string;
   onCloseKeepDraft: () => void;
   onDiscard: () => void;
   onFinishWorkout: () => void;
+  onSaveSeparate: () => void;
   onPauseResumeRest: () => void;
   onSkipRest: () => void;
   onSessionNotesChange: (value: string) => void;
@@ -62,11 +64,13 @@ const WorkoutPlaybackSummary = ({
   restRemaining,
   isRestActive,
   saveError,
+  completionConflict,
   isSaving,
   timezone,
   onCloseKeepDraft,
   onDiscard,
   onFinishWorkout,
+  onSaveSeparate,
   onPauseResumeRest,
   onSkipRest,
   onSessionNotesChange,
@@ -265,7 +269,22 @@ const WorkoutPlaybackSummary = ({
           {saveError && (
             <div className="flex gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-              <span>{saveError}</span>
+              <div className="space-y-2">
+                <p>{saveError}</p>
+                {completionConflict && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={isSaving}
+                    onClick={onSaveSeparate}
+                  >
+                    {t(
+                      'exercise.workoutPlaybackDialog.saveSeparate',
+                      'Save as a separate workout'
+                    )}
+                  </Button>
+                )}
+              </div>
             </div>
           )}
           <StatRows
@@ -293,7 +312,7 @@ const WorkoutPlaybackSummary = ({
                       'Finish Workout'
                     ),
                 onClick: onFinishWorkout,
-                disabled: isSaving,
+                disabled: isSaving || completionConflict,
               },
             ]}
           />

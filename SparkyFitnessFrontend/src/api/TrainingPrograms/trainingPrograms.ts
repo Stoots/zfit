@@ -3,6 +3,7 @@ import {
   trainingProgramSchema,
   type TrainingProgramInput,
   type TrainingProgramOutcomeInput,
+  type TrainingProgramCompletionInput,
 } from '@workspace/shared';
 import { apiCall } from '@/api/api';
 
@@ -42,6 +43,19 @@ export async function recordTrainingProgramOutcome(
   return trainingProgramSchema.parse(
     await apiCall<unknown>(
       `/training-programs/${id}/sessions/${sessionId}/outcome`,
+      { method: 'POST', body: JSON.stringify(input) }
+    )
+  );
+}
+
+export async function completeTrainingProgramSession(
+  id: string,
+  sessionId: string,
+  input: TrainingProgramCompletionInput
+) {
+  return trainingProgramSchema.parse(
+    await apiCall<unknown>(
+      `/training-programs/${id}/sessions/${sessionId}/complete`,
       { method: 'POST', body: JSON.stringify(input) }
     )
   );

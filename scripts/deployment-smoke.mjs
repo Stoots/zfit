@@ -5,6 +5,7 @@ import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { pathToFileURL } from "node:url";
 import puppeteer from "puppeteer-core";
+import cardAttributes from "../shared/src/constants/dashboardWorkoutCardAttributes.json" with { type: "json" };
 
 const timeout = 30_000;
 
@@ -98,26 +99,28 @@ export function expectedWorkoutCards(
       plan.sessions.map((session) => [session.id, { plan, session }]),
     ),
   );
-  // Choose the whole earliest day before filtering logged prescriptions, just
-  // as the dashboard does; never promote a later day when today's cards are logged.
+  // Program outcomes, not today's diary assignments, decide whether a future
+  // occurrence of the same reusable Workout Session is still scheduled.
   const pending = plannedSessions
-    .filter((session) => {
-      const candidate = byId.get(session.workout_session_id);
-      return (
-        session.status === "planned" &&
-        candidate &&
-        String(candidate.plan.id) === String(session.workout_plan_id)
-      );
-    })
+    .filter((session) => session.status === "planned")
     .sort((left, right) =>
       left.effective_date.localeCompare(right.effective_date),
     );
   const expected = [];
-  const nextDate = pending[0]?.effective_date;
+  let selected = 0;
   for (const planned of pending) {
-    if (planned.effective_date !== nextDate) break;
-    const { plan, session } = byId.get(planned.workout_session_id);
-    if (eligible(session)) expected.push(card(plan, session, planned));
+    if (selected >= 3) break;
+    const candidate = byId.get(planned.workout_session_id);
+    if (
+      !candidate ||
+      String(candidate.plan.id) !== String(planned.workout_plan_id)
+    ) {
+      if (selected === 0) break;
+      continue;
+    }
+    selected++;
+    const { plan, session } = candidate;
+    expected.push(card(plan, session, planned));
   }
   for (const plan of plans) {
     const session = plan.next_session;
@@ -129,18 +132,18 @@ export function expectedWorkoutCards(
 }
 
 // Also used as the browser wait predicate: no label or whole-plan fallback.
-export function readWorkoutCards(expected) {
+export function readWorkoutCards(cardAttributes, expected) {
   const actual = [...document.querySelectorAll("button")]
     .filter((button) => button.textContent.trim() === "Start Workout")
     .map((button) => {
-      const root = button.closest("[data-workout-session-id]");
+      const root = button.closest(`[${cardAttributes.sessionId}]`);
       return {
-        workoutSessionId: root?.getAttribute("data-workout-session-id") ?? null,
-        workoutPlanId: root?.getAttribute("data-workout-plan-id") ?? null,
+        workoutSessionId: root?.getAttribute(cardAttributes.sessionId) ?? null,
+        workoutPlanId: root?.getAttribute(cardAttributes.planId) ?? null,
         trainingProgramSessionId:
-          root?.getAttribute("data-training-program-session-id") || null,
+          root?.getAttribute(cardAttributes.programSessionId) || null,
         prescription: JSON.parse(
-          root?.getAttribute("data-workout-session-prescription") || "null",
+          root?.getAttribute(cardAttributes.prescription) || "null",
         ),
       };
     });
@@ -198,7 +201,7 @@ async function snapshot(page) {
   return {
     ...surface,
     expected: expectedWorkoutCards(programs, plans, entries, libraryPlans),
-    actual: await page.evaluate(readWorkoutCards),
+    actual: await page.evaluate(readWorkoutCards, cardAttributes),
   };
 }
 
@@ -218,7 +221,7 @@ async function main() {
 
 Use a dedicated Chrome profile, signed in to the public-origin Diary in English.
 Run warm BEFORE deployment and verify AFTER deployment, with the same browser and output directory.
-Verify compares the loaded entry asset with the running container and checks exact session UUIDs and prescriptions for every earliest-day Program workout plus unrelated active standalone plans.
+Verify compares the loaded entry asset with the running container and checks exact session UUIDs and prescriptions for the next three Program workouts plus unrelated active standalone plans.
 Inactive owner plans bound by a Program remain eligible; shared or unbound inactive plans do not become standalone previews.
 Caching remains enabled. Stale builds trigger a normal service-worker update and one reload.
 The browser stays open. Reports and screenshots contain private workout data, but no cookies.`);
@@ -347,14 +350,21 @@ The browser stays open. Reports and screenshots contain private workout data, bu
       }
       // Wait for the exact-session Program query and prescription to render.
       const expected = (await snapshot(page)).expected;
-      await page.waitForFunction(readWorkoutCards, {}, expected);
+      await page.waitForFunction(
+        readWorkoutCards,
+        {},
+        cardAttributes,
+        expected,
+      );
       report.final = await snapshot(page);
       assertSnapshot(report.final, expectedEntry);
-      await page.evaluate(() =>
-        [...document.querySelectorAll("button")]
-          .find((button) => button.textContent.trim() === "Start Workout")
-          .closest("[data-workout-session-id]")
-          .scrollIntoView({ block: "start" }),
+      await page.evaluate(
+        (sessionIdAttribute) =>
+          [...document.querySelectorAll("button")]
+            .find((button) => button.textContent.trim() === "Start Workout")
+            .closest(`[${sessionIdAttribute}]`)
+            .scrollIntoView({ block: "start" }),
+        cardAttributes.sessionId,
       );
       await page.screenshot({ path: resolve(output, "upcoming-workouts.png") });
     }

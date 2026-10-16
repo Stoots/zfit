@@ -210,6 +210,7 @@ export * from "./utils/exerciseMuscleAggregates.ts";
 export * from "./utils/trainingConsistency.ts";
 export * from "./utils/dashboardWorkoutPlans.ts";
 export * from "./utils/programCardioAssessments.ts";
+export { default as DASHBOARD_WORKOUT_CARD_ATTRIBUTES } from "./constants/dashboardWorkoutCardAttributes.json";
 export * from "./utils/muscleBodyMap.ts";
 export * from "./utils/workoutHeartRateSeries.ts";
 export * from "./utils/cardioSession.ts";

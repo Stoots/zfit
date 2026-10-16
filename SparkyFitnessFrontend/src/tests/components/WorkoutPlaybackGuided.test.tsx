@@ -15,6 +15,12 @@ const mockCreatePresetSession = jest.fn();
 const mockSearchParams = new URLSearchParams('date=2026-09-25');
 let mockLocationState: { returnTo?: string; draft?: unknown } | null = null;
 
+jest.mock('@/hooks/TrainingPrograms/useTrainingPrograms', () => ({
+  useTrainingPrograms: () => ({
+    complete: { mutateAsync: jest.fn(), isPending: false },
+  }),
+}));
+
 jest.mock('react-i18next', () =>
   jest.requireActual('@/tests/mocks/reactI18next')
 );

@@ -2671,7 +2671,11 @@ async function logWorkoutPlanSession(
   workoutSessionId: string,
   entryDate: string,
   transactionClient?: PoolClient,
-  assignmentIds?: ReadonlySet<number>
+  assignmentIds?: ReadonlySet<number>,
+  completion?: {
+    programSessionId: string;
+    performedExercises?: PresetSessionExerciseRequest[];
+  }
 ) {
   const client = transactionClient ?? (await getClient(userId, actingUserId));
   try {
@@ -2731,6 +2735,43 @@ async function logWorkoutPlanSession(
         workout_plan_assignment_id: assignment.id,
       }));
     });
+    const performedExercises = completion?.performedExercises;
+    if (
+      completion &&
+      !performedExercises &&
+      !exercises.some((exercise) => exercise.sets.length > 0)
+    ) {
+      throw createServiceError(
+        409,
+        'Sessions with no prescribed sets must link an existing workout.'
+      );
+    }
+    // A player may submit only exercises from this frozen session. Match each
+    // occurrence so repeated exercises cannot claim an unrelated assignment.
+    const remaining = [...exercises];
+    const loggedExercises = performedExercises
+      ? performedExercises.map((performed) => {
+          const index = remaining.findIndex(
+            (prescribed) =>
+              prescribed.exercise_id === performed.exercise_id &&
+              Number(prescribed.workout_plan_assignment_id) ===
+                Number(performed.workout_plan_assignment_id)
+          );
+          if (index < 0 || performed.sets.length === 0) {
+            throw createServiceError(
+              400,
+              'Performed exercises must belong to the bound Workout Session.'
+            );
+          }
+          const prescribed = remaining.splice(index, 1)[0]!;
+          return {
+            ...prescribed,
+            ...performed,
+            id: undefined,
+            workout_plan_assignment_id: prescribed.workout_plan_assignment_id,
+          };
+        })
+      : exercises;
     const groupedSession = await createGroupedWorkoutSession(
       userId,
       actingUserId,
@@ -2741,7 +2782,7 @@ async function logWorkoutPlanSession(
         workout_format: formats.size === 1 ? [...formats][0] : 'standard',
         time_cap_seconds:
           formats.size === 1 && caps.size === 1 ? [...caps][0] : null,
-        exercises,
+        exercises: loggedExercises,
         activity_details: [
           {
             provider_name: 'SparkyFitness',
@@ -2752,6 +2793,15 @@ async function logWorkoutPlanSession(
               assignments,
             },
           },
+          ...(completion
+            ? [
+                {
+                  provider_name: 'SparkyFitness',
+                  detail_type: 'training_program_completion',
+                  detail_data: { session_id: completion.programSessionId },
+                },
+              ]
+            : []),
         ],
       },
       client,

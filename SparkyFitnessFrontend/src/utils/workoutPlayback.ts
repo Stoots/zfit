@@ -123,6 +123,7 @@ export interface WorkoutPlaybackDraft {
   version: 1;
   preset_id: string;
   workout_session_id?: string;
+  training_program?: { program_id: string; session_id: string };
   name: string;
   description: string | null;
   entry_date: string;
@@ -521,6 +522,7 @@ export function createWorkoutPlaybackDraftFromPreset(
     version: 1,
     preset_id: String(preset.id),
     workout_session_id: preset.workout_session_id,
+    training_program: preset.training_program,
     load_adjustments_applied: !!preset.workout_session_id,
     name: preset.name,
     description: preset.description ?? null,

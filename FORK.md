@@ -69,7 +69,7 @@ Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded her
 
 #### Bug fixes
 
-- Show only the next pending Training Program workout on web and mobile dashboards (ordered by effective date), keeping the session picker for standalone Workout Plans and falling back to all plans if Programs fail to load.
+- Show the next three pending Training Program workouts on the web dashboard and the next one on mobile (ordered by effective date), keeping the session picker for standalone Workout Plans and falling back to all plans if Programs fail to load.
 - Reject `missed` outcomes for future Planned Sessions so an accidental click cannot trigger an irreversible auto-shift; index Program session diary links.
 - Restore per-set RPE entry in started workouts, including timed cardio, with decimal effort values retained in resumed drafts and workout save requests.
 - Show prescribed set notes on workout start and provide editable exercise notes that persist with the workout.

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import WorkoutPlaybackPage from '@/pages/Diary/WorkoutPlaybackPage';
+import { HttpApiError } from '@/api/api';
 import type { WorkoutPreset } from '@/types/workout';
 import {
   buildPresetSessionCreateRequestFromDraft,
@@ -10,6 +11,8 @@ import {
 
 const mockNavigate = jest.fn();
 const mockCreatePresetSession = jest.fn();
+const mockCompleteProgramSession = jest.fn();
+const mockGetGroupedWorkoutSession = jest.fn();
 const mockSearchParams = new URLSearchParams('date=2026-04-27');
 let mockDistanceUnit: 'km' | 'miles' = 'km';
 let mockLocationState: { returnTo?: string; draft?: unknown } | null = null;
@@ -29,10 +32,15 @@ jest.mock('@/contexts/PreferencesContext', () => ({
     weightUnit: 'kg',
     distanceUnit: mockDistanceUnit,
     timezone: 'UTC',
+    energyUnit: 'kcal',
+    convertEnergy: (value: number) => value,
+    getEnergyUnitString: () => 'kcal',
   }),
 }));
 
 jest.mock('@/hooks/Exercises/useExerciseEntries', () => ({
+  getGroupedWorkoutSession: (...args: unknown[]) =>
+    mockGetGroupedWorkoutSession(...args),
   useCreatePresetSessionMutation: () => ({
     mutateAsync: (...args: unknown[]) => mockCreatePresetSession(...args),
     isPending: false,
@@ -41,7 +49,17 @@ jest.mock('@/hooks/Exercises/useExerciseEntries', () => ({
   fetchExerciseProgressionStats: jest.fn(async () => null),
 }));
 
+jest.mock('@/hooks/TrainingPrograms/useTrainingPrograms', () => ({
+  useTrainingPrograms: () => ({
+    complete: {
+      mutateAsync: (...args: unknown[]) => mockCompleteProgramSession(...args),
+      isPending: false,
+    },
+  }),
+}));
+
 jest.mock('@/hooks/Exercises/useWorkoutCoaching', () => ({
+  useWorkoutSessionFeedback: () => ({ isLoading: true }),
   fetchWorkoutCoachingSignals: jest.fn(async () => ({
     adaptive_suggestions: false,
     signals: [],
@@ -72,8 +90,184 @@ describe('WorkoutPlaybackPage', () => {
     mockDistanceUnit = 'km';
     mockNavigate.mockReset();
     mockCreatePresetSession.mockReset();
+    mockCompleteProgramSession.mockReset();
+    mockGetGroupedWorkoutSession
+      .mockReset()
+      .mockResolvedValue({ id: 'diary-1', exercises: [] });
     window.localStorage.clear();
     mockLocationState = { returnTo: '/?date=2026-04-27' };
+  });
+
+  it('finishes a Program draft through one atomic completion request', async () => {
+    const draft = createWorkoutPlaybackDraftFromPreset(
+      presetFixture,
+      '2026-04-27'
+    );
+    draft.training_program = {
+      program_id: 'program-1',
+      session_id: 'planned-1',
+    };
+    draft.exercises[0]!.workout_plan_assignment_id = 17;
+    draft.exercises[0]!.sets[0]!.completed = true;
+    draft.exercises[0]!.sets[0]!.completed_at = '2026-04-27T10:00:00.000Z';
+    mockLocationState = { returnTo: '/?date=2026-04-27', draft };
+    mockCompleteProgramSession.mockResolvedValue({
+      phases: [
+        {
+          weeks: [
+            {
+              sessions: [
+                { id: 'planned-1', completed_workout: { id: 'diary-1' } },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    render(<WorkoutPlaybackPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'Finish Workout' }));
+    await waitFor(() =>
+      expect(mockCompleteProgramSession).toHaveBeenCalledWith({
+        programId: 'program-1',
+        sessionId: 'planned-1',
+        input: {
+          entry_date: '2026-04-27',
+          performed_exercises: [
+            expect.objectContaining({
+              exercise_id: 'exercise-1',
+              workout_plan_assignment_id: 17,
+              sets: [
+                expect.objectContaining({
+                  reps: 8,
+                  completed_at: '2026-04-27T10:00:00.000Z',
+                }),
+              ],
+            }),
+          ],
+        },
+      })
+    );
+    expect(mockCreatePresetSession).not.toHaveBeenCalled();
+  });
+
+  it('keeps a failed Program draft for an idempotent retry and blocks double submission', async () => {
+    const draft = createWorkoutPlaybackDraftFromPreset(
+      presetFixture,
+      '2026-04-27'
+    );
+    draft.training_program = {
+      program_id: 'program-1',
+      session_id: 'planned-1',
+    };
+    draft.exercises[0]!.workout_plan_assignment_id = 17;
+    mockLocationState = { returnTo: '/?date=2026-04-27', draft };
+    let rejectFirst!: (reason: Error) => void;
+    mockCompleteProgramSession.mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => {
+          rejectFirst = reject;
+        })
+    );
+    mockCompleteProgramSession.mockResolvedValueOnce({
+      phases: [
+        {
+          weeks: [
+            {
+              sessions: [
+                { id: 'planned-1', completed_workout: { id: 'diary-1' } },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+    render(<WorkoutPlaybackPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'Log set' }));
+    await waitFor(() =>
+      expect(loadWorkoutPlaybackDraftFromStorage('2026-04-27')).not.toBeNull()
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Finish Workout' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Finish Workout' }));
+    expect(mockCompleteProgramSession).toHaveBeenCalledTimes(1);
+    rejectFirst(new Error('uncertain response'));
+    await waitFor(() =>
+      expect(screen.getByText(/Failed to save workout/)).toBeInTheDocument()
+    );
+    expect(loadWorkoutPlaybackDraftFromStorage('2026-04-27')).not.toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Finish Workout' }));
+    await waitFor(() =>
+      expect(mockCompleteProgramSession).toHaveBeenCalledTimes(2)
+    );
+    expect(mockCreatePresetSession).not.toHaveBeenCalled();
+  });
+
+  it('keeps a conflicting Program draft and offers a separate unlinked save or discard', async () => {
+    const draft = createWorkoutPlaybackDraftFromPreset(
+      presetFixture,
+      '2026-04-27'
+    );
+    draft.training_program = {
+      program_id: 'program-1',
+      session_id: 'planned-1',
+    };
+    draft.exercises[0]!.workout_plan_assignment_id = 17;
+    mockLocationState = { returnTo: '/?date=2026-04-27', draft };
+    mockCompleteProgramSession.mockRejectedValue(
+      new HttpApiError(
+        'Already completed with a different workout',
+        409,
+        'PROGRAM_COMPLETION_CONFLICT'
+      )
+    );
+    mockCreatePresetSession.mockResolvedValue({
+      id: 'separate-1',
+      exercises: [],
+    });
+    render(<WorkoutPlaybackPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'Log set' }));
+    await waitFor(() =>
+      expect(loadWorkoutPlaybackDraftFromStorage('2026-04-27')).not.toBeNull()
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Finish Workout' }));
+    await waitFor(() =>
+      expect(
+        screen.getByText(/already completed with a different workout/i)
+      ).toBeInTheDocument()
+    );
+    expect(
+      screen.getByRole('button', { name: 'Save as a separate workout' })
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Discard' })).toBeInTheDocument();
+    expect(loadWorkoutPlaybackDraftFromStorage('2026-04-27')).not.toBeNull();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Save as a separate workout' })
+    );
+    await waitFor(() =>
+      expect(mockCreatePresetSession).toHaveBeenCalledTimes(1)
+    );
+    expect(mockCompleteProgramSession).toHaveBeenCalledTimes(1);
+    expect(mockCreatePresetSession.mock.calls[0]![0]).not.toHaveProperty(
+      'training_program'
+    );
+  });
+
+  it('keeps the standalone playback save path', async () => {
+    const draft = createWorkoutPlaybackDraftFromPreset(
+      presetFixture,
+      '2026-04-27'
+    );
+    draft.exercises[0]!.sets[0]!.completed = true;
+    mockLocationState = { returnTo: '/?date=2026-04-27', draft };
+    mockCreatePresetSession.mockResolvedValue({
+      id: 'standalone-1',
+      exercises: [],
+    });
+    render(<WorkoutPlaybackPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'Finish Workout' }));
+    await waitFor(() =>
+      expect(mockCreatePresetSession).toHaveBeenCalledTimes(1)
+    );
+    expect(mockCompleteProgramSession).not.toHaveBeenCalled();
   });
 
   it.each([

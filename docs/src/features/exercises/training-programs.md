@@ -23,7 +23,7 @@ Weekly plans retain explicit weekdays, including unscheduled sessions without a 
 
 **Optional** is an explicit session checkbox, not a name convention. Existing sessions default to required. Copying and saving a Workout Session retain its flag and full prescription; names such as “C” or “accessory” never make it optional. Later library edits do not change an existing Program binding's stored optionality. Mark only the intended sessions optional; absent deload sessions remain absent rather than being generated.
 
-**Start Workout** in the Program view opens the exact bound session, not the plan's standalone next session. Diary previews include every pending exact session on the earliest Program date in authored order, even when its plan is inactive, plus unrelated active standalone plans. Completed assignment coverage hides only the corresponding session; partial coverage does not hide the remainder.
+**Start Workout** in the Program view opens the exact bound session, not the plan's standalone next session. The web Diary previews up to three pending exact sessions across effective dates in date and authored order, even when their plans are inactive, plus unrelated active standalone plans. A Program session stays in that preview until its Program outcome is recorded. Finishing **Start Workout** playback from Home or the Program page sends the performed sets to the same atomic completion endpoint and records the Program outcome with the diary workout. An identical retry returns that result without logging again. If another completion or explicit link already recorded a different workout, playback keeps the draft and offers **Save as a separate workout** (unlinked) or **Discard**. Standalone playback still saves a diary workout normally. **Mark complete** confirms one atomic server action that logs the exact bound Workout Session prescription on the selected Diary date and records the Program outcome. Retrying after an uncertain response returns the recorded completion without logging another workout. The same dialog offers **Link an existing workout**: choose any diary date and explicitly select an unlinked workout, including a partial workout, to record its completion without logging a new one. A workout already linked to another Planned Session is unavailable. Sessions with no prescribed sets use only the link flow; the direct completion API rejects logging them without performed sets.
 
 Frozen execution retains all prescribed exercise/set data, effort, rest, distance, ranges and notes. A single-preset session uses its frozen format and time cap. Multi-assignment sessions retain each prescription but use the existing one-format combined playback: mixed formats become standard, and a shared time cap is used only when all caps agree. There are no independent per-block timers. Logging keeps performed results separate from the server-frozen prescription; later local or library edits do not refresh that history.
 
@@ -131,20 +131,21 @@ Training Programs are owner-only. Family delegates cannot view or edit them, inc
 
 A Workout Session used by a Planned Session cannot be removed or moved to another plan, and its parent plan cannot be deleted until Program references are removed. Assignments with any diary link, including incomplete prefill, also cannot be removed; deleting their session or plan returns HTTP 409 without deleting or unlinking diary history. Recorded Planned Sessions cannot be individually removed to release their reference; explicit Program deletion remains available. Hiding a library exercise remains an alternative to deleting linked identities.
 
-This feature does not automatically log workouts, create cardio tests, or expose AI queries.
+Workouts are logged only after explicit Mark complete confirmation; Programs do not create cardio tests or expose AI queries.
 
 ## HTTP interface
 
 Requests use the application's session cookie or API-key authentication. No request accepts `user_id`; ownership is derived from authentication. Acting-user switches and `x-on-behalf-of-user-id` delegation are refused.
 
-| Method | Path                                                     | Result                                                                                  |
-| ------ | -------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| GET    | `/api/training-programs`                                 | Your Programs with full structure, schedule and history                                 |
-| POST   | `/api/training-programs`                                 | Create; returns persisted structure with HTTP 201                                       |
-| GET    | `/api/training-programs/:id`                             | View your persisted Program                                                             |
-| PUT    | `/api/training-programs/:id`                             | Atomically replace the editable aggregate, preserving recorded history                  |
-| POST   | `/api/training-programs/:id/sessions/:sessionId/outcome` | Record a miss or link completion; returns the whole updated Program                     |
-| DELETE | `/api/training-programs/:id`                             | Delete Program hierarchy/history, preserving diary workouts and Workout Plans; HTTP 204 |
+| Method | Path                                                      | Result                                                                                             |
+| ------ | --------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| GET    | `/api/training-programs`                                  | Your Programs with full structure, schedule and history                                            |
+| POST   | `/api/training-programs`                                  | Create; returns persisted structure with HTTP 201                                                  |
+| GET    | `/api/training-programs/:id`                              | View your persisted Program                                                                        |
+| PUT    | `/api/training-programs/:id`                              | Atomically replace the editable aggregate, preserving recorded history                             |
+| POST   | `/api/training-programs/:id/sessions/:sessionId/outcome`  | Record a miss or link completion; returns the whole updated Program                                |
+| POST   | `/api/training-programs/:id/sessions/:sessionId/complete` | Atomically log the bound Workout Session and record completion; retries return the existing result |
+| DELETE | `/api/training-programs/:id`                              | Delete Program hierarchy/history, preserving diary workouts and Workout Plans; HTTP 204            |
 
 Example create body:
 

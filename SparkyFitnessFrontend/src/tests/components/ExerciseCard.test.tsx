@@ -42,6 +42,7 @@ jest.mock('@/contexts/ActiveUserContext', () => ({
 jest.mock('@/contexts/PreferencesContext', () => ({
   usePreferences: () => ({
     loggingLevel: 'ERROR',
+    timezone: 'Australia/Sydney',
     energyUnit: 'kcal',
     convertEnergy: (value: number) => value,
     getEnergyUnitString: () => 'kcal',
@@ -53,6 +54,9 @@ jest.mock('@/hooks/Exercises/useWorkoutPlans', () => ({
   useWorkoutPlanTemplates: () => ({ data: mockAllPlans, isPending: false }),
 }));
 jest.mock('@/hooks/TrainingPrograms/useTrainingPrograms', () => ({
+  useTrainingPrograms: () => ({
+    outcome: { mutateAsync: jest.fn(), isPending: false },
+  }),
   useTrainingProgramsList: (_user: string, enabled: boolean) => ({
     data: enabled ? mockPrograms : undefined,
   }),
@@ -61,6 +65,10 @@ jest.mock('@/hooks/Exercises/useExerciseEntries', () => ({
   useExerciseEntries: () => ({ data: mockEntries, isLoading: false }),
   useDeleteExerciseEntryMutation: () => ({ mutateAsync: jest.fn() }),
   useDeleteExercisePresetEntryMutation: () => ({ mutateAsync: jest.fn() }),
+  useCreatePresetSessionMutation: () => ({
+    mutateAsync: jest.fn(),
+    isPending: false,
+  }),
 }));
 jest.mock('@/pages/Exercises/AddExerciseDialog', () => () => null);
 jest.mock('@/pages/Diary/EditExerciseEntryDialog', () => () => null);
@@ -213,7 +221,7 @@ it('starts the earliest exact Program session and keeps unrelated standalone wor
   mount();
   expect(
     screen.getAllByRole('button', { name: /^Start Workout:/ })
-  ).toHaveLength(2);
+  ).toHaveLength(3);
   fireEvent.click(
     screen.getByRole('button', { name: /Start Workout: A \(session 1 of 2\)/ })
   );
@@ -265,7 +273,7 @@ it('keeps the fixed Program preview while a diary assignment is partially linked
   mount();
   expect(
     screen.getAllByRole('button', { name: /^Start Workout:/ })
-  ).toHaveLength(2);
+  ).toHaveLength(3);
   fireEvent.click(
     screen.getByRole('button', { name: /Start Workout: A \(session 1 of 2\)/ })
   );
