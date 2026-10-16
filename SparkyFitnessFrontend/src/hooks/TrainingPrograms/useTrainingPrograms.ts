@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type {
+  TrainingProgram,
   TrainingProgramInput,
   TrainingProgramOutcomeInput,
   TrainingProgramCompletionInput,
@@ -43,6 +44,51 @@ export function useTrainingPrograms(
     void client.invalidateQueries({ queryKey: workoutPlanKeys.all });
     void client.invalidateQueries({ queryKey: exerciseEntryKeys.all });
     void client.invalidateQueries({ queryKey: dailyProgressKeys.all });
+  };
+  const updateCompletedProgram = async (
+    saved: TrainingProgram,
+    sessionId: string
+  ) => {
+    const listKey = trainingProgramKeys.list(saved.user_id);
+    await client.cancelQueries({ queryKey: listKey });
+    const reconcile = (cached?: TrainingProgram): TrainingProgram => {
+      const sessions = new Map(
+        cached?.phases.flatMap((phase) =>
+          phase.weeks.flatMap((week) =>
+            week.sessions.map((session) => [session.id, session] as const)
+          )
+        )
+      );
+      return {
+        ...saved,
+        phases: saved.phases.map((phase) => ({
+          ...phase,
+          weeks: phase.weeks.map((week) => ({
+            ...week,
+            sessions: week.sessions.map((session) => {
+              const current = sessions.get(session.id);
+              // A delayed response must not reopen another session's outcome.
+              return session.id !== sessionId &&
+                (session.status === 'planned' ||
+                  session.status === 'omitted') &&
+                current &&
+                current.status !== 'planned'
+                ? current
+                : session;
+            }),
+          })),
+        })),
+      };
+    };
+    client.setQueryData<TrainingProgram[]>(listKey, (programs) =>
+      programs?.map((program) =>
+        program.id === saved.id ? reconcile(program) : program
+      )
+    );
+    client.setQueryData<TrainingProgram>(
+      trainingProgramKeys.detail(saved.user_id, saved.id),
+      reconcile
+    );
   };
   const programs = useTrainingProgramsList(userId, enabled);
   const program = useQuery({
@@ -103,8 +149,8 @@ export function useTrainingPrograms(
       sessionId: string;
       input: TrainingProgramOutcomeInput;
     }) => recordTrainingProgramOutcome(programId, sessionId, input),
-    onSuccess: (saved) => {
-      client.setQueryData(trainingProgramKeys.detail(userId, saved.id), saved);
+    onSuccess: async (saved, { sessionId }) => {
+      await updateCompletedProgram(saved, sessionId);
       invalidateDependents();
     },
     meta: {
@@ -124,8 +170,8 @@ export function useTrainingPrograms(
       sessionId: string;
       input: TrainingProgramCompletionInput;
     }) => completeTrainingProgramSession(programId, sessionId, input),
-    onSuccess: (saved) => {
-      client.setQueryData(trainingProgramKeys.detail(userId, saved.id), saved);
+    onSuccess: async (saved, { sessionId }) => {
+      await updateCompletedProgram(saved, sessionId);
       invalidateDependents();
       invalidateDiary();
     },

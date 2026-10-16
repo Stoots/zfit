@@ -374,33 +374,33 @@ describe('ExerciseCard dashboard plans', () => {
     );
   });
 
-  it('shows three Program cards in schedule order and no fourth card', () => {
-    mockState.plans = ['7', '8', '9', '10'].map((id) =>
+  it('shows four Program cards in schedule order and no fifth card', () => {
+    mockState.plans = ['7', '8', '9', '10', '11'].map((id) =>
       makePlan(id, `Plan ${id}`, [`Workout ${id}`])
     );
     const linked = programLinkedTo('7');
     const week = linked.phases[0]!.weeks[0]!;
     const baseSession = week.sessions[0]!;
-    week.sessions = ['10', '8', '7', '9'].map((id, index) => ({
+    week.sessions = ['10', '8', '7', '9', '11'].map((id, index) => ({
       ...baseSession,
       id: `planned-${id}`,
       workout_plan_id: Number(id),
       workout_session_id: `${id}-s1`,
-      effective_date: `2026-10-${String([18, 16, 15, 17][index])}`,
+      effective_date: `2026-10-${String([18, 16, 15, 17, 19][index])}`,
     }));
     mockState.programs = { data: [linked], isError: false };
     renderCard();
 
     expect(
       screen.getAllByRole('button', { name: 'Mark complete' })
-    ).toHaveLength(3);
+    ).toHaveLength(4);
     expect(
       screen
         .getAllByTestId(/dashboard-plan-/)
-        .slice(0, 3)
+        .slice(0, 4)
         .map((item) => item.getAttribute('data-workout-plan-id'))
-    ).toEqual(['7', '8', '9']);
-    expect(screen.queryByText('Workout 10')).not.toBeInTheDocument();
+    ).toEqual(['7', '8', '9', '10']);
+    expect(screen.queryByText('Workout 11')).not.toBeInTheDocument();
   });
 
   it('shows the next Program workout as a preview without a session picker', () => {
