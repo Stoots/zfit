@@ -72,6 +72,8 @@ Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded her
 
 #### Bug fixes
 
+- Restore hidden CSV exercises in place on re-import, counting them as updated while preserving separate-copy imports for hidden manual exercises (#21).
+
 - Allow Workout Program consolidation when a Program includes Cardio Tests, preserving assessment and attempt links; assessment-only Programs return no workout proposal.
 - Prevent exercise replacement in web Training Program playback and recover older substituted drafts as separate, unlinked workouts.
 - Preserve a Workout Session's shared interval format and time cap across matching frozen presets on web, consistent with mobile.

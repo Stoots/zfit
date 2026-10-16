@@ -796,12 +796,9 @@ async function getTopExercises(userId: any, limit: any) {
   }
 }
 async function getExerciseBySourceAndSourceId(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  source: any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  sourceId: any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  userId: any
+  source: string,
+  sourceId: string,
+  userId: string
 ) {
   const client = await getSystemClient();
   try {
@@ -809,7 +806,7 @@ async function getExerciseBySourceAndSourceId(
       `SELECT id, source, source_id, name, force, level, mechanic, equipment,
               primary_muscles, secondary_muscles, instructions, category, images,
               calories_per_hour, description, user_id, is_custom, shared_with_public,
-              modality, created_at, updated_at
+              modality, is_quick_exercise, created_at, updated_at
        FROM exercises WHERE source = $1 AND source_id = $2 AND user_id = $3`,
       [source, sourceId, userId]
     );

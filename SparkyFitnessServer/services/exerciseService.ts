@@ -1801,8 +1801,23 @@ async function importExercisesFromCSV(
           );
           updatedCount++;
         } else {
-          await exerciseDb.createExercise(exerciseData);
-          createdCount++;
+          const hiddenCsvExercise =
+            await exerciseDb.getExerciseBySourceAndSourceId(
+              'CSV',
+              sourceId,
+              authenticatedUserId
+            );
+          if (hiddenCsvExercise?.is_quick_exercise === true) {
+            await exerciseDb.updateExercise(
+              hiddenCsvExercise.id,
+              authenticatedUserId,
+              { ...exerciseData, is_quick_exercise: false }
+            );
+            updatedCount++;
+          } else {
+            await exerciseDb.createExercise(exerciseData);
+            createdCount++;
+          }
         }
       } catch (rowError) {
         failedCount++;

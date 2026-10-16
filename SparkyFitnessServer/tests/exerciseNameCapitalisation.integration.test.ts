@@ -629,7 +629,7 @@ describe.runIf(optedIn)(
       });
     });
 
-    it('imports a visible CSV movement without updating its hidden exact-name counterpart', async () => {
+    it('imports a visible CSV movement without updating its hidden manual exact-name counterpart', async () => {
       const hidden = await create('hidden CSV McGill TRX row');
       const hide = await request(app)
         .delete(`/api/exercises/${hidden.id}?mode=hide`)
@@ -689,6 +689,65 @@ describe.runIf(optedIn)(
       } finally {
         db.release();
       }
+    });
+
+    it('restores an owned hidden CSV exercise on re-import', async () => {
+      const searchPath =
+        '/api/exercises/search?searchTerm=hidden%20CSV%20restore%20row';
+      const importCsv = (description: string) =>
+        request(app)
+          .post('/api/exercises/import')
+          .set('Authorization', `Bearer ${token}`)
+          .attach(
+            'file',
+            Buffer.from(
+              `name,primary_muscles,category,description\nhidden CSV restore row,back,strength,${description}\n`
+            ),
+            'restore-exercise.csv'
+          );
+      const first = await importCsv('Original details');
+      expect(first.status, JSON.stringify(first.body)).toBe(201);
+      expect(first.body).toMatchObject({ created: 1, updated: 0, failed: 0 });
+      const original = (await get(searchPath))[0];
+      const hide = await request(app)
+        .delete(`/api/exercises/${original.id}?mode=hide`)
+        .set('Authorization', `Bearer ${token}`);
+      expect(hide.status, JSON.stringify(hide.body)).toBe(200);
+      expect(await get(searchPath)).toEqual([]);
+
+      const restored = await importCsv('Restored details');
+      expect(restored.status, JSON.stringify(restored.body)).toBe(201);
+      expect(restored.body).toMatchObject({
+        created: 0,
+        updated: 1,
+        failed: 0,
+      });
+      expect(await get(searchPath)).toEqual([
+        expect.objectContaining({
+          id: original.id,
+          description: 'Restored details',
+        }),
+      ]);
+      expect(
+        await exerciseRepository.getExerciseBySourceAndSourceId(
+          'CSV',
+          'hidden_csv_restore_row',
+          owner
+        )
+      ).toMatchObject({ id: original.id, is_quick_exercise: false });
+      const repeated = await importCsv('Repeated details');
+      expect(repeated.status, JSON.stringify(repeated.body)).toBe(201);
+      expect(repeated.body).toMatchObject({
+        created: 0,
+        updated: 1,
+        failed: 0,
+      });
+      expect(await get(searchPath)).toEqual([
+        expect.objectContaining({
+          id: original.id,
+          description: 'Repeated details',
+        }),
+      ]);
     });
 
     it('imports an owned copy instead of updating another user’s shared exact-name exercise', async () => {
