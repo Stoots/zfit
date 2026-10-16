@@ -2374,7 +2374,7 @@ async function updateGroupedWorkoutSession(
       number,
       readonly WorkoutPlanPresetSnapshot['exercises'][number][]
     >();
-    const prescribedAssignmentIds = new Set<number>();
+    const prescribedExercises = new Map<number, Set<string | null>>();
     let hasPlanPrescription = false;
     for (const detail of existingSession.activity_details ?? []) {
       if (detail.detail_type !== 'workout_plan_prescription') continue;
@@ -2392,7 +2392,16 @@ async function updateGroupedWorkoutSession(
           'Stored workout prescription is invalid.'
         );
       for (const assignment of parsed.data) {
-        prescribedAssignmentIds.add(assignment.id);
+        prescribedExercises.set(
+          assignment.id,
+          new Set(
+            assignment.preset_snapshot
+              ? assignment.preset_snapshot.exercises.map(
+                  (exercise) => exercise.exercise_id
+                )
+              : [assignment.exercise_id]
+          )
+        );
         if (assignment.preset_snapshot) {
           frozenExerciseSnapshots.set(
             assignment.id,
@@ -2404,12 +2413,12 @@ async function updateGroupedWorkoutSession(
     if (
       hasPlanPrescription &&
       updateData.exercises?.some(
-        (exercise: { workout_plan_assignment_id?: string | number | null }) =>
+        (exercise) =>
           exercise.workout_plan_assignment_id !== null &&
           exercise.workout_plan_assignment_id !== undefined &&
-          !prescribedAssignmentIds.has(
-            Number(exercise.workout_plan_assignment_id)
-          )
+          !prescribedExercises
+            .get(Number(exercise.workout_plan_assignment_id))
+            ?.has(exercise.exercise_id)
       )
     ) {
       throw createServiceError(
