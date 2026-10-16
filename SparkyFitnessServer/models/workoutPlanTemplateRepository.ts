@@ -538,6 +538,11 @@ async function deleteDisposablePrefillEntries(
          AND entry.is_weekly_prefill
          AND entry.entry_date >= $3::date
          AND NOT EXISTS (
+           SELECT 1 FROM exercise_entries sibling
+           WHERE sibling.exercise_preset_entry_id = entry.exercise_preset_entry_id
+             AND NOT sibling.is_weekly_prefill
+         )
+         AND NOT EXISTS (
            SELECT 1 FROM exercise_entry_sets completed_set
            WHERE completed_set.exercise_entry_id = entry.id
              AND completed_set.completed_at IS NOT NULL
