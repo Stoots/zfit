@@ -34,6 +34,8 @@ evidence. Reuse existing harnesses rather than pinning implementation details.
 
 **Isolated route tests** mount a router in a throwaway `express()` app and mock service/repository and auth/permission boundaries to isolate the HTTP contract (reference: `SparkyFitnessServer/tests/medicationRoutes.test.ts`). **Persisted HTTP tests** instead use real authentication and PostgreSQL to prove workflows and authorization; see `trainingPrograms.integration.test.ts` and `workoutPlanBulk.integration.test.ts`. These are different seams, not a rule that every route test avoids the database.
 
+**Row order:** PostgreSQL returns rows in no guaranteed order without `ORDER BY`. Compare row arrays only after an explicit `ORDER BY` or a sort on a stable key such as the row ID. An unordered `toStrictEqual` on persisted rows passes locally and flakes in CI (#17).
+
 ```typescript
 // SparkyFitnessServer/tests/medicationRoutes.test.ts (shape)
 import { vi, describe, it, expect, beforeEach } from 'vitest';

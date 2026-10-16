@@ -45,4 +45,5 @@ Follow this checklist whenever you add or change a server database migration —
 
 - [ ] Run `pnpm run validate` in `SparkyFitnessServer/` — typecheck, lint, format.
 - [ ] Run tests nearest the touched surface: `pnpm exec vitest run tests/<domain>*.test.ts`.
+- [ ] Adding or changing a column on an existing table: run the `migration-check` suite list from `.github/workflows/ci-tests.yml` with `--no-file-parallelism` against a disposable database. Some suites replay older migrations against today's schema, so a new `NOT NULL` column can break a 2026-09 cleanup (#48).
 - [ ] If the API changed, validate from the consuming packages (frontend, mobile) too.
