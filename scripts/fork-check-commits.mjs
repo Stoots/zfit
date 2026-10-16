@@ -6,12 +6,19 @@ import { join } from "node:path";
 import { lintText } from "./fork-check-pr-body.mjs";
 
 const workflowPath = ".github/workflows/ci-tests.yml";
+// Fork-owned GitHub files, as listed in FORK.md.
+const forkOwnedPath = (path) =>
+  path.startsWith(".github/workflows/fork-") ||
+  path === ".github/workflows/deployment-smoke-checks.yml" ||
+  path.startsWith(".github/scripts/assert-acceptance-report");
 const protectedPath = (path) =>
   path === "CHANGELOG.md" ||
   path === "AGENTS.md" ||
   path === "db_schema_backup.sql" ||
-  path.startsWith(".github/") ||
+  (path.startsWith(".github/") && !forkOwnedPath(path)) ||
   path.startsWith("SparkyFitnessFrontend/src/components/ui/");
+// The native app stays at upstream behaviour; fork features ship to web (FORK.md).
+const nativeAppPath = (path) => path.startsWith("SparkyFitnessMobile/");
 
 function command(bin, args, options = {}) {
   const result = spawnSync(bin, args, {
@@ -138,6 +145,10 @@ function main() {
         console.log("WARNING " + short + ": review upstream-owned " + path);
         warnings++;
       }
+    }
+    for (const path of new Set(paths.filter(nativeAppPath))) {
+      console.log("WARNING " + short + ": native app is frozen; " + path);
+      warnings++;
     }
 
     const message = command("git", ["show", "-s", "--format=%B", sha]);

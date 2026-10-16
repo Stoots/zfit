@@ -16,7 +16,7 @@ export function lintText(value) {
   if (
     /generated with/i.test(value) ||
     assistantName.test(value) ||
-    /^co-authored-by:\s*.*\bAI\b/im.test(value)
+    /^co-authored-by:\s*.*(\bAI\b|\[bot\])/im.test(value)
   ) {
     errors.push("Remove assistant attribution from public text.");
   }

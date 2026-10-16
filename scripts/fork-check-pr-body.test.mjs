@@ -44,6 +44,8 @@ test("rejects attribution in PR text", () => {
     "Generated with a code assistant",
     "Reviewed by Copilot",
     "🤖",
+    "Co-authored-by: coderabbitai[bot] <136622811+coderabbitai[bot]@users.noreply.github.com>",
+    "Co-authored-by: some-review-tool[bot] <1+tool[bot]@users.noreply.github.com>",
   ]) {
     const result = run(body);
     assert.equal(result.status, 1, body);

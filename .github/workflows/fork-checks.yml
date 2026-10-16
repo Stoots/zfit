@@ -1,0 +1,41 @@
+name: Fork Checks
+
+# Fork-owned (see FORK.md): public-history rules for every PR's commits and text.
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  public-history:
+    name: Commits and PR text
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Verify fork check scripts
+        run: node --test scripts/fork-check-commits.test.mjs scripts/fork-check-pr-body.test.mjs
+
+      # Upstream sync branches carry upstream's own history; only fork-authored PRs are held to it.
+      - name: Check PR commits
+        if: ${{ !startsWith(github.head_ref, 'sync/upstream-') }}
+        run: node scripts/fork-check-commits.mjs "$BASE_SHA..$HEAD_SHA"
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+
+      - name: Check PR title and body
+        run: printf '%s\n\n%s\n' "$PR_TITLE" "$PR_BODY" | node scripts/fork-check-pr-body.mjs
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
