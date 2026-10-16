@@ -88,6 +88,7 @@ pnpm exec eslint routes/v2/foodRoutes.ts services/foodCoreService.ts
 - `db/` - pool management, grants, migrations, and RLS policies
 - `config/` - logging and Swagger config
 - `utils/` - startup helpers, CORS, permissions, timezone loading, OIDC helpers, migration helpers
+- `ai/tools/trainingAnalysisTools.ts` and `models/trainingAnalysisRepository.ts` - owner-only, chat-only read tools for the optional `trainingAnalysis` request scope. `chatService` bypasses category escalation, mutation tools and unrelated history for these turns; `tests/chatTrainingRoutes.test.ts` mocks providers and the Cardio Test integration suite verifies persisted HealthKit reads.
 - `ai/` - AI provider configuration (`config.ts`), the unified provider-dispatch helper (`providerDispatch.ts`), and the in-process chatbot tool registry (`ai/tools/`)
 - `security/` - encryption utilities (`encryption.ts`)
 - `validation/` - legacy express-validator rules for a few older routes (new routes use Zod schemas)
@@ -229,7 +230,7 @@ When searching, ignore noisy/generated directories unless you explicitly need th
 
 ### AI Services
 
-- AI calls go through the Vercel `ai` SDK (v6) with provider adapters for OpenAI, Anthropic, and Google, plus OpenAI-compatible, Mistral, Groq, OpenRouter, and Ollama service types
+- AI calls go through the Vercel `ai` SDK (v7) with provider adapters for OpenAI, Anthropic, and Google, plus OpenAI-compatible, Mistral, Groq, OpenRouter, and Ollama service types
 - `ai/config.ts` holds default model and vision-model selection per provider; `ai/providerDispatch.ts` is the unified dispatch helper used by chat, food-photo analysis, nutrition-label scan, and unit conversion
 - Prefer routing new AI features through `providerDispatch.ts` instead of calling provider SDKs directly
 - Chatbot tool calls run in-process through the registry in `ai/tools/`
@@ -273,7 +274,7 @@ When searching, ignore noisy/generated directories unless you explicitly need th
   inspect `services/hydrationTotalsService.ts` (the single owner of the daily water formula), `services/measurementService.ts` (the container "+/-" path and the container->food link), `services/caffeineKineticsService.ts` / `services/alcoholWeekService.ts`, `models/waterContainerRepository.ts`, and the shared maths in `../shared/src/nutrients/`
 - Self-service "delete synced data by source" issue:
   inspect `routes/syncedDataRoutes.ts`, `services/syncedDataService.ts`, and `models/syncedDataRepository.ts` (the `SYNCED_SOURCE_TABLES` whitelist)
-- AI chat or chatbot tool issue:
+- AI chat or chatbot tool issue (including web Training analysis via the optional shared `TrainingAnalysis.api.zod.ts` scope):
   inspect `services/chatService.ts`, `ai/tools/`, and the matching domain service and repository
 - Fasting or mood issue:
   inspect `routes/fastingRoutes.ts` / `routes/moodRoutes.ts` and `models/fastingRepository.ts` / `models/moodRepository.ts`

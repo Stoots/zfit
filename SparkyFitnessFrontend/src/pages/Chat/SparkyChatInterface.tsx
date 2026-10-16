@@ -16,7 +16,16 @@ import {
 import { Thread } from '@/components/thread';
 import { useToast } from '@/hooks/use-toast';
 import { useChatToolCategories } from '@/contexts/ChatToolCategoriesContext';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import {
+  todayInZone,
+  addDays,
+  trainingAnalysisScopeSchema,
+  type TrainingAnalysisScope,
+} from '@workspace/shared';
+import { usePreferences } from '@/contexts/PreferencesContext';
+import { TrainingAnalysisControls } from './TrainingAnalysisControls';
 
 import { MessagePart, ImagePart } from '@/types/Chatbot_types';
 import { type UIMessage } from 'ai';
@@ -39,15 +48,28 @@ const SparkyChatInner = ({
   activeAIServiceSetting,
   history,
 }: SparkyChatInnerProps) => {
+  const { t } = useTranslation();
+  const { timezone } = usePreferences();
+  const [analysisEnabled, setAnalysisEnabled] = useState(false);
+  const [analysisScope, setAnalysisScope] = useState<TrainingAnalysisScope>(
+    () => {
+      const end_date = todayInZone(timezone);
+      return {
+        start_date: addDays(end_date, -27),
+        end_date,
+        programs: true,
+        test_types: [],
+        health_metrics: [],
+      };
+    }
+  );
   const invalidateDiary = useDiaryInvalidation();
   const invalidateChat = useChatInvalidation();
   const userDate = formatDateToYYYYMMDD(new Date());
   const { toast } = useToast();
 
   // Runtime tool-category selection, scoped to the active service and prefilled
-  // from its full/core profile. getSelected() is stable and reads the latest
-  // value, so the runtime's prepareSendMessagesRequest closure (created once)
-  // always sends the current selection without being recreated.
+  // from its full/core profile. The SDK resolves the latest transport on send.
   const { getSelected, setActiveService, hasCustomSelection } =
     useChatToolCategories();
 
@@ -133,6 +155,13 @@ const SparkyChatInner = ({
           })
         );
 
+        const analysis = analysisEnabled ? analysisScope : undefined;
+        if (
+          analysis &&
+          !trainingAnalysisScopeSchema.safeParse(analysis).success
+        ) {
+          throw new Error(t('chat.trainingAnalysis.invalidScope'));
+        }
         return {
           body: {
             ...options.body,
@@ -140,6 +169,7 @@ const SparkyChatInner = ({
             // closure never sends a stale set). Empty => server falls back to
             // the service's profile default.
             toolCategories: hasCustomSelection ? getSelected() : undefined,
+            trainingAnalysis: analysis,
             messages: processedMessages,
           },
         };
@@ -164,7 +194,13 @@ const SparkyChatInner = ({
 
   return (
     <div className="flex flex-col h-full bg-background">
-      <div className="flex-1 overflow-hidden py-4">
+      <TrainingAnalysisControls
+        enabled={analysisEnabled}
+        onEnabledChange={setAnalysisEnabled}
+        scope={analysisScope}
+        onScopeChange={setAnalysisScope}
+      />
+      <div className="flex-1 min-h-0 overflow-hidden py-4">
         <Thread runtime={runtime} />
       </div>
     </div>

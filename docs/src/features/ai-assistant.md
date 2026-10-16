@@ -15,6 +15,19 @@
 - **Metadata Storage**: Stores structured data like food options, exercise suggestions within chat history
 - **Settings**: Direct access to AI service configuration
 
+### Training analysis (web)
+
+In the existing chat, turn on **Training analysis (read-only)** before asking a question. Choose **Data for your next question**: a date range (up to 366 days), a Program or all Programs in that range, Cardio Test protocols, and any relevant synced Apple Health metrics. The default is 28 days of Program history; tests and health metrics are off. Collapse the data controls to leave more space for the conversation on a phone.
+
+For example, select your Program and Cooper attempts, then ask “Summarize my completed, missed and omitted optional sessions, and suggest a focus for next week.” Select resting heart rate or HRV when asking about recovery. Each analysis question stands alone: repeat the relevant context in follow-up questions.
+
+- Program results retain exact Workout Session IDs, current prescriptions, effective/scheduled dates, optional status, and linked completed workout/Test identities. Omitted optional sessions are distinguished from missed required sessions. Current prescriptions are not evidence of what was performed.
+- Cardio Test results use the same Cooper, sprint, 30-second power and ramp Attempt contract as the Tests screens, including optional Planned Session links.
+- Selected Apple Health fields include steps, distance, active energy, resting heart rate, VO2 max, heart rate and HRV. Only already persisted HealthKit/Apple Health records are read; nothing starts a sync. Older HealthKit custom measurements and active-energy diary records are included. Heart rate and HRV are daily sample summaries; SDNN and RMSSD stay separate. Older check-in steps have no source provenance and are excluded, so some selected metrics may be unavailable. Records from overlapping storage paths must not be summed together.
+- No training/health data is prefetched for the provider. Only the current explicit question and data returned by the selected read tools are sent to your configured service. Earlier chat messages and unrelated custom-measurement definitions are excluded. Empty results mean unavailable records, not zero activity. Large results carry a truncation flag; narrow the dates or Program when needed (500 Program sessions/Attempts, 1,000 daily metrics/active-energy records, and 3,000 daily sample/custom summaries per read).
+- Analysis exposes no mutation or tool-escalation capabilities, even if a question asks for edits. Turn analysis off and make a separate explicit logging/editing request to use the normal chat tools. This does not change ordinary chat or the upstream App Store app's tool registry.
+- Training analysis is owner-only; switched-account requests are rejected. It is available in the web app, including the iPhone Home Screen app.
+
 ### Food Integration
 - **Auto-Logging**: Directly add recognized foods to diary with confirmation
 - **Nutrition Confirmation**: Review and edit AI suggestions before logging

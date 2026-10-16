@@ -1,10 +1,12 @@
 # Database Security & RLS Tiers
 
-_Last updated: 2026-10-14_
+_Last updated: 2026-10-17_
 
 SparkyFitness uses PostgreSQL Row-Level Security (RLS) to enforce strict data isolation between accounts, caregivers, family members, and third-party integrations (API keys). This document covers the security design, context switching mechanism, and the three-tier database table classifications.
 
 ---
+
+Web chat Training analysis is an owner-only read surface over existing Program, Test and synced health tables. Its optional `trainingAnalysis` scope is validated before provider dispatch; tools use `getClient(userId, userId)` and selected dates/fields. No policies, table tiers or delegation grants change. See [AI Assistant](../features/ai-assistant.md#training-analysis-web).
 
 ## Identity & Context Functions
 
