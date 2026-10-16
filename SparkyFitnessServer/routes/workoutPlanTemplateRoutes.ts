@@ -11,6 +11,8 @@ import checkPermissionMiddleware from '../middleware/checkPermissionMiddleware.j
 import { authenticate } from '../middleware/authMiddleware.js';
 import workoutPlanTemplateService from '../services/workoutPlanTemplateService.js';
 const router = express.Router();
+const actingUserId = (req: express.Request) =>
+  req.originalUserId || req.authenticatedUserId || req.userId;
 
 const bulkCandidateParamsSchema = z.object({
   id: z.coerce.number().int().positive(),
@@ -77,7 +79,7 @@ router.get(
       const candidates =
         await workoutPlanTemplateService.getBulkPrescriptionCandidates(
           req.userId,
-          req.originalUserId || req.authenticatedUserId || req.userId,
+          actingUserId(req),
           params.data.id,
           query.data.program_id ?? null
         );
@@ -101,7 +103,7 @@ router.post(
         });
       const preview = await workoutPlanTemplateService.previewBulkPrescriptions(
         req.userId,
-        req.originalUserId || req.authenticatedUserId || req.userId,
+        actingUserId(req),
         parsed.data
       );
       res.json(preview);
@@ -124,7 +126,7 @@ router.post(
         });
       const saved = await workoutPlanTemplateService.applyBulkPrescriptions(
         req.userId,
-        req.originalUserId || req.authenticatedUserId || req.userId,
+        actingUserId(req),
         parsed.data
       );
       res.json(saved);
@@ -190,7 +192,7 @@ router.post(
       }
       const workouts = await exerciseService.logWorkoutPlanSession(
         req.userId,
-        req.originalUserId || req.authenticatedUserId || req.userId,
+        actingUserId(req),
         params.data.workoutSessionId,
         body.data.entry_date
       );
