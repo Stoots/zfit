@@ -7,6 +7,7 @@ import {
   buildPresetSessionCreateRequestFromDraft,
   createWorkoutPlaybackDraftFromPreset,
   loadWorkoutPlaybackDraftFromStorage,
+  saveWorkoutPlaybackDraftToStorage,
 } from '@/utils/workoutPlayback';
 
 const mockNavigate = jest.fn();
@@ -150,6 +151,80 @@ describe('WorkoutPlaybackPage', () => {
     expect(mockCreatePresetSession).not.toHaveBeenCalled();
   });
 
+  it('hides exercise replacement for Program drafts but keeps it for standalone workouts', () => {
+    const draft = createWorkoutPlaybackDraftFromPreset(
+      presetFixture,
+      '2026-04-27'
+    );
+    draft.training_program = {
+      program_id: 'program-1',
+      session_id: 'planned-1',
+    };
+    mockLocationState = { draft };
+    const view = render(<WorkoutPlaybackPage />);
+    expect(
+      screen.queryByRole('button', { name: 'Replace Bench Press' })
+    ).not.toBeInTheDocument();
+
+    view.unmount();
+    delete draft.training_program;
+    mockLocationState = { draft };
+    render(<WorkoutPlaybackPage />);
+    expect(
+      screen.getByRole('button', { name: 'Replace Bench Press' })
+    ).toBeInTheDocument();
+  });
+
+  it('lets an old substituted Program draft save separately after rejection', async () => {
+    const draft = createWorkoutPlaybackDraftFromPreset(
+      presetFixture,
+      '2026-04-27'
+    );
+    draft.training_program = {
+      program_id: 'program-1',
+      session_id: 'planned-1',
+    };
+    draft.exercises[0]!.exercise_id = 'replacement-exercise';
+    draft.exercises[0]!.workout_plan_assignment_id = 17;
+    draft.exercises[0]!.sets[0]!.completed = true;
+    saveWorkoutPlaybackDraftToStorage(draft);
+    mockLocationState = null;
+    mockCompleteProgramSession.mockRejectedValue(
+      new HttpApiError(
+        'Performed exercises must belong to the bound Workout Session.',
+        400
+      )
+    );
+    mockCreatePresetSession.mockResolvedValue({
+      id: 'separate-1',
+      exercises: [],
+    });
+
+    render(<WorkoutPlaybackPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'Finish Workout' }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole('button', { name: 'Save as a separate workout' })
+      ).toBeInTheDocument()
+    );
+    expect(screen.getByRole('button', { name: 'Discard' })).toBeInTheDocument();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Save as a separate workout' })
+    );
+    await waitFor(() =>
+      expect(mockCreatePresetSession).toHaveBeenCalledTimes(1)
+    );
+    expect(mockCreatePresetSession.mock.calls[0]![0]).toMatchObject({
+      workoutPlanAssignmentId: null,
+      exercises: [
+        {
+          exercise_id: 'replacement-exercise',
+          workout_plan_assignment_id: null,
+        },
+      ],
+    });
+  });
+
   it('keeps a failed Program draft for an idempotent retry and blocks double submission', async () => {
     const draft = createWorkoutPlaybackDraftFromPreset(
       presetFixture,
@@ -249,6 +324,10 @@ describe('WorkoutPlaybackPage', () => {
     expect(mockCreatePresetSession.mock.calls[0]![0]).not.toHaveProperty(
       'training_program'
     );
+    expect(mockCreatePresetSession.mock.calls[0]![0]).toMatchObject({
+      workoutPlanAssignmentId: null,
+      exercises: [{ workout_plan_assignment_id: null }],
+    });
   });
 
   it('keeps the standalone playback save path', async () => {

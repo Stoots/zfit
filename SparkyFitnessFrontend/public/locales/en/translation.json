@@ -1345,6 +1345,7 @@
       "finish": "Finish Workout",
       "finishError": "Failed to save workout. Your local progress is still preserved, and you can retry.",
       "completionConflict": "This Planned Session was already completed with a different workout. Save your performed sets as a separate workout or Discard this draft.",
+      "programDraftRejected": "This draft cannot complete the Planned Session. Save your performed sets as a separate workout or Discard this draft.",
       "saveSeparate": "Save as a separate workout",
       "finishing": "Saving...",
       "location": "Gym / Location",

@@ -192,7 +192,7 @@ const WorkoutPlaybackPage = () => {
   );
   const draftRef = useRef<WorkoutPlaybackDraft | null>(draft);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [completionConflict, setCompletionConflict] = useState(false);
+  const [requiresSeparateSave, setRequiresSeparateSave] = useState(false);
   const [elapsedTickMs, setElapsedTickMs] = useState(() => Date.now());
   const [setNotesVisibility, setSetNotesVisibility] = useState<
     Record<string, boolean>
@@ -1026,11 +1026,18 @@ const WorkoutPlaybackPage = () => {
       if (
         !draft ||
         finishInFlight.current ||
-        (completionConflict && !saveSeparately)
+        (requiresSeparateSave && !saveSeparately)
       )
         return;
 
       const payload = buildPresetSessionCreateRequestFromDraft(draft, timezone);
+      if (saveSeparately) {
+        payload.workoutPlanAssignmentId = null;
+        payload.exercises = payload.exercises?.map((exercise) => ({
+          ...exercise,
+          workout_plan_assignment_id: null,
+        }));
+      }
       if (!payload.exercises || payload.exercises.length === 0) {
         setSaveError(
           t(
@@ -1095,11 +1102,25 @@ const WorkoutPlaybackPage = () => {
           'code' in error &&
           error.code === 'PROGRAM_COMPLETION_CONFLICT'
         ) {
-          setCompletionConflict(true);
+          setRequiresSeparateSave(true);
           setSaveError(
             t(
               'exercise.workoutPlaybackDialog.completionConflict',
               'This Planned Session was already completed with a different workout. Save your performed sets as a separate workout or Discard this draft.'
+            )
+          );
+        } else if (
+          draft.training_program &&
+          error &&
+          typeof error === 'object' &&
+          'status' in error &&
+          error.status === 400
+        ) {
+          setRequiresSeparateSave(true);
+          setSaveError(
+            t(
+              'exercise.workoutPlaybackDialog.programDraftRejected',
+              'This draft cannot complete the Planned Session. Save your performed sets as a separate workout or Discard this draft.'
             )
           );
         } else {
@@ -1116,7 +1137,7 @@ const WorkoutPlaybackPage = () => {
     },
     [
       completeProgramSession,
-      completionConflict,
+      requiresSeparateSave,
       createPresetSession,
       draft,
       elapsedSeconds,
@@ -1192,7 +1213,7 @@ const WorkoutPlaybackPage = () => {
         restRemaining={restRemaining}
         isRestActive={!!isRestActive}
         saveError={saveError}
-        completionConflict={completionConflict}
+        requiresSeparateSave={requiresSeparateSave}
         isSaving={isSaving}
         timezone={timezone}
         onCloseKeepDraft={handleCloseKeepDraft}
@@ -1299,12 +1320,14 @@ const WorkoutPlaybackPage = () => {
         onRemoveSet={handleRemoveSet}
         onAddSet={handleAddSet}
         onAddDropSets={handleAddDropSets}
-        onReplaceExercise={setReplaceExerciseIndex}
+        onReplaceExercise={
+          draft.training_program ? undefined : setReplaceExerciseIndex
+        }
         onAdaptiveDeclined={handleAdaptiveDeclined}
         weightUnit={weightUnit}
       />
 
-      {replaceExerciseIndex !== null && (
+      {replaceExerciseIndex !== null && !draft.training_program && (
         <Suspense fallback={null}>
           <AddExerciseDialog
             open

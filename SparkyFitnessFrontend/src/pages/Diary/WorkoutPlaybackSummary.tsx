@@ -41,7 +41,7 @@ interface WorkoutPlaybackSummaryProps {
   restRemaining: string;
   isRestActive: boolean;
   saveError: string | null;
-  completionConflict: boolean;
+  requiresSeparateSave: boolean;
   isSaving: boolean;
   timezone: string;
   onCloseKeepDraft: () => void;
@@ -64,7 +64,7 @@ const WorkoutPlaybackSummary = ({
   restRemaining,
   isRestActive,
   saveError,
-  completionConflict,
+  requiresSeparateSave,
   isSaving,
   timezone,
   onCloseKeepDraft,
@@ -271,7 +271,7 @@ const WorkoutPlaybackSummary = ({
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
               <div className="space-y-2">
                 <p>{saveError}</p>
-                {completionConflict && (
+                {requiresSeparateSave && (
                   <Button
                     type="button"
                     variant="outline"
@@ -312,7 +312,7 @@ const WorkoutPlaybackSummary = ({
                       'Finish Workout'
                     ),
                 onClick: onFinishWorkout,
-                disabled: isSaving || completionConflict,
+                disabled: isSaving || requiresSeparateSave,
               },
             ]}
           />
