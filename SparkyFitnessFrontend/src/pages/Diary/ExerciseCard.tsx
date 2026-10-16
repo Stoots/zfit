@@ -650,7 +650,7 @@ const ExerciseCard = ({
     const selected = selectUpcomingDashboardWorkoutPlans(
       programCandidates,
       trainingPrograms,
-      3
+      4
     );
     return {
       programPlans: selected.programPlans,

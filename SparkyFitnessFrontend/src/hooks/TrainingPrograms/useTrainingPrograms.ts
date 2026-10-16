@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import type {
+  TrainingProgram,
   TrainingProgramInput,
   TrainingProgramOutcomeInput,
   TrainingProgramCompletionInput,
@@ -43,6 +44,17 @@ export function useTrainingPrograms(
     void client.invalidateQueries({ queryKey: workoutPlanKeys.all });
     void client.invalidateQueries({ queryKey: exerciseEntryKeys.all });
     void client.invalidateQueries({ queryKey: dailyProgressKeys.all });
+  };
+  const updateCompletedProgram = async (saved: TrainingProgram) => {
+    const listKey = trainingProgramKeys.list(saved.user_id);
+    await client.cancelQueries({ queryKey: listKey });
+    client.setQueryData<TrainingProgram[]>(listKey, (programs) =>
+      programs?.map((program) => (program.id === saved.id ? saved : program))
+    );
+    client.setQueryData(
+      trainingProgramKeys.detail(saved.user_id, saved.id),
+      saved
+    );
   };
   const programs = useTrainingProgramsList(userId, enabled);
   const program = useQuery({
@@ -103,8 +115,8 @@ export function useTrainingPrograms(
       sessionId: string;
       input: TrainingProgramOutcomeInput;
     }) => recordTrainingProgramOutcome(programId, sessionId, input),
-    onSuccess: (saved) => {
-      client.setQueryData(trainingProgramKeys.detail(userId, saved.id), saved);
+    onSuccess: async (saved) => {
+      await updateCompletedProgram(saved);
       invalidateDependents();
     },
     meta: {
@@ -124,8 +136,8 @@ export function useTrainingPrograms(
       sessionId: string;
       input: TrainingProgramCompletionInput;
     }) => completeTrainingProgramSession(programId, sessionId, input),
-    onSuccess: (saved) => {
-      client.setQueryData(trainingProgramKeys.detail(userId, saved.id), saved);
+    onSuccess: async (saved) => {
+      await updateCompletedProgram(saved);
       invalidateDependents();
       invalidateDiary();
     },

@@ -152,7 +152,7 @@ test("retains authored same-day order for distinct same-plan same-label sessions
   );
 });
 
-test("fills three cards past an unavailable nonfirst session", () => {
+test("skips an unavailable nonfirst session while filling the queue", () => {
   const missing = planned(
     "missing",
     "00000000-0000-4000-8000-000000000099",
@@ -170,6 +170,29 @@ test("fills three cards past an unavailable nonfirst session", () => {
     ),
     [card(sessionA), card(sessionB, 3, "planned-b")],
   );
+});
+
+test("keeps four pending occurrences after completing the third out of order", () => {
+  const sessions = Array.from({ length: 6 }, (_, index) =>
+    planned(`occurrence-${index + 1}`, sessionA, `2026-10-${11 + index}`),
+  );
+  const select = () =>
+    expectedWorkoutCards(program(sessions), [plan], []).map(
+      (card) => card.trainingProgramSessionId,
+    );
+  assert.deepEqual(select(), [
+    "occurrence-1",
+    "occurrence-2",
+    "occurrence-3",
+    "occurrence-4",
+  ]);
+  sessions[2].status = "completed";
+  assert.deepEqual(select(), [
+    "occurrence-1",
+    "occurrence-2",
+    "occurrence-4",
+    "occurrence-5",
+  ]);
 });
 
 test("rejects the wrong same-label UUID even when plan and prescription match", () => {
