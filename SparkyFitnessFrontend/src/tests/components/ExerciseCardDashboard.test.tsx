@@ -9,7 +9,7 @@ import '@testing-library/jest-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
 import { DASHBOARD_WORKOUT_CARD_ATTRIBUTES } from '@workspace/shared';
-import type { TrainingProgram } from '@workspace/shared';
+import type { TrainingProgram, WorkoutFormat } from '@workspace/shared';
 import type { GroupedExerciseEntry } from '@/types/exercises';
 import ExerciseCard from '@/pages/Diary/ExerciseCard';
 import type { WorkoutPlanTemplate } from '@/types/workout';
@@ -37,9 +37,10 @@ jest.mock('@/contexts/PreferencesContext', () => ({
     timezone: 'Australia/Sydney',
     energyUnit: 'kcal',
     weightUnit: 'kg',
-    distanceUnit: 'km',
+    distanceUnit: mockState.distanceUnit,
     convertWeight: (value: number) => value,
-    convertDistance: (value: number) => value,
+    convertDistance: (value: number) =>
+      mockState.distanceUnit === 'miles' ? value / 1.609344 : value,
     convertEnergy: (value: number) => value,
     getEnergyUnitString: () => 'kcal',
   }),
@@ -94,11 +95,13 @@ interface ProgramsResult {
   isError: boolean;
 }
 const mockState: {
+  distanceUnit: 'km' | 'miles';
   actingOnBehalf: boolean;
   plans: WorkoutPlanTemplate[];
   programs: ProgramsResult;
   entries: GroupedExerciseEntry[];
 } = {
+  distanceUnit: 'km',
   actingOnBehalf: false,
   plans: [],
   programs: { data: [], isError: false },
@@ -187,6 +190,7 @@ const pickerFor = (sessionName: string) =>
 describe('ExerciseCard dashboard plans', () => {
   beforeEach(() => {
     localStorage.clear();
+    mockState.distanceUnit = 'km';
     mockExerciseFetch.mockReset().mockImplementation(async (id: string) => ({
       id,
       name: `Exercise ${id}`,
@@ -204,6 +208,151 @@ describe('ExerciseCard dashboard plans', () => {
       .mockReset()
       .mockImplementation(() => Promise.resolve({ data: mockState.entries }));
   });
+
+  it.each([
+    { unit: 'km' as const, carry: '4 m', run: '0.004 km' },
+    { unit: 'miles' as const, carry: '4.37445 yd', run: '0.00248548 miles' },
+  ])(
+    'previews short carry and run targets in $unit without rounding to zero',
+    async ({ unit, carry, run }) => {
+      mockState.distanceUnit = unit;
+      const plan = makePlan('7', 'Program plan', ['Conditioning']);
+      plan.sessions[0]!.assignments = [
+        {
+          id: 'frozen',
+          sets: [],
+          preset_snapshot: {
+            id: 42,
+            user_id: 'athlete',
+            name: 'Conditioning',
+            exercises: [
+              {
+                exercise_id: 'carry',
+                exercise_name: 'Carry',
+                modality: 'weight_distance',
+                sets: [{ set_number: 1, distance: 0.004, weight: 20 }],
+              },
+              {
+                exercise_id: 'run',
+                exercise_name: 'Run',
+                modality: 'duration_distance',
+                sets: [{ set_number: 1, distance: 0.004, duration: 10 }],
+              },
+            ],
+          },
+        },
+      ];
+      mockState.plans = [plan];
+      mockState.programs = { data: [programLinkedTo('7')], isError: false };
+      renderCard();
+      fireEvent.click(screen.getByRole('button', { name: /Preview workout:/ }));
+      const dialog = screen.getByRole('dialog');
+      expect(await within(dialog).findByText(`20 kg · ${carry}`)).toBeVisible();
+      expect(within(dialog).getByText(`10s · ${run}`)).toBeVisible();
+      fireEvent.click(
+        within(dialog).getByRole('button', { name: 'Start Workout' })
+      );
+      await waitFor(() => expect(mockNavigate).toHaveBeenCalledTimes(1));
+      expect(
+        mockNavigate.mock.calls[0]![1].state.draft.exercises.map(
+          (exercise: { sets: { distance: number }[] }) =>
+            exercise.sets[0]!.distance
+        )
+      ).toEqual([0.004, 0.004]);
+    }
+  );
+
+  it.each<{
+    name: string;
+    presets: { format: WorkoutFormat; cap: number }[];
+    format: WorkoutFormat;
+    label: string;
+    cap: number | null;
+  }>([
+    {
+      name: 'single frozen EMOM',
+      presets: [{ format: 'emom', cap: 600 }],
+      format: 'emom',
+      label: 'EMOM',
+      cap: 600,
+    },
+    {
+      name: 'matching frozen presets',
+      presets: [
+        { format: 'emom', cap: 600 },
+        { format: 'emom', cap: 600 },
+      ],
+      format: 'emom',
+      label: 'EMOM',
+      cap: 600,
+    },
+    {
+      name: 'mixed frozen formats',
+      presets: [
+        { format: 'emom', cap: 600 },
+        { format: 'tabata', cap: 600 },
+      ],
+      format: 'standard',
+      label: 'Standard',
+      cap: null,
+    },
+    {
+      name: 'mixed frozen caps',
+      presets: [
+        { format: 'emom', cap: 600 },
+        { format: 'emom', cap: 90 },
+      ],
+      format: 'emom',
+      label: 'EMOM',
+      cap: null,
+    },
+  ])(
+    'previews the resolved format and cap for $name exactly as Start Workout loads',
+    async ({ presets, format, label, cap }) => {
+      const plan = makePlan('7', 'Program plan', ['Conditioning']);
+      plan.sessions[0]!.assignments = presets.map((preset, index) => ({
+        id: `frozen-${index}`,
+        sort_order: index,
+        sets: [],
+        preset_snapshot: {
+          id: index,
+          user_id: 'athlete',
+          name: 'Frozen',
+          workout_format: preset.format,
+          time_cap_seconds: preset.cap,
+          exercises: [
+            {
+              exercise_id: `carry-${index}`,
+              exercise_name: `Carry ${index + 1}`,
+              modality: 'weight_distance',
+              sets: [{ set_number: 1, distance: 0.004, weight: 20 }],
+            },
+          ],
+        },
+      }));
+      mockState.plans = [plan];
+      mockState.programs = { data: [programLinkedTo('7')], isError: false };
+      renderCard();
+      fireEvent.click(screen.getByRole('button', { name: /Preview workout:/ }));
+      const dialog = screen.getByRole('dialog');
+      await within(dialog).findByRole('heading', { name: '1. Carry 1' });
+      expect(mockNavigate).not.toHaveBeenCalled();
+      expect(mockComplete).not.toHaveBeenCalled();
+      expect(mockOutcome).not.toHaveBeenCalled();
+      expect(within(dialog).getByText(label)).toBeVisible();
+      if (cap === 600)
+        expect(within(dialog).getByText('Cap: 10:00')).toBeVisible();
+      else expect(within(dialog).queryByText(/^Cap:/)).not.toBeInTheDocument();
+      fireEvent.click(
+        within(dialog).getByRole('button', { name: 'Start Workout' })
+      );
+      await waitFor(() => expect(mockNavigate).toHaveBeenCalledTimes(1));
+      expect(mockNavigate.mock.calls[0]![1].state.draft).toMatchObject({
+        workout_format: format,
+        time_cap_seconds: cap,
+      });
+    }
+  );
 
   it('previews the exact strength occurrence without starting or completing it', async () => {
     const plan = makePlan('7', 'Program plan', ['Push', 'Pull']);

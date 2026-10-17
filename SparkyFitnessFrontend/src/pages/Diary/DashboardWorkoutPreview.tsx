@@ -11,6 +11,13 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { formatWeight } from '@/utils/numberFormatting';
+import { formatSecondsClock } from '@/utils/timeFormatters';
+import {
+  carryDistanceFromKm,
+  carryDistanceUnitLabel,
+  resolveExerciseModality,
+} from '@workspace/shared';
+import type { WorkoutPresetExercise } from '@/types/workout';
 import { usePreferences } from '@/contexts/PreferencesContext';
 import {
   useWorkoutSessionPreview,
@@ -40,6 +47,29 @@ export default function DashboardWorkoutPreview({
   const { t } = useTranslation();
   const { weightUnit, distanceUnit, convertDistance } = usePreferences();
   const preview = useWorkoutSessionPreview(workout, open);
+  const formatLabels = {
+    standard: t('workoutPresetForm.formatStandard', 'Standard'),
+    interval: t('workoutPresetForm.formatInterval', 'Interval / HIIT'),
+    tabata: t('workoutPresetForm.formatTabata', 'Tabata'),
+    emom: t('workoutPresetForm.formatEmom', 'EMOM'),
+    amrap: t('workoutPresetForm.formatAmrap', 'AMRAP'),
+    for_time: t('workoutPresetForm.formatForTime', 'For Time'),
+  };
+  const formatDistance = (
+    distance: number,
+    exercise: WorkoutPresetExercise
+  ) => {
+    const isCarry =
+      resolveExerciseModality(
+        exercise.modality ?? exercise.exercise?.modality,
+        exercise.category ?? exercise.exercise?.category
+      ) === 'weight_distance';
+    const value = isCarry
+      ? carryDistanceFromKm(distance, distanceUnit)
+      : convertDistance(distance, 'km', distanceUnit);
+    const unit = isCarry ? carryDistanceUnitLabel(distanceUnit) : distanceUnit;
+    return `${value.toLocaleString(undefined, { maximumSignificantDigits: 6 })} ${unit}`;
+  };
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>{children}</DialogTrigger>
@@ -76,6 +106,18 @@ export default function DashboardWorkoutPreview({
             </p>
           ) : (
             <>
+              <p className="text-sm text-muted-foreground flex flex-wrap gap-x-3 gap-y-1">
+                <span>
+                  {formatLabels[preview.data.workout_format ?? 'standard']}
+                </span>
+                {preview.data.time_cap_seconds != null && (
+                  <span>
+                    {t('interval.timeCapLabel', 'Cap: {{cap}}', {
+                      cap: formatSecondsClock(preview.data.time_cap_seconds),
+                    })}
+                  </span>
+                )}
+              </p>
               {preview.data.description && (
                 <p className="text-sm text-muted-foreground">
                   {preview.data.description}
@@ -115,7 +157,7 @@ export default function DashboardWorkoutPreview({
                                     )
                                   : null,
                                 set.distance != null
-                                  ? `${convertDistance(set.distance, 'km', distanceUnit).toLocaleString(undefined, { maximumFractionDigits: 2 })} ${distanceUnit}`
+                                  ? formatDistance(set.distance, exercise)
                                   : null,
                                 set.rest_time != null
                                   ? t(
