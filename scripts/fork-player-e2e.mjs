@@ -26,11 +26,22 @@ const env = {
   TMPDIR: process.env.TMPDIR,
   NODE_ENV: "development",
 };
+// Docker CLI needs its client settings (rootless, contexts, remote hosts); app children keep the strict env.
+const dockerEnv = { ...env };
+for (const key of [
+  "DOCKER_HOST",
+  "DOCKER_CONTEXT",
+  "DOCKER_CONFIG",
+  "DOCKER_CERT_PATH",
+  "DOCKER_TLS_VERIFY",
+  "XDG_RUNTIME_DIR",
+])
+  if (process.env[key]) dockerEnv[key] = process.env[key];
 function docker(...args) {
   if (args[0] !== "rm") abort.signal.throwIfAborted();
   return execFileSync("docker", args, {
     encoding: "utf8",
-    env,
+    env: dockerEnv,
     timeout: 120_000,
   }).trim();
 }
@@ -395,9 +406,7 @@ async function run() {
     ["#set-reps-0-0", "11"],
   ]) {
     await tap(selector);
-    await page.keyboard.down("Control");
-    await page.keyboard.press("A");
-    await page.keyboard.up("Control");
+    await page.keyboard.press("KeyA", { commands: ["SelectAll"] });
     await page.keyboard.type(value);
   }
   await tap('[aria-label="Complete set 1"]');
