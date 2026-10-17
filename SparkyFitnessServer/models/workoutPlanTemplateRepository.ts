@@ -11,6 +11,8 @@ import type { PoolClient } from 'pg';
 import { getClient } from '../db/poolManager.js';
 import { HttpError } from '../utils/errors.js';
 import {
+  displaySetRir,
+  setEffortField,
   workoutPlanCreateRequestSchema,
   workoutPlanUpdateRequestSchema,
   workoutPlanPresetSnapshotSchema,
@@ -1201,7 +1203,8 @@ function exactExerciseMapping(
 function copyBulkSets(
   source: WorkoutPlanAssignmentSetInput[],
   target: WorkoutPlanAssignmentSetInput[],
-  fields: WorkoutPlanBulkRequest['fields']
+  fields: WorkoutPlanBulkRequest['fields'],
+  effortField: 'rpe' | 'rir'
 ): WorkoutPlanAssignmentSetInput[] {
   if (
     new Set(source.map((s) => s.set_number)).size !== source.length ||
@@ -1221,7 +1224,9 @@ function copyBulkSets(
       };
     });
   const setFields = fields.filter(
-    (f) => !['workout_format', 'time_cap_seconds', 'description'].includes(f)
+    (f) =>
+      !['workout_format', 'time_cap_seconds', 'description'].includes(f) &&
+      (f !== 'rir' || effortField === 'rir')
   );
   if (!setFields.length) return target;
   if (
@@ -1236,7 +1241,11 @@ function copyBulkSets(
     const prescribed = source.find((s) => s.set_number === set.set_number)!;
     const result = { ...set };
     const values: Record<string, unknown> = result;
-    for (const field of setFields) values[field] = prescribed[field] ?? null;
+    for (const field of setFields)
+      values[field] =
+        field === 'rir'
+          ? displaySetRir(prescribed)
+          : (prescribed[field] ?? null);
     return result;
   });
 }
@@ -1289,7 +1298,8 @@ function bulkAfter(
         sets: copyBulkSets(
           draft.preset_snapshot!.exercises[i]!.sets,
           exercise.sets,
-          fields
+          fields,
+          setEffortField(exercise)
         ),
       })
     );
@@ -1317,7 +1327,12 @@ function bulkAfter(
       );
     if (!draft.sets)
       bulkError('The source draft must provide explicit sets.', 400);
-    result.sets = copyBulkSets(draft.sets, target.sets, fields);
+    result.sets = copyBulkSets(
+      draft.sets,
+      target.sets,
+      fields,
+      setEffortField(target)
+    );
   }
   return result;
 }

@@ -1,3 +1,4 @@
+import { displaySetRir } from "./setRir.ts";
 import type { ExerciseCoachingSignal } from "../schemas/api/WorkoutCoaching.api.zod.ts";
 
 /**
@@ -123,13 +124,17 @@ export function decideAdaptiveAdjustment(
   }
   // 4. Too hard last time: don't add load yet.
   if (signal.last_difficulty === "too_hard") {
-    return adjustment({ kind: "hold", blockIncrease: true, reason: "too_hard" });
+    return adjustment({
+      kind: "hold",
+      blockIncrease: true,
+      reason: "too_hard",
+    });
   }
   // 5. No feedback, but logged effort says it was a grind.
   if (
     signal.last_difficulty == null &&
-    ((signal.avg_rpe != null && signal.avg_rpe >= ADAPTIVE_HIGH_RPE) ||
-      (signal.avg_rir != null && signal.avg_rir <= ADAPTIVE_LOW_RIR))
+    (displaySetRir({ rir: signal.avg_rir ?? undefined, rpe: signal.avg_rpe }) ??
+      10) <= ADAPTIVE_LOW_RIR
   ) {
     return adjustment({
       kind: "hold",

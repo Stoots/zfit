@@ -1,3 +1,8 @@
+import type {
+  WorkoutPresetSetRequest,
+  WorkoutPresetCreateRequest,
+  WorkoutPresetUpdateRequest,
+} from '@workspace/shared';
 import { getClient } from '../db/poolManager.js';
 import { log } from '../config/logging.js';
 // @ts-expect-error TS(7016): Could not find a declaration file for module 'pg-format'
@@ -35,9 +40,13 @@ async function assertPresetExerciseSetWeights(
   assertSetWeightSign(sets, result.rows[0]?.modality ?? null);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function createWorkoutPreset(presetData: any) {
-  const client = await getClient(presetData.user_id); // User-specific operation
+async function createWorkoutPreset(
+  presetData: Partial<WorkoutPresetCreateRequest> & {
+    user_id: string;
+    name: string;
+  }
+) {
+  const client: PoolClient = await getClient(presetData.user_id); // User-specific operation
   try {
     await client.query('BEGIN');
     const presetResult = await client.query(
@@ -91,8 +100,7 @@ async function createWorkoutPreset(presetData: any) {
             exercise.exercise_id,
             exercise.sets
           );
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const setsValues = exercise.sets.map((set: any) => [
+          const setsValues = exercise.sets.map((set) => [
             newExerciseId,
             set.set_number,
             set.set_type,
@@ -102,9 +110,10 @@ async function createWorkoutPreset(presetData: any) {
             set.distance,
             set.rest_time,
             set.notes,
+            set.rir ?? null,
           ]);
           const setsQuery = format(
-            'INSERT INTO workout_preset_exercise_sets (workout_preset_exercise_id, set_number, set_type, reps, weight, duration, distance, rest_time, notes) VALUES %L',
+            'INSERT INTO workout_preset_exercise_sets (workout_preset_exercise_id, set_number, set_type, reps, weight, duration, distance, rest_time, notes, rir) VALUES %L',
             setsValues
           );
           await client.query(setsQuery);
@@ -123,9 +132,8 @@ async function createWorkoutPreset(presetData: any) {
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function getWorkoutPresetByName(userId: any, name: any) {
-  const client = await getClient(userId);
+async function getWorkoutPresetByName(userId: string, name: string) {
+  const client: PoolClient = await getClient(userId);
   try {
     // Owner first, then family-shared via can_view_exercise_library. Do not
     // rely on RLS alone: has_library_access_with_public also allows every
@@ -158,7 +166,7 @@ async function getWorkoutPresetByName(userId: any, name: any) {
                  (SELECT json_agg(set_data ORDER BY set_data.set_number)
                   FROM (
                     SELECT
-                      wpes.id, wpes.set_number, wpes.set_type, wpes.reps, wpes.weight, wpes.duration, wpes.distance, wpes.rest_time, wpes.notes
+                      wpes.id, wpes.set_number, wpes.set_type, wpes.reps, wpes.weight, wpes.duration, wpes.distance, wpes.rest_time, wpes.notes, wpes.rir
                     FROM workout_preset_exercise_sets wpes
                     WHERE wpes.workout_preset_exercise_id = wpe.id
                   ) AS set_data
@@ -190,9 +198,8 @@ async function getWorkoutPresetByName(userId: any, name: any) {
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function getWorkoutPresets(userId: any, page = 1, limit = 10) {
-  const client = await getClient(userId); // User-specific operation
+async function getWorkoutPresets(userId: string, page = 1, limit = 10) {
+  const client: PoolClient = await getClient(userId); // User-specific operation
   try {
     const offset = (page - 1) * limit;
     // Ownership/sharing visibility is enforced by RLS (owner, public, or
@@ -227,7 +234,7 @@ async function getWorkoutPresets(userId: any, page = 1, limit = 10) {
                   (SELECT json_agg(set_data ORDER BY set_data.set_number)
                    FROM (
                      SELECT
-                       wpes.id, wpes.set_number, wpes.set_type, wpes.reps, wpes.weight, wpes.duration, wpes.distance, wpes.rest_time, wpes.notes
+                       wpes.id, wpes.set_number, wpes.set_type, wpes.reps, wpes.weight, wpes.duration, wpes.distance, wpes.rest_time, wpes.notes, wpes.rir
                      FROM workout_preset_exercise_sets wpes
                      WHERE wpes.workout_preset_exercise_id = wpe.id
                    ) AS set_data
@@ -247,7 +254,7 @@ async function getWorkoutPresets(userId: any, page = 1, limit = 10) {
       [limit, offset]
     );
     return {
-      presets: result.rows.map((row: any) => parsePresetExerciseEquipment(row)),
+      presets: result.rows.map((row) => parsePresetExerciseEquipment(row)),
       total,
       page,
       limit,
@@ -257,9 +264,8 @@ async function getWorkoutPresets(userId: any, page = 1, limit = 10) {
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function getWorkoutPresetById(presetId: any, userId: any) {
-  const client = await getClient(userId); // User-specific operation (RLS will handle access)
+async function getWorkoutPresetById(presetId: string | number, userId: string) {
+  const client: PoolClient = await getClient(userId); // User-specific operation (RLS will handle access)
   try {
     const result = await client.query(
       `SELECT
@@ -286,7 +292,7 @@ async function getWorkoutPresetById(presetId: any, userId: any) {
                   (SELECT json_agg(set_data ORDER BY set_data.set_number)
                    FROM (
                      SELECT
-                       wpes.id, wpes.set_number, wpes.set_type, wpes.reps, wpes.weight, wpes.duration, wpes.distance, wpes.rest_time, wpes.notes
+                       wpes.id, wpes.set_number, wpes.set_type, wpes.reps, wpes.weight, wpes.duration, wpes.distance, wpes.rest_time, wpes.notes, wpes.rir
                      FROM workout_preset_exercise_sets wpes
                      WHERE wpes.workout_preset_exercise_id = wpe.id
                    ) AS set_data
@@ -311,14 +317,11 @@ async function getWorkoutPresetById(presetId: any, userId: any) {
 }
 
 async function updateWorkoutPreset(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  presetId: any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  userId: any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  updateData: any
+  presetId: string | number,
+  userId: string,
+  updateData: WorkoutPresetUpdateRequest
 ) {
-  const client = await getClient(userId); // User-specific operation
+  const client: PoolClient = await getClient(userId); // User-specific operation
   try {
     await client.query('BEGIN');
     const result = await client.query(
@@ -342,6 +345,19 @@ async function updateWorkoutPreset(
       ]
     );
     if (result.rows.length > 0 && updateData.exercises !== undefined) {
+      // Released clients omit RIR; retain it only for matching exercise positions.
+      const previous = await client.query<{
+        exercise_id: string;
+        sets: Pick<WorkoutPresetSetRequest, 'set_number' | 'rir'>[];
+      }>(
+        `SELECT pe.exercise_id, COALESCE((
+          SELECT json_agg(json_build_object('set_number', s.set_number, 'rir', s.rir))
+          FROM workout_preset_exercise_sets s WHERE s.workout_preset_exercise_id = pe.id
+        ), '[]'::json) AS sets
+        FROM workout_preset_exercises pe WHERE pe.workout_preset_id = $1
+        ORDER BY pe.sort_order, pe.id`,
+        [presetId]
+      );
       // Delete old exercises and sets (cascade will handle sets)
       await client.query(
         'DELETE FROM workout_preset_exercises WHERE workout_preset_id = $1',
@@ -349,7 +365,10 @@ async function updateWorkoutPreset(
       );
       // Insert new exercises and sets
       if (updateData.exercises.length > 0) {
-        for (const exercise of updateData.exercises) {
+        for (const [
+          exerciseIndex,
+          exercise,
+        ] of updateData.exercises.entries()) {
           const exerciseResult = await client.query(
             `INSERT INTO workout_preset_exercises (
               workout_preset_id,
@@ -386,20 +405,39 @@ async function updateWorkoutPreset(
               exercise.exercise_id,
               exercise.sets
             );
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const setsValues = exercise.sets.map((set: any) => [
-              newExerciseId,
-              set.set_number,
-              set.set_type,
-              set.reps,
-              set.weight,
-              set.duration,
-              set.distance,
-              set.rest_time,
-              set.notes,
-            ]);
+            const incomingSets = exercise.sets;
+            const oldExercise = previous.rows[exerciseIndex];
+            const oldSets =
+              oldExercise?.exercise_id === exercise.exercise_id
+                ? oldExercise.sets
+                : [];
+            const setsValues = incomingSets.map((set) => {
+              const matches = oldSets.filter(
+                (old) => old.set_number === set.set_number
+              );
+              const rir = Object.hasOwn(set, 'rir')
+                ? (set.rir ?? null)
+                : matches.length === 1 &&
+                    incomingSets.filter(
+                      (incoming) => incoming.set_number === set.set_number
+                    ).length === 1
+                  ? (matches[0].rir ?? null)
+                  : null;
+              return [
+                newExerciseId,
+                set.set_number,
+                set.set_type,
+                set.reps,
+                set.weight,
+                set.duration,
+                set.distance,
+                set.rest_time,
+                set.notes,
+                rir,
+              ];
+            });
             const setsQuery = format(
-              'INSERT INTO workout_preset_exercise_sets (workout_preset_exercise_id, set_number, set_type, reps, weight, duration, distance, rest_time, notes) VALUES %L',
+              'INSERT INTO workout_preset_exercise_sets (workout_preset_exercise_id, set_number, set_type, reps, weight, duration, distance, rest_time, notes, rir) VALUES %L',
               setsValues
             );
             await client.query(setsQuery);
@@ -419,9 +457,8 @@ async function updateWorkoutPreset(
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function deleteWorkoutPreset(presetId: any, userId: any) {
-  const client = await getClient(userId); // User-specific operation
+async function deleteWorkoutPreset(presetId: string | number, userId: string) {
+  const client: PoolClient = await getClient(userId); // User-specific operation
   try {
     await client.query('BEGIN');
     const result = await client.query(
@@ -429,7 +466,7 @@ async function deleteWorkoutPreset(presetId: any, userId: any) {
       [presetId]
     );
     await client.query('COMMIT');
-    return result.rowCount > 0;
+    return (result.rowCount ?? 0) > 0;
   } catch (error) {
     await client.query('ROLLBACK');
     log('error', `Error deleting workout preset ${presetId}:`, error);
@@ -439,9 +476,11 @@ async function deleteWorkoutPreset(presetId: any, userId: any) {
   }
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function getWorkoutPresetOwnerId(userId: any, presetId: any) {
-  const client = await getClient(userId); // User-specific operation (RLS will handle access)
+async function getWorkoutPresetOwnerId(
+  userId: string,
+  presetId: string | number
+) {
+  const client: PoolClient = await getClient(userId); // User-specific operation (RLS will handle access)
   try {
     const result = await client.query(
       'SELECT user_id FROM workout_presets WHERE id = $1',
@@ -454,16 +493,11 @@ async function getWorkoutPresetOwnerId(userId: any, presetId: any) {
 }
 
 async function addExerciseToWorkoutPreset(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  userId: any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  workoutPresetId: any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  exerciseId: any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  imageUrl: any,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  sets: any,
+  userId: string,
+  workoutPresetId: string | number,
+  exerciseId: string,
+  imageUrl: string | null | undefined,
+  sets: WorkoutPresetSetRequest[],
   sortOrder = 0,
   progressionMode = 'rep_goal',
   repGoal: number | null = null,
@@ -471,7 +505,7 @@ async function addExerciseToWorkoutPreset(
   incrementValue: number = 5.0,
   equipmentBrand: string | null = null
 ) {
-  const client = await getClient(userId); // User-specific operation
+  const client: PoolClient = await getClient(userId); // User-specific operation
   try {
     await client.query('BEGIN');
     const existingExerciseResult = await client.query(
@@ -527,8 +561,7 @@ async function addExerciseToWorkoutPreset(
 
     if (sets && sets.length > 0) {
       await assertPresetExerciseSetWeights(client, exerciseId, sets);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const setsValues = sets.map((set: any) => [
+      const setsValues = sets.map((set) => [
         exercisePresetId,
         set.set_number,
         set.set_type,
@@ -538,9 +571,10 @@ async function addExerciseToWorkoutPreset(
         set.distance,
         set.rest_time,
         set.notes,
+        set.rir ?? null,
       ]);
       const setsQuery = format(
-        'INSERT INTO workout_preset_exercise_sets (workout_preset_exercise_id, set_number, set_type, reps, weight, duration, distance, rest_time, notes) VALUES %L',
+        'INSERT INTO workout_preset_exercise_sets (workout_preset_exercise_id, set_number, set_type, reps, weight, duration, distance, rest_time, notes, rir) VALUES %L',
         setsValues
       );
       await client.query(setsQuery);
@@ -565,7 +599,7 @@ async function searchWorkoutPresets(
   userId: string | null | undefined,
   limit: number | null = null
 ) {
-  const client = await getClient(userId); // User-specific operation
+  const client: PoolClient = await getClient(userId); // User-specific operation
   try {
     const {
       whereClauses: searchClauses,
@@ -573,7 +607,7 @@ async function searchWorkoutPresets(
       nextParamIndex,
     } = buildSqlSearch('wp.name', searchTerm, 1);
     const whereClauses: string[] = [...searchClauses];
-    const queryParams: any[] = [...searchParams];
+    const queryParams: (string | number)[] = [...searchParams];
     const paramIndex = nextParamIndex;
 
     const whereSql =
@@ -614,7 +648,7 @@ async function searchWorkoutPresets(
                  (SELECT json_agg(set_data ORDER BY set_data.set_number)
                   FROM (
                     SELECT
-                      wpes.id, wpes.set_number, wpes.set_type, wpes.reps, wpes.weight, wpes.duration, wpes.distance, wpes.rest_time, wpes.notes
+                      wpes.id, wpes.set_number, wpes.set_type, wpes.reps, wpes.weight, wpes.duration, wpes.distance, wpes.rest_time, wpes.notes, wpes.rir
                     FROM workout_preset_exercise_sets wpes
                     WHERE wpes.workout_preset_exercise_id = wpe.id
                   ) AS set_data
@@ -638,7 +672,7 @@ async function searchWorkoutPresets(
       selectQueryParams.push(limit);
     }
     const result = await client.query(query, selectQueryParams);
-    return result.rows.map((row: any) => parsePresetExerciseEquipment(row));
+    return result.rows.map((row) => parsePresetExerciseEquipment(row));
   } finally {
     client.release();
   }

@@ -1,3 +1,4 @@
+import { legacyRpePatch } from '@workspace/shared';
 import { useAuth } from '@/hooks/useAuth';
 import {
   lazy,
@@ -786,7 +787,10 @@ const WorkoutPlaybackSession = ({
       value: number | string | null
     ) => {
       updateDraft((currentDraft) =>
-        updateWorkoutSetAtPointer(currentDraft, pointer, { [field]: value })
+        updateWorkoutSetAtPointer(currentDraft, pointer, {
+          ...legacyRpePatch(field),
+          [field]: value,
+        })
       );
     },
     [updateDraft]

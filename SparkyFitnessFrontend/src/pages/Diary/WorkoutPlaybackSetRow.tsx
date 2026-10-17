@@ -1,3 +1,4 @@
+import { displaySetRir } from '@workspace/shared';
 import { useTranslation } from 'react-i18next';
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -64,6 +65,7 @@ interface WorkoutPlaybackSetRowProps {
   weight: number | null | undefined;
   duration: number | null | undefined;
   rpe: number | null | undefined;
+  rir: number | null | undefined;
   /** Epoch ms the set's stopwatch started; null when not running. */
   timerStartedAtMs: number | null;
   restTime: number | null | undefined;
@@ -99,6 +101,7 @@ const WorkoutPlaybackSetRow = ({
   weight,
   duration,
   rpe,
+  rir,
   timerStartedAtMs,
   restTime,
   notes,
@@ -291,14 +294,26 @@ const WorkoutPlaybackSetRow = ({
           min={0}
           max={10}
           step={0.5}
-          aria-label={t('workout.rpeSet', 'RPE set {{setNumber}}', {
-            setNumber,
-          })}
-          value={rpe ?? ''}
+          aria-label={t(
+            modality === 'duration_distance'
+              ? 'workout.rpeSet'
+              : 'workout.rirSet',
+            modality === 'duration_distance'
+              ? 'RPE set {{setNumber}}'
+              : 'RIR set {{setNumber}}',
+            {
+              setNumber,
+            }
+          )}
+          value={
+            (modality === 'duration_distance'
+              ? rpe
+              : displaySetRir({ rir, rpe })) ?? ''
+          }
           onChange={(event) =>
             onSetFieldChange(
               pointer,
-              'rpe',
+              modality === 'duration_distance' ? 'rpe' : 'rir',
               event.target.value === '' ? null : Number(event.target.value)
             )
           }

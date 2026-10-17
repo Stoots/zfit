@@ -76,7 +76,7 @@ When you start a workout, each exercise's suggested weight takes your recent fee
 | Pain last workout, exercise not named | No weight increase | "Holding weight: you reported discomfort…" |
 | Too hard last time | No weight increase | "Holding weight: last time felt too hard." |
 | Too hard two sessions running | 10% lighter | "Lighter today: too hard two sessions running." |
-| No feedback, but your last sets were logged at RPE 9.5+ or 0 RIR | No weight increase | "Holding weight: your last sets were near max effort." |
+| No feedback, but your last sets were logged at 0–0.5 RIR | No weight increase | "Holding weight: your last sets were near max effort." |
 | Too easy two sessions running | One step heavier (your preset's increment, else 2.5 kg / 5 lb) | "A step heavier: too easy two sessions running." |
 
 - Weights are rounded down to a loadable step (2.5 kg or 5 lb) and always drop at least one step on a lighter day.
@@ -86,7 +86,7 @@ When you start a workout, each exercise's suggested weight takes your recent fee
 
 ### Turning it off
 
-Adaptive suggestions are **on by default**. Until you give feedback, the only thing that can change is holding the weight when your last sets were logged at near-max effort (RPE 9.5+ or 0 RIR). To turn them off:
+Adaptive suggestions are **on by default**. Until you give feedback, the only thing that can change is holding the weight when your last sets were logged at near-max effort (0–0.5 RIR). To turn them off:
 
 | Where | How |
 | :--- | :--- |
@@ -119,3 +119,5 @@ Turn on **Settings → Workout Settings → Lower music during cues** and your m
 | "My shoulder hurts. Chest exercises that don't use shoulders?" | Alternatives that avoid shoulder muscles |
 | "Yesterday's workout felt too easy." | Saves the feedback on that workout |
 | "Will my Push Day change next time?" | Explains each exercise's adjustment and why |
+
+Strength sets use **RIR (reps in reserve)**: 0 means no further reps were possible; 2 means two more reps were possible. Coaching prefers logged RIR and converts legacy RPE only when RIR is missing. Cardio effort ratings remain RPE.

@@ -13,13 +13,12 @@ import { carryDistanceUnitLabel } from '@workspace/shared';
 
 interface SetColumnHeadersProps {
   modality: SetTableModality;
-  /** Diary entries record RIR; presets don't, so they leave this off. */
-  showRir?: boolean;
+  effortField?: 'rpe' | 'rir';
 }
 
 export const SetColumnHeaders = ({
   modality,
-  showRir = false,
+  effortField = 'rir',
 }: SetColumnHeadersProps) => {
   const { t } = useTranslation();
   const { distanceUnit } = usePreferences();
@@ -27,7 +26,7 @@ export const SetColumnHeaders = ({
     'text-[10px] font-bold uppercase text-muted-foreground tracking-wide flex items-center gap-1';
   const layout = SET_TABLE_LAYOUT[modality];
   const { showReps, showWeight, showDistance, signedWeight } = layout;
-  const gridClass = showRir ? layout.gridClassWithRir : layout.gridClass;
+  const gridClass = layout.gridClass;
 
   return (
     <div className="flex items-center gap-2 px-1 mb-0.5">
@@ -60,15 +59,9 @@ export const SetColumnHeaders = ({
           </div>
         )}
         <div className={cell}>
-          <Activity className="h-3 w-3 text-emerald-500" />
-          {t('workout.rpe', 'RPE')}
+          <Activity className="h-3 w-3 text-teal-500" />
+          {t(`workout.${effortField}`, effortField.toUpperCase())}
         </div>
-        {showRir && (
-          <div className={cell}>
-            <Activity className="h-3 w-3 text-teal-500" />
-            {t('workout.rir', 'RIR')}
-          </div>
-        )}
         <div className={cell}>
           <Hourglass className="h-3 w-3 text-orange-500" />
           {t('workout.durationSec', 'Duration (s)')}

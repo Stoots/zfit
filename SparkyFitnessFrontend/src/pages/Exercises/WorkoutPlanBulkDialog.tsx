@@ -1,3 +1,4 @@
+import { displaySetRir, setEffortField } from '@workspace/shared';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -86,6 +87,8 @@ function PrescriptionValues({
       exercise_id: assignment.exercise_id,
       exercise_name: assignment.exercise_name,
       sets: assignment.sets,
+      modality: assignment.modality,
+      category: null,
     },
   ];
   const displayValue = (value: unknown) =>
@@ -125,19 +128,36 @@ function PrescriptionValues({
                       })}{' '}
                     </span>
                     {(fields.includes('sets')
-                      ? Object.entries(set)
+                      ? Object.entries(
+                          setEffortField(exercise) === 'rpe'
+                            ? set
+                            : { ...set, rir: displaySetRir(set) }
+                        )
                           .filter(
-                            ([key]) => key !== 'id' && key !== 'set_number'
+                            ([key]) =>
+                              key !== 'id' &&
+                              key !== 'set_number' &&
+                              key !==
+                                (setEffortField(exercise) === 'rpe'
+                                  ? 'rir'
+                                  : 'rpe')
                           )
                           .map(
                             ([key, value]) =>
                               `${fieldNames[key as WorkoutPlanBulkField] ?? key}: ${displayValue(value)}`
                           )
                       : fields
-                          .filter((field) => setFields.includes(field))
+                          .filter(
+                            (field) =>
+                              setFields.includes(field) &&
+                              (field !== 'rpe' ||
+                                setEffortField(exercise) === 'rpe') &&
+                              (field !== 'rir' ||
+                                setEffortField(exercise) !== 'rpe')
+                          )
                           .map(
                             (field) =>
-                              `${fieldNames[field]}: ${displayValue(set[field])}`
+                              `${fieldNames[field]}: ${displayValue(field === 'rir' ? displaySetRir(set) : set[field])}`
                           )
                     ).join('; ')}
                   </li>
@@ -194,6 +214,10 @@ export default function WorkoutPlanBulkDialog({
     })
   );
   const source = sources.find((item) => item.key === sourceKey);
+  const sourceExercises =
+    source?.assignment.preset_snapshot?.exercises ??
+    (source ? [source.assignment] : []);
+  const effortFields = new Set(sourceExercises.map(setEffortField));
   const pending = bulk.preview.isPending || bulk.apply.isPending;
   const resetPreview = () => {
     setPreview(null);
@@ -424,7 +448,11 @@ export default function WorkoutPlanBulkDialog({
               </legend>
               <div className="grid gap-x-6 sm:grid-cols-2">
                 {[
-                  ...setFields,
+                  ...setFields.filter((field) =>
+                    field === 'rpe' || field === 'rir'
+                      ? effortFields.has(field)
+                      : true
+                  ),
                   ...(source.assignment.preset_snapshot ? presetFields : []),
                 ].map((field) => (
                   <Label

@@ -1,3 +1,4 @@
+import { legacyRpePatch } from '@workspace/shared';
 import { useState, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from '@/hooks/use-toast';
@@ -128,7 +129,7 @@ export function useWorkoutPlanAssignments(
     changeAssignment(index, (a) => ({
       ...a,
       sets: a.sets.map((s, i) =>
-        i === setIndex ? { ...s, [field]: value } : s
+        i === setIndex ? { ...s, ...legacyRpePatch(field), [field]: value } : s
       ),
     }));
   const handleAddSetInPlan = (index: number) =>

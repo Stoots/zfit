@@ -10,7 +10,7 @@ When creating a workout preset or starting an active session, you can choose fro
 
 | Format | Focus / Style | Timer & Clock Behavior | Scoring & Logging |
 | :--- | :--- | :--- | :--- |
-| **Standard** | Traditional hypertrophy, powerlifting, bodybuilding | Stopwatch counting up (elapsed time) | Sets, reps, weight, RPE, rest timers between sets |
+| **Standard** | Traditional hypertrophy, powerlifting, bodybuilding | Stopwatch counting up (elapsed time) | Sets, reps, weight, RIR, rest timers between sets |
 | **Tabata** | High-intensity interval rounds (e.g. 20s work / 10s rest) | Work/Rest interval clock with 3-2-1 countdown beeps | Automatic set completion at the end of each work interval |
 | **EMOM** | Every Minute On the Minute | Repeating 60s (or custom) clock with start chimes | Work inside the minute; rest the remainder; tracks rounds |
 | **AMRAP** | As Many Rounds/Reps As Possible within a fixed time cap | Global countdown clock down to `00:00` | Completed rounds + extra reps, Rx / Scaled status |

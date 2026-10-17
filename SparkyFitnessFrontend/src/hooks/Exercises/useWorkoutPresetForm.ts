@@ -1,3 +1,4 @@
+import { legacyRpePatch } from '@workspace/shared';
 import { useState, useCallback } from 'react';
 
 import type {
@@ -195,7 +196,11 @@ export function useWorkoutPresetForm({
               if (sIndex !== setIndex) {
                 return set;
               }
-              return { ...set, [field]: value };
+              return {
+                ...set,
+                ...legacyRpePatch(field),
+                [field]: value,
+              };
             }),
           };
         })

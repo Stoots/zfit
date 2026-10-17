@@ -535,12 +535,12 @@ describe.runIf(run)('persisted authenticated bulk prescription APIs', () => {
     expect(await fullState()).toEqual(after);
   });
 
-  it.each(['individual', 'frozen preset'] as const)(
+  it.each(['individual', 'frozen preset', 'mixed preset'] as const)(
     '%s effort-only edits copy numeric/null RPE and RIR without changing any other stored key or scalar',
     async (kind) => {
       await outcome(3);
       let effortPlan = plan;
-      if (kind === 'frozen preset') {
+      if (kind !== 'individual') {
         const created = await call('/api/workout-plan-templates', {
           plan_name: 'Effort-only frozen future sets',
           start_date: '2099-10-11',
@@ -565,7 +565,14 @@ describe.runIf(run)('persisted authenticated bulk prescription APIs', () => {
                     exercise_id: id,
                     exercise_name: e ? 'Row' : 'Split squat',
                     image_url: null,
-                    category: 'Strength',
+                    category:
+                      kind === 'mixed preset' && e === 1
+                        ? 'Cardio'
+                        : 'Strength',
+                    modality:
+                      kind === 'mixed preset' && e === 1
+                        ? 'duration_distance'
+                        : 'weight_reps',
                     superset_group: null,
                     equipment_brand: `Target-local equipment ${i}`,
                     sets: [1, 2].map((set_number) => ({
@@ -578,6 +585,9 @@ describe.runIf(run)('persisted authenticated bulk prescription APIs', () => {
                       effort: 'Keep authored effort wording',
                       rpe: 5 + i,
                       ...(i === 2 && set_number === 2 ? {} : { rir: 3 + i }),
+                      ...(kind === 'mixed preset' && e === 1 && i === 0
+                        ? { rpe: 8, rir: undefined }
+                        : {}),
                     })),
                   })),
                 },
@@ -599,8 +609,9 @@ describe.runIf(run)('persisted authenticated bulk prescription APIs', () => {
                 .map((p) => p.id)
             : [],
       }));
-      for (const field of ['rpe', 'rir'] as const) {
-        const value = field === 'rpe' ? 8.5 : 2.5;
+      for (const mode of ['legacy', 'rpe', 'rir'] as const) {
+        const field = mode === 'legacy' ? 'rir' : mode;
+        const value = field === 'rpe' ? 8.5 : mode === 'legacy' ? 2 : 2.5;
         const prescription = workoutPlanAssignmentInputSchema.parse({
           ...source.assignments[0]!,
           preset_snapshot: source.assignments[0]!.preset_snapshot ?? undefined,
@@ -610,6 +621,10 @@ describe.runIf(run)('persisted authenticated bulk prescription APIs', () => {
           : prescription.sets!;
         sourceSets.forEach((set) => {
           set[field] = set.set_number === 1 ? value : null;
+          if (mode === 'legacy' && set.set_number === 1) {
+            delete set.rir;
+            set.rpe = 8;
+          }
         });
         const body: WorkoutPlanBulkRequest = {
           plan_id: effortPlan.id,
@@ -624,12 +639,23 @@ describe.runIf(run)('persisted authenticated bulk prescription APIs', () => {
         const p = await preview(body);
         expect(await fullState()).toEqual(before);
         for (const target of p.targets) {
-          const sets = target.after.preset_snapshot
-            ? target.after.preset_snapshot.exercises.flatMap((e) => e.sets)
+          const mixedRir = kind === 'mixed preset' && field === 'rir';
+          const exercises = target.after.preset_snapshot?.exercises;
+          const sets = exercises
+            ? (mixedRir ? exercises.slice(0, 1) : exercises).flatMap(
+                (e) => e.sets
+              )
             : target.after.sets;
           expect(sets.map((set) => set[field])).toEqual(
-            kind === 'individual' ? [value, null] : [value, null, value, null]
+            kind === 'individual' || mixedRir
+              ? [value, null]
+              : [value, null, value, null]
           );
+          if (mixedRir) {
+            expect(exercises![1]!.sets).toEqual(
+              target.before.preset_snapshot!.exercises[1]!.sets
+            );
+          }
         }
         const result = await apply(p);
         expect(result.status, JSON.stringify(result.body)).toBe(200);
@@ -661,11 +687,13 @@ describe.runIf(run)('persisted authenticated bulk prescription APIs', () => {
           if (kind === 'individual') {
             row.prescription[field] = row.set_number === 1 ? value : null;
           } else {
-            row.preset_snapshot.exercises.forEach((exercise) =>
+            row.preset_snapshot.exercises.forEach((exercise, index) => {
+              if (kind === 'mixed preset' && index === 1 && field === 'rir')
+                return;
               exercise.sets.forEach((set) => {
                 set[field] = set.set_number === 1 ? value : null;
-              })
-            );
+              });
+            });
           }
         }
         // Exact raw SQL rows: all scalar columns, absent JSON keys, unrelated

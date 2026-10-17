@@ -22,6 +22,7 @@ export const workoutPresetSetResponseSchema = z.object({
   distance: z.number().nullable().optional(),
   rest_time: z.number().nullable(),
   notes: z.string().nullable(),
+  rir: z.number().min(0).max(10).nullable().optional(),
 });
 
 export const workoutPresetExerciseResponseSchema = z.object({
@@ -35,7 +36,10 @@ export const workoutPresetExerciseResponseSchema = z.object({
   modality: exerciseModalitySchema.optional(),
   superset_group: z.number().int().nullable(),
   // Progression & Equipment Fields
-  progression_mode: z.enum(["rep_goal", "fixed", "step_load", "manual"]).nullable().optional(),
+  progression_mode: z
+    .enum(["rep_goal", "fixed", "step_load", "manual"])
+    .nullable()
+    .optional(),
   rep_goal: z.number().int().nullable().optional(),
   increment_type: z.enum(["weight", "reps"]).nullable().optional(),
   increment_value: z.number().nullable().optional(),
@@ -101,6 +105,7 @@ export const workoutPresetSetRequestSchema = z.object({
   distance: z.number().nullable().optional(),
   rest_time: z.number().nullable().optional(),
   notes: z.string().nullable().optional(),
+  rir: z.number().min(0).max(10).nullable().optional(),
 });
 
 /** workout_preset_exercises.ramp_increment is numeric(6,2). */

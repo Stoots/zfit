@@ -1,3 +1,4 @@
+import { legacyRpePatch } from '@workspace/shared';
 import React, { useState, useEffect, type ChangeEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -48,6 +49,7 @@ import {
   todayInZone,
   prefillEntryTime,
   resolveExerciseModality,
+  setEffortField,
   setsDurationMinutes,
   userHourMinute,
 } from '@workspace/shared';
@@ -95,7 +97,8 @@ const LogExerciseEntryDialog: React.FC<LogExerciseEntryDialogProps> = ({
     exercise?.modality,
     exercise?.category
   );
-  const isCardio = modality === 'duration_distance';
+  const effortField = setEffortField({ modality });
+  const isCardio = effortField === 'rpe';
 
   const [notes, setNotes] = useState<string>('');
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -144,13 +147,17 @@ const LogExerciseEntryDialog: React.FC<LogExerciseEntryDialogProps> = ({
   const handleSetChange = (
     index: number,
     field: keyof WorkoutPresetSet,
-    value: string | number | undefined
+    value: string | number | null | undefined
   ) => {
     setSets((prev) => {
       const currentSet = prev[index];
       if (!currentSet) return prev;
       const newSets = [...prev];
-      newSets[index] = { ...currentSet, [field]: value };
+      newSets[index] = {
+        ...currentSet,
+        ...legacyRpePatch(field),
+        [field]: value,
+      };
       return newSets;
     });
   };
@@ -357,13 +364,12 @@ const LogExerciseEntryDialog: React.FC<LogExerciseEntryDialogProps> = ({
               >
                 <SetColumnHeaders
                   modality={toSetTableModality(modality)}
-                  showRir
+                  effortField={effortField}
                 />
                 <SortableContext items={sets.map((set) => set._dndId)}>
                   <div className="space-y-0.5">
                     {sets.map((set, index) => (
                       <SortableSetItem
-                        showRir
                         key={set._dndId}
                         id={set._dndId}
                         set={set}
@@ -373,13 +379,14 @@ const LogExerciseEntryDialog: React.FC<LogExerciseEntryDialogProps> = ({
                           handleSetChange(
                             sIdx,
                             field as Parameters<typeof handleSetChange>[1],
-                            value ?? undefined
+                            value
                           )
                         }
                         onDuplicateSet={(_, sIdx) => handleDuplicateSet(sIdx)}
                         onRemoveSet={(_, sIdx) => handleRemoveSet(sIdx)}
                         weightUnit={weightUnit}
                         modality={toSetTableModality(modality)}
+                        effortField={effortField}
                       />
                     ))}
                   </div>

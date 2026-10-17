@@ -1913,6 +1913,8 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
               set_number: 1,
               reps: 11,
               weight: 42,
+              rpe: 8,
+              rir: null,
               completed_at: '2026-10-25T10:00:00.000Z',
             },
           ],
@@ -1927,7 +1929,9 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
       expect(first.status).toBe(200);
       const diary = await diaryPrescription(assignmentId, '2026-10-25');
       expect(diary).toHaveLength(1);
-      expect(diary[0]!.sets).toMatchObject([{ reps: 11, weight: 42 }]);
+      expect(diary[0]!.sets).toMatchObject([
+        { reps: 11, weight: 42, rpe: 8, rir: 2 },
+      ]);
       expect(new Date(diary[0]!.sets[0]!.completed_at).toISOString()).toBe(
         '2026-10-25T10:00:00.000Z'
       );
