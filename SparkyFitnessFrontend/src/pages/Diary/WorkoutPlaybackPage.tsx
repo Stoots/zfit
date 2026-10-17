@@ -115,11 +115,14 @@ function clampRestSeconds(seconds: number): number {
 function getInitialDraft(
   requestedDate: string | null,
   routeState: WorkoutPlaybackRouteState | null
-): WorkoutPlaybackDraft | null {
+): {
+  draft: WorkoutPlaybackDraft | null;
+  recoveryDraft: WorkoutPlaybackDraft | null;
+} {
   const existingDraft = routeState?.draft ?? null;
   if (existingDraft) {
     if (requestedDate && existingDraft.entry_date !== requestedDate) {
-      return null;
+      return { draft: null, recoveryDraft: null };
     }
 
     const stored = loadWorkoutPlaybackDraftFromStorage(
@@ -128,22 +131,28 @@ function getInitialDraft(
     // Starting the same Planned Session again must resume the lifter's edits.
     if (
       existingDraft.training_program &&
+      existingDraft.workout_session_id &&
+      stored?.entry_date === existingDraft.entry_date &&
       stored?.training_program?.program_id ===
         existingDraft.training_program.program_id &&
       stored.training_program.session_id ===
-        existingDraft.training_program.session_id
+        existingDraft.training_program.session_id &&
+      stored.workout_session_id === existingDraft.workout_session_id
     ) {
-      return stored;
+      return { draft: stored, recoveryDraft: null };
     }
 
-    return existingDraft;
+    return { draft: existingDraft, recoveryDraft: stored };
   }
 
   if (!requestedDate) {
-    return null;
+    return { draft: null, recoveryDraft: null };
   }
 
-  return loadWorkoutPlaybackDraftFromStorage(requestedDate);
+  return {
+    draft: loadWorkoutPlaybackDraftFromStorage(requestedDate),
+    recoveryDraft: null,
+  };
 }
 
 function getReturnPath(
@@ -201,8 +210,12 @@ const WorkoutPlaybackPage = () => {
 
   const scrubbedRouteStateRef = useRef(false);
   const persistedDraftDateRef = useRef<string | null>(null);
-  const [draft, setDraft] = useState<WorkoutPlaybackDraft | null>(() =>
+  const [initialDraft] = useState(() =>
     getInitialDraft(requestedDate, routeState)
+  );
+  const [draft, setDraft] = useState(initialDraft.draft);
+  const [recoveryDraft, setRecoveryDraft] = useState(
+    initialDraft.recoveryDraft
   );
   const draftRef = useRef<WorkoutPlaybackDraft | null>(draft);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -509,6 +522,7 @@ const WorkoutPlaybackPage = () => {
   ]);
   // Persist edits before navigation or backgrounding can cancel a delayed save.
   useEffect(() => {
+    if (recoveryDraft) return;
     if (!draft) {
       if (persistedDraftDateRef.current) {
         clearWorkoutPlaybackDraftFromStorage(persistedDraftDateRef.current);
@@ -526,7 +540,7 @@ const WorkoutPlaybackPage = () => {
 
     setDraftStorageFailed(!saveWorkoutPlaybackDraftToStorage(draft));
     persistedDraftDateRef.current = draft.entry_date;
-  }, [draft]);
+  }, [draft, recoveryDraft]);
 
   useEffect(() => {
     draftRef.current = draft;
@@ -1023,6 +1037,13 @@ const WorkoutPlaybackPage = () => {
   }, []);
 
   const handleConfirmDiscard = useCallback(() => {
+    if (recoveryDraft) {
+      clearWorkoutPlaybackDraftFromStorage(recoveryDraft.entry_date);
+      setRecoveryDraft(null);
+      setSaveError(null);
+      setIsDiscardDialogOpen(false);
+      return;
+    }
     if (draft) {
       clearWorkoutPlaybackDraftFromStorage(draft.entry_date);
     }
@@ -1030,18 +1051,22 @@ const WorkoutPlaybackPage = () => {
     setSaveError(null);
     setIsDiscardDialogOpen(false);
     navigate(returnPath);
-  }, [draft, navigate, returnPath]);
+  }, [draft, recoveryDraft, navigate, returnPath]);
 
   const handleFinishWorkout = useCallback(
     async (saveSeparately = false) => {
       if (
         !draft ||
         finishInFlight.current ||
-        (requiresSeparateSave && !saveSeparately)
+        ((requiresSeparateSave || recoveryDraft) && !saveSeparately)
       )
         return;
 
-      const payload = buildPresetSessionCreateRequestFromDraft(draft, timezone);
+      const savingDraft = recoveryDraft ?? draft;
+      const payload = buildPresetSessionCreateRequestFromDraft(
+        savingDraft,
+        timezone
+      );
       if (saveSeparately) {
         payload.workoutPlanAssignmentId = null;
         payload.exercises = payload.exercises?.map((exercise) => ({
@@ -1061,7 +1086,7 @@ const WorkoutPlaybackPage = () => {
 
       finishInFlight.current = true;
       try {
-        const program = saveSeparately ? null : draft.training_program;
+        const program = saveSeparately ? null : savingDraft.training_program;
         const savedProgram = program
           ? await completeProgramSession.mutateAsync({
               programId: program.program_id,
@@ -1073,6 +1098,12 @@ const WorkoutPlaybackPage = () => {
             })
           : null;
         const saved = program ? null : await createPresetSession(payload);
+        if (recoveryDraft) {
+          clearWorkoutPlaybackDraftFromStorage(recoveryDraft.entry_date);
+          setRecoveryDraft(null);
+          setSaveError(null);
+          return;
+        }
         const programWorkout = savedProgram?.phases
           .flatMap((phase) => phase.weeks)
           .flatMap((week) => week.sessions)
@@ -1150,6 +1181,7 @@ const WorkoutPlaybackPage = () => {
     [
       completeProgramSession,
       requiresSeparateSave,
+      recoveryDraft,
       createPresetSession,
       draft,
       elapsedSeconds,
@@ -1226,6 +1258,12 @@ const WorkoutPlaybackPage = () => {
         isRestActive={!!isRestActive}
         saveError={
           saveError ??
+          (recoveryDraft
+            ? t(
+                'exercise.workoutPlaybackDialog.incompatibleDraft',
+                'Another workout draft is saved for this date. Save its logged sets as a separate workout or Discard that saved draft before finishing this workout.'
+              )
+            : null) ??
           (draftStorageFailed
             ? t(
                 'exercise.workoutPlaybackDialog.draftStorageError',
@@ -1233,7 +1271,7 @@ const WorkoutPlaybackPage = () => {
               )
             : null)
         }
-        requiresSeparateSave={requiresSeparateSave}
+        requiresSeparateSave={requiresSeparateSave || !!recoveryDraft}
         isSaving={isSaving}
         timezone={timezone}
         onCloseKeepDraft={handleCloseKeepDraft}
