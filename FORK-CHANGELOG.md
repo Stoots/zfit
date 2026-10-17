@@ -6,7 +6,7 @@ Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded her
 
 ### Unreleased
 
-- Show a collapsed **Last time** reference under each web workout-player exercise: prior date, sets, preferred weight unit, RIR and warm-ups; skip today and untouched prescriptions (#85).
+- Show a collapsed **Last time** reference under each web workout-player exercise: prior date, sets, preferred weight unit, RIR and warm-ups; skip today and untouched prescriptions with one filtered history request per exercise (#85).
 
 #### Bug fixes
 

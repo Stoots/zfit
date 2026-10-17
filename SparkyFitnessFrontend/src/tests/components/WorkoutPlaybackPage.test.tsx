@@ -91,6 +91,7 @@ const mockGetGroupedWorkoutSession = jest.fn();
 const mockSearchParams = new URLSearchParams('date=2026-04-27');
 let mockDistanceUnit: 'km' | 'miles' = 'km';
 let mockWeightUnit = 'kg';
+let mockTimezone = 'UTC';
 let mockLocationState: { returnTo?: string; draft?: unknown } | null = null;
 
 jest.mock('react-i18next', () =>
@@ -114,7 +115,7 @@ jest.mock('@/contexts/PreferencesContext', () => ({
   usePreferences: () => ({
     weightUnit: mockWeightUnit,
     distanceUnit: mockDistanceUnit,
-    timezone: 'UTC',
+    timezone: mockTimezone,
     energyUnit: 'kcal',
     convertEnergy: (value: number) => value,
     getEnergyUnitString: () => 'kcal',
@@ -175,6 +176,7 @@ describe('WorkoutPlaybackPage', () => {
     mockOwnedPrograms = { data: [{ id: 'program-1' }], isPending: false };
     mockDistanceUnit = 'km';
     mockWeightUnit = 'kg';
+    mockTimezone = 'UTC';
     mockNavigate.mockReset();
     mockCreatePresetSession.mockReset();
     mockCompleteProgramSession.mockReset();
@@ -214,60 +216,28 @@ describe('WorkoutPlaybackPage', () => {
     expect(screen.getAllByText('Last time')).toHaveLength(1);
   });
 
-  it('skips today and untouched prefills across pages, then shows the latest logged session in the user’s unit', async () => {
+  it('requests the latest eligible earlier sets once per exercise', async () => {
     mockWeightUnit = 'lbs';
-    const last = historicalEntry();
     mockHistoryApi.mockImplementation(
       (
         _url: string,
         options: { params: { exerciseId: string; page: number } }
-      ) => {
-        if (options.params.exerciseId !== 'exercise-1')
-          return Promise.resolve(historyPage([]));
-        if (options.params.page === 1)
-          return Promise.resolve(
-            historyPage(
-              [
-                historicalEntry({ entry_date: '2026-04-27' }),
-                historicalEntry({
-                  entry_date: '2026-04-25',
-                  is_weekly_prefill: true,
-                }),
-                historicalEntry({
-                  entry_date: '2026-04-24',
-                  source: 'Workout Plan',
-                }),
-              ],
-              true
-            )
-          );
-        return Promise.resolve(
-          historyPage([
-            {
-              type: 'preset',
-              id: 'session-1',
-              entry_date: '2026-04-20',
-              workout_preset_id: 1,
-              name: 'Prior workout',
-              description: null,
-              notes: null,
-              source: 'sparky',
-              total_duration_minutes: 10,
-              activity_details: [],
-              exercises: [
-                (({ type: _type, name: _name, ...entry }) => ({
-                  ...entry,
-                  is_weekly_prefill: true,
-                  sets: last.sets.map((set) => ({
-                    ...set,
-                    completed_at: '2026-04-20T12:00:00Z',
-                  })),
-                }))(last),
-              ],
-            },
-          ])
-        );
-      }
+      ) =>
+        Promise.resolve(
+          historyPage(
+            options.params.exerciseId === 'exercise-1'
+              ? [historicalEntry()]
+              : options.params.page === 1
+                ? [
+                    historicalEntry({
+                      exercise_id: 'exercise-2',
+                      entry_date: '2026-04-27',
+                    }),
+                  ]
+                : [],
+            true
+          )
+        )
     );
     mockLocationState = createWorkoutPlaybackRouteState(
       presetFixture,
@@ -276,15 +246,64 @@ describe('WorkoutPlaybackPage', () => {
     );
     render(<WorkoutPlaybackPage />);
     const details = (await screen.findByText('Last time')).closest('details')!;
-    expect(details).toHaveTextContent('2026-04-20');
     expect(details).toHaveTextContent('8 × 165.3 lbs');
-    expect(details).not.toHaveTextContent('2026-04-27');
+    expect(mockHistoryApi).toHaveBeenCalledTimes(2);
     expect(mockHistoryApi).toHaveBeenCalledWith(
       '/v2/exercise-entries/history',
       expect.objectContaining({
-        params: { exerciseId: 'exercise-1', page: 2, pageSize: 20 },
+        params: {
+          exerciseId: 'exercise-1',
+          page: 1,
+          pageSize: 1,
+          before: '2026-04-27',
+          performed_only: true,
+        },
       })
     );
+  });
+
+  it('excludes the user’s today from a future-dated draft', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-04-26T14:30:00Z'));
+    mockTimezone = 'Australia/Sydney'; // Local today is April 27, while UTC is April 26.
+    try {
+      mockHistoryApi.mockImplementation(
+        (
+          _url: string,
+          options: { params: { exerciseId: string; before?: string } }
+        ) => {
+          const today = historicalEntry({ entry_date: '2026-04-27' });
+          const older = historicalEntry({ entry_date: '2026-04-26' });
+          return Promise.resolve(
+            historyPage(
+              options.params.exerciseId === 'exercise-1'
+                ? [options.params.before === '2026-04-27' ? older : today]
+                : []
+            )
+          );
+        }
+      );
+      mockSearchParams.set('date', '2026-04-28');
+      mockLocationState = createWorkoutPlaybackRouteState(
+        presetFixture,
+        '2026-04-28',
+        storageIdentity
+      );
+      render(<WorkoutPlaybackPage />);
+      const details = (await screen.findByText('Last time')).closest(
+        'details'
+      )!;
+      expect(details).toHaveTextContent('2026-04-26');
+      expect(details).not.toHaveTextContent('2026-04-27');
+      expect(mockHistoryApi).toHaveBeenCalledWith(
+        '/v2/exercise-entries/history',
+        expect.objectContaining({
+          params: expect.objectContaining({ before: '2026-04-27' }),
+        })
+      );
+    } finally {
+      mockSearchParams.set('date', '2026-04-27');
+      jest.useRealTimers();
+    }
   });
 
   it('keeps inputs usable while history is pending and hides the section when history is empty', async () => {
