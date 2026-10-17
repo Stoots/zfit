@@ -80,3 +80,6 @@ dossier sans titre/
 
 # Local MCP server config (contains bearer tokens)
 .mcp.json
+
+# Fork scratch dirs (worker TMPDIR, player e2e artifacts)
+tmp-codex/

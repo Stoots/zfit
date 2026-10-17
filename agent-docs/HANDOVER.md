@@ -20,17 +20,9 @@ Deployment targets, rollback files, Penpot design-file IDs and local tool setup 
 
 ## Next work
 
-The issue queue is on `Stoots/zfit` (`docs/agents/issue-tracker.md`). Specs #1 and #9 and ADR 0003 set the accepted design; #9 supersedes #1 for session identity.
+The queue lives in the issue tracker, not here: `gh issue list -R Stoots/zfit --label ready-for-agent` (see `docs/agents/issue-tracker.md`). Ordering between tickets is recorded as native "blocked by" links. Specs #1 and #9 and ADR 0003 set the accepted design; #9 supersedes #1 for session identity.
 
-The #50 cleanup retires the completed one-off consolidation tool; the historical
-journal, migration, schema and RLS coverage remain.
-
-1. #6 ramp Tests, then #8 AI queries.
-2. Cleanup tickets #16, #19 and #21.
-3. #37 iPhone web app ease-of-use audit (low priority).
-4. Upstream sync (`FORK.md` procedure).
-
-Owner items: a walkthrough of the #18 delegate access decision (closed by #24; the owner has asked for an explanation). Keep private cutover identifiers out of the issue tracker.
+Keep private cutover identifiers out of the issue tracker.
 
 ## Known gaps and upgrade notes
 
@@ -43,6 +35,8 @@ Owner items: a walkthrough of the #18 delegate access decision (closed by #24; t
 - The fork's upstream sync remains pending. Use the branch procedure in `FORK.md`; the 184-commit count there is a 2026-10-12 snapshot. `puppeteer-core` in the root tooling manifest supports the fork-only smoke tool and may cause sync conflicts.
 
 ## Landing verification
+
+- `pnpm player:e2e` exercises Program workout draft recovery and saved diary sets against disposable PostgreSQL and a production web build at a 390×844 touch viewport. See `FORK.md` for prerequisites and artifacts.
 
 - PR #15 delivery reported frontend, mobile and server validation; full frontend/mobile suites; and persisted Cooper/RLS checks against disposable PostgreSQL. See the PR and `agent-docs/cooper-manual-acceptance.md` for the remaining phone check.
 - PR #20 delivery reported frontend, mobile and server validation; 190 frontend suites (1,753 tests), 499 mobile suites (7,690 tests), serial migration-check suites, upgrade-path tests and guarded consolidation acceptance. The landing review corrected spec gaps that those green suites initially missed.
