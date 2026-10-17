@@ -1,4 +1,21 @@
 {
+  "dashboardWorkoutPreview": {
+    "trigger": "Preview workout: {{name}} — {{context}}",
+    "view": "View workout",
+    "retry": "Try again",
+    "loading": "Loading workout…",
+    "error": "Could not load this workout. Try again.",
+    "empty": "No exercises are prescribed in this Workout Session.",
+    "noSets": "No sets prescribed.",
+    "reps": "{{count}} reps",
+    "reps_one": "{{count}} rep",
+    "reps_other": "{{count}} reps",
+    "seconds": "{{count}}s",
+    "rest": "{{count}}s rest",
+    "cooper": "Run as far as possible in 12 minutes and record the distance in metres.",
+    "sprint": "Complete five 6-second sprint efforts with 54-second rests. Record peak power for each effort.",
+    "power": "Complete two 30-second efforts with a 60-second rest. Record peak and average power for each effort."
+  },
   "trainingPrograms": {
     "jumpToNextSession": "Jump to next session",
     "noRemainingSessions": "No remaining sessions.",

@@ -435,3 +435,23 @@ test("partial diary linking retains a weekly session until every assignment is l
     { ...expectedCard, trainingProgramSessionId: "planned-a" },
   ]);
 });
+
+test("counts Cardio Test assessments toward the four Program slots without treating them as workouts", () => {
+  const programs = program([
+    {
+      ...planned("assessment", null, "2026-10-10"),
+      workout_plan_id: null,
+      cardio_test_type: "ramp",
+    },
+    planned("first", sessionA, "2026-10-11"),
+    planned("second", sessionA, "2026-10-12"),
+    planned("third", sessionB, "2026-10-13"),
+    planned("fifth", sessionB, "2026-10-14"),
+  ]);
+  assert.deepEqual(
+    expectedWorkoutCards(programs, [plan], []).map(
+      (card) => card.trainingProgramSessionId,
+    ),
+    ["first", "second", "third"],
+  );
+});

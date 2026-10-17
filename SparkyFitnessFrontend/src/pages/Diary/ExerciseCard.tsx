@@ -37,6 +37,9 @@ import type {
 } from '@/types/workout';
 import { formatMinutesToHHMM } from '@/utils/timeFormatters';
 import DashboardPlanCard from './DashboardPlanCard';
+import DashboardWorkoutPreview from './DashboardWorkoutPreview';
+import { cardioTestTitle } from '@/pages/TrainingPrograms/cardioTestTitle';
+import { cardioTestProtocols } from '@workspace/shared';
 import ExerciseEntryDisplay from './ExerciseEntryDisplay';
 import ExercisePresetEntryDisplay from './ExercisePresetEntryDisplay';
 import EditExerciseDatabaseDialog from './EditExerciseDatabaseDialog';
@@ -667,25 +670,69 @@ const ExerciseCard = ({
     isActingOnBehalf,
   ]);
 
-  const programCards = programPlans.map((plan) => {
-    const context = trainingPrograms?.flatMap((program) =>
+  const programCards = (
+    !isActingOnBehalf && !trainingProgramsError ? (trainingPrograms ?? []) : []
+  )
+    .flatMap((program) =>
       program.phases.flatMap((phase) =>
         phase.weeks.flatMap((week, weekIndex) =>
           week.sessions
-            .filter(
-              (session) => session.id === plan.training_program_session_id
-            )
+            .filter((session) => session.status === 'planned')
             .map((session) => ({
-              programId: program.id,
-              session,
-              label: `${program.name} · ${phase.name} · ${t('trainingPrograms.weekNumber', 'Week {{number}}', { number: weekIndex + 1 })} · ${session.effective_date}`,
-              date: session.effective_date,
+              plan: programPlans.find(
+                (plan) => plan.training_program_session_id === session.id
+              ),
+              context: {
+                programId: program.id,
+                session,
+                label: `${program.name} · ${phase.name} · ${t('trainingPrograms.weekNumber', 'Week {{number}}', { number: weekIndex + 1 })} · ${session.effective_date}`,
+                date: session.effective_date,
+              },
             }))
         )
       )
-    )[0];
-    return { plan, context };
-  });
+    )
+    .filter((card) => card.plan || card.context.session.cardio_test_type)
+    .sort((a, b) => a.context.date.localeCompare(b.context.date))
+    .slice(0, 4);
+
+  const startCardioTest = (session: PlannedSession) => {
+    const params = new URLSearchParams({ planned_session_id: session.id });
+    if (session.cardio_test_type !== 'cooper_run')
+      params.set('protocol', session.cardio_test_type!);
+    navigate(`/cardio-tests?${params}`);
+  };
+
+  const protocolDescription = (
+    protocol: NonNullable<PlannedSession['cardio_test_type']>
+  ) => {
+    switch (protocol) {
+      case 'cooper_run':
+        return t(
+          'dashboardWorkoutPreview.cooper',
+          'Run as far as possible in 12 minutes and record the distance in metres.'
+        );
+      case 'sprint_6s':
+        return t(
+          'dashboardWorkoutPreview.sprint',
+          'Complete five 6-second sprint efforts with 54-second rests. Record peak power for each effort.'
+        );
+      case 'power_30s':
+        return t(
+          'dashboardWorkoutPreview.power',
+          'Complete two 30-second efforts with a 60-second rest. Record peak and average power for each effort.'
+        );
+      case 'ramp':
+        return t(
+          'cardioTests.ramp.protocol',
+          '{{initial}} W initially, increasing by {{increment}} W per minute',
+          {
+            initial: cardioTestProtocols.ramp.initial_watts,
+            increment: cardioTestProtocols.ramp.increment_watts_per_minute,
+          }
+        );
+    }
+  };
 
   if (loading) {
     return <div>Loading exercises...</div>;
@@ -696,7 +743,7 @@ const ExerciseCard = ({
       <CardHeader className="p-4 pb-2 md:p-6">
         <div className="flex justify-between items-center">
           <CardTitle>
-            {programPlans.length
+            {programCards.length
               ? programCards[0]?.context?.date === selectedDate
                 ? t('diary.todaysSession', "Today's session")
                 : t('diary.nextSession', 'Next session')
@@ -751,26 +798,72 @@ const ExerciseCard = ({
         </div>
       </CardHeader>
       <CardContent className="px-4 pb-4 sm:px-6 sm:pb-6">
-        {programCards.map(({ plan, context }) => (
-          <DashboardPlanCard
-            key={`program-${plan.training_program_session_id}`}
-            plan={plan}
-            programContext={context?.label}
-            allowSessionPicker={false}
-            startingSessionId={startingSession}
-            onStart={handleStartPlanSession}
-            onComplete={
-              context
-                ? () =>
-                    void handleOpenCompletion(
-                      plan,
-                      context.programId,
-                      context.session
-                    )
-                : undefined
-            }
-          />
-        ))}
+        {programCards.map(({ plan, context }) =>
+          plan ? (
+            <DashboardPlanCard
+              key={`program-${plan.training_program_session_id}`}
+              plan={plan}
+              programContext={context?.label}
+              previewUserId={currentUserId}
+              allowSessionPicker={false}
+              startingSessionId={startingSession}
+              onStart={handleStartPlanSession}
+              onComplete={
+                context
+                  ? () =>
+                      void handleOpenCompletion(
+                        plan,
+                        context.programId,
+                        context.session
+                      )
+                  : undefined
+              }
+            />
+          ) : (
+            <div
+              key={context.session.id}
+              className="border-b pb-3 mb-3 space-y-3"
+            >
+              <DashboardWorkoutPreview
+                name={cardioTestTitle(context.session.cardio_test_type!, t)}
+                context={context.label}
+                protocolDescription={protocolDescription(
+                  context.session.cardio_test_type!
+                )}
+                onStart={() => startCardioTest(context.session)}
+              >
+                <button
+                  type="button"
+                  className="block w-full min-h-11 text-left rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label={t(
+                    'dashboardWorkoutPreview.trigger',
+                    'Preview workout: {{name}} — {{context}}',
+                    {
+                      name: cardioTestTitle(
+                        context.session.cardio_test_type!,
+                        t
+                      ),
+                      context: context.label,
+                    }
+                  )}
+                >
+                  <span className="block text-sm text-muted-foreground mb-2">
+                    {context.label}
+                  </span>
+                  <span className="block font-semibold text-xl">
+                    {cardioTestTitle(context.session.cardio_test_type!, t)}
+                  </span>
+                  <span className="block text-sm text-primary mt-2">
+                    {t('dashboardWorkoutPreview.view', 'View workout')}
+                  </span>
+                </button>
+              </DashboardWorkoutPreview>
+              <Button onClick={() => startCardioTest(context.session)}>
+                {t('trainingPrograms.recordTest', 'Record Test Attempt')}
+              </Button>
+            </div>
+          )
+        )}
         {standalonePlans.map((plan: WorkoutPlanTemplate) => (
           <DashboardPlanCard
             key={plan.id}

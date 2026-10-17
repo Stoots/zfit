@@ -72,6 +72,7 @@ Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded her
 
 #### Bug fixes
 
+- Preview upcoming web dashboard Workout Sessions before starting, with exact prescriptions, occurrence context, accessible phone-sized dialogs, and Cardio Test protocol previews; retain short carry distances and frozen workout formats/time caps, refresh previews after plan edits, and pluralize rep counts (#67).
 - Add a phone-friendly jump from the Program summary to the earliest pending session by effective date, including overdue sessions, and show when none remain (#62).
 
 - Bring populated Cardio Test editors into view with a dated heading and return focus to history after Save or Cancel for all four web protocols (#60).
