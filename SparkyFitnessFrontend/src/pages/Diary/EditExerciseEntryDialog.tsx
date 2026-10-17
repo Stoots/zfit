@@ -87,6 +87,7 @@ import { cn } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
 import {
   resolveExerciseModality,
+  setEffortField,
   setsDurationMinutes,
   toHourMinute,
   userHourMinute,
@@ -274,7 +275,8 @@ const EditExerciseEntryDialog = ({
     entry.exercise_snapshot?.modality,
     entry.exercise_snapshot?.category
   );
-  const isCardio = modality === 'duration_distance';
+  const effortField = setEffortField({ modality });
+  const isCardio = effortField === 'rpe';
 
   // Laps/GPS only exist for cardio (duration_distance) entries; skip the request
   // entirely for strength-set edits instead of firing two calls that always come back
@@ -621,7 +623,7 @@ const EditExerciseEntryDialog = ({
   const handleSetChange = (
     setIndex: number,
     field: keyof WorkoutPresetSet,
-    value: string | number | undefined
+    value: string | number | null | undefined
   ) => {
     setSets((prev) =>
       prev.map((set, i) =>
@@ -964,7 +966,10 @@ const EditExerciseEntryDialog = ({
                 collisionDetection={closestCenter}
                 onDragEnd={handleDragEnd}
               >
-                <SetColumnHeaders modality={toSetTableModality(modality)} />
+                <SetColumnHeaders
+                  modality={toSetTableModality(modality)}
+                  effortField={effortField}
+                />
                 <SortableContext items={sets.map((set) => set._dndId)}>
                   <div className="space-y-0.5">
                     {sets.map((set, setIndex) => (
@@ -978,13 +983,14 @@ const EditExerciseEntryDialog = ({
                           handleSetChange(
                             sIdx,
                             field as Parameters<typeof handleSetChange>[1],
-                            value ?? undefined
+                            value
                           )
                         }
                         onDuplicateSet={(_, sIdx) => handleDuplicateSet(sIdx)}
                         onRemoveSet={(_, sIdx) => handleRemoveSet(sIdx)}
                         weightUnit={weightUnit}
                         modality={toSetTableModality(modality)}
+                        effortField={effortField}
                       />
                     ))}
                   </div>

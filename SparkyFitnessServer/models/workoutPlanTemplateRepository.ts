@@ -11,6 +11,7 @@ import type { PoolClient } from 'pg';
 import { getClient } from '../db/poolManager.js';
 import { HttpError } from '../utils/errors.js';
 import {
+  displaySetRir,
   workoutPlanCreateRequestSchema,
   workoutPlanUpdateRequestSchema,
   workoutPlanPresetSnapshotSchema,
@@ -1236,7 +1237,11 @@ function copyBulkSets(
     const prescribed = source.find((s) => s.set_number === set.set_number)!;
     const result = { ...set };
     const values: Record<string, unknown> = result;
-    for (const field of setFields) values[field] = prescribed[field] ?? null;
+    for (const field of setFields)
+      values[field] =
+        field === 'rir'
+          ? displaySetRir(prescribed)
+          : (prescribed[field] ?? null);
     return result;
   });
 }
