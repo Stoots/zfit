@@ -1435,6 +1435,11 @@ const WorkoutPlaybackSession = ({
       <fieldset disabled={!!recoveryDraft} className="min-w-0">
         <WorkoutPlaybackExercisesList
           exercises={draft.exercises}
+          lastTimeBeforeDate={
+            identity.userId === identity.activeUserId
+              ? draft.entry_date
+              : undefined
+          }
           setNotesVisibility={setNotesVisibility}
           onToggleSetNotesVisibility={toggleSetNotesVisibility}
           onSelectSet={handleSelectSet}

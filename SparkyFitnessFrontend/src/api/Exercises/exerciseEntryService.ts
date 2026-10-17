@@ -5,6 +5,8 @@ import type { ActivityDetailsResponse } from '@/types/exercises';
 import {
   ExerciseSessionResponse,
   exerciseSessionResponseSchema,
+  exerciseHistoryResponseSchema,
+  canLinkDiaryWorkout,
   ExerciseEntryResponse,
   CreateExerciseEntryRequest,
   CreatePresetSessionRequest,
@@ -215,6 +217,40 @@ export const getExerciseProgressData = async (
     }
   );
   return z.array(exerciseProgressResponseSchema).parse(response);
+};
+
+/** Last performed entry, using paginated history so prefills cannot hide older work. */
+export const fetchLastExercisePerformance = async (
+  exerciseId: string,
+  beforeDate: string,
+  signal: AbortSignal
+): Promise<ExerciseEntryResponse | null> => {
+  for (let page = 1; !signal.aborted; page += 1) {
+    const response = exerciseHistoryResponseSchema.parse(
+      await apiCall('/v2/exercise-entries/history', {
+        method: 'GET',
+        params: { exerciseId, page, pageSize: 20 },
+        signal,
+      })
+    );
+    for (const session of response.sessions) {
+      if (!session.entry_date || session.entry_date >= beforeDate) continue;
+      const entries = session.type === 'preset' ? session.exercises : [session];
+      const previous = entries
+        .filter(
+          (entry) =>
+            entry.exercise_id === exerciseId &&
+            entry.sets.length > 0 &&
+            canLinkDiaryWorkout({ ...entry, type: 'individual' })
+        )
+        .sort((a, b) =>
+          (b.created_at ?? '').localeCompare(a.created_at ?? '')
+        )[0];
+      if (previous) return { ...previous, entry_date: session.entry_date };
+    }
+    if (!response.pagination.hasMore || !response.sessions.length) break;
+  }
+  return null;
 };
 
 export const getExerciseHistory = async (

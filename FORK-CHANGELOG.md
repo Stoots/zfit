@@ -6,6 +6,8 @@ Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded her
 
 ### Unreleased
 
+- Show a collapsed **Last time** reference under each web workout-player exercise: prior date, sets, preferred weight unit, RIR and warm-ups; skip today and untouched prescriptions (#85).
+
 #### Bug fixes
 
 - Scope web workout drafts to the signed-in account and acting profile; reset playback on profile changes and clear account drafts on sign-out (#78). Legacy Program drafts migrate only after verifying the signed-in owner's Program list, preserving completed sets and edited weights; unverifiable drafts remain untouched, including on sign-out. Stale session-expiry probes cannot clear drafts after recovery.
