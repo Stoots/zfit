@@ -1,3 +1,4 @@
+import { useAttemptEditorFocus } from './useAttemptEditorFocus';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowRight } from 'lucide-react';
@@ -42,6 +43,9 @@ function ProfileCooperRunTests() {
     canRead && !isActingOnBehalf
   );
   const [editing, setEditing] = useState<CooperRunAttempt | null>(null);
+  const { headingRef, editButtonRef } = useAttemptEditorFocus(
+    editing?.id ?? null
+  );
   const [attemptDate, setAttemptDate] = useState('');
   const [distance, setDistance] = useState('');
   const latest = attempts.data?.at(-1);
@@ -148,10 +152,21 @@ function ProfileCooperRunTests() {
               onSubmit={submit}
               className="space-y-4 rounded-lg border bg-card p-4 sm:p-6"
             >
-              <h2 className="text-lg font-semibold">
-                {editing
-                  ? t('cardioTests.edit', 'Edit Test Attempt')
-                  : t('cardioTests.add', 'Record Test Attempt')}
+              <h2
+                ref={headingRef}
+                tabIndex={-1}
+                className="scroll-mt-4 text-lg font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {editing ? (
+                  <>
+                    {t('cardioTests.editingAttempt', 'Editing Test Attempt')} ·{' '}
+                    <time dateTime={editing.attempt_date}>
+                      {editing.attempt_date}
+                    </time>
+                  </>
+                ) : (
+                  t('cardioTests.add', 'Record Test Attempt')
+                )}
               </h2>
               <div className="grid gap-4 sm:grid-cols-2">
                 {!isActingOnBehalf && (
@@ -320,7 +335,10 @@ function ProfileCooperRunTests() {
                           type="button"
                           variant="outline"
                           disabled={pending}
-                          onClick={() => selectAttempt(attempt)}
+                          onClick={(event) => {
+                            editButtonRef.current = event.currentTarget;
+                            selectAttempt(attempt);
+                          }}
                         >
                           {t('common.edit', 'Edit')}
                         </Button>

@@ -219,6 +219,77 @@ describe('Cooper run Test Attempts', () => {
     jest.mocked(getTrainingPrograms).mockResolvedValue([]);
   });
 
+  it.each(['cooper_run', 'sprint_6s', 'power_30s', 'ramp'] as const)(
+    'focuses the populated %s editor and returns to history after Cancel and Save',
+    async (protocol) => {
+      const base = {
+        id: 'existing',
+        user_id: mockActiveUserId,
+        planned_session_id: null,
+        attempt_date: '2026-10-14',
+        created_at: '2026-10-14T12:00:00Z',
+        updated_at: '2026-10-14T12:00:00Z',
+      };
+      if (protocol === 'cooper_run')
+        mockServer.records = [
+          { ...base, test_type: protocol, distance_meters: 2500 },
+        ];
+      else
+        mockProtocolRecords = [
+          protocol === 'ramp'
+            ? {
+                ...base,
+                test_type: protocol,
+                results: {
+                  maximum_watts: 280,
+                  peak_heart_rate: 181,
+                  one_minute_heart_rate: 145,
+                },
+              }
+            : protocol === 'sprint_6s'
+              ? {
+                  ...base,
+                  test_type: protocol,
+                  results: { peak_watts: [900, 850, 800, 750, 700] },
+                }
+              : {
+                  ...base,
+                  test_type: protocol,
+                  results: {
+                    efforts: [
+                      { peak_watts: 700, average_watts: 450 },
+                      { peak_watts: 650, average_watts: 425 },
+                    ],
+                  },
+                },
+        ];
+      window.history.replaceState({}, '', `/cardio-tests?protocol=${protocol}`);
+      const scrollIntoView = jest.fn();
+      HTMLElement.prototype.scrollIntoView = scrollIntoView;
+      renderWithClient(<CooperRunTests />);
+      const edit = await screen.findByRole('button', { name: 'Edit' });
+      fireEvent.click(edit);
+      expect(
+        screen.getByRole('heading', {
+          name: 'Editing Test Attempt · 2026-10-14',
+        })
+      ).toHaveFocus();
+      expect(scrollIntoView).toHaveBeenLastCalledWith({
+        block: 'start',
+        behavior: 'instant',
+      });
+      expect(screen.getAllByLabelText('Date')[0]).toHaveValue('2026-10-14');
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      expect(edit).toHaveFocus();
+      fireEvent.click(edit);
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      await waitFor(() => expect(edit).toHaveFocus());
+      expect(
+        screen.queryByRole('heading', { name: /Editing Test Attempt/ })
+      ).toBeNull();
+    }
+  );
+
   it('records a scheduled ramp attempt and plots maximum watts and heart-rate recovery', async () => {
     const sessionId = '00000000-0000-4000-a000-000000000099';
     window.history.replaceState(

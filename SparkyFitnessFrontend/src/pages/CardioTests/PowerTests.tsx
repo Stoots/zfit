@@ -1,3 +1,4 @@
+import { useAttemptEditorFocus } from './useAttemptEditorFocus';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -116,6 +117,7 @@ function PowerProtocol({
     config[protocol].labels.map(() => '')
   );
   const [editing, setEditing] = useState<string | null>(null);
+  const { headingRef, editButtonRef } = useAttemptEditorFocus(editing);
   const linkedEditBlocked = programs.isError && !!editing && !!plannedSessionId;
   const [validationError, setValidationError] = useState('');
   const savingRef = useRef(false);
@@ -201,6 +203,23 @@ function PowerProtocol({
       <h2 className="text-xl font-semibold">{title}</h2>
       {canWrite && (
         <form onSubmit={submit} className="space-y-4 rounded-lg border p-4">
+          {editing && (
+            <h3
+              ref={headingRef}
+              tabIndex={-1}
+              className="scroll-mt-4 text-lg font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {t('cardioTests.editingAttempt', 'Editing Test Attempt')} ·{' '}
+              <time
+                dateTime={
+                  rows.find((attempt) => attempt.id === editing)?.attempt_date
+                }
+              >
+                {rows.find((attempt) => attempt.id === editing)?.attempt_date}
+              </time>
+            </h3>
+          )}
+
           {!isActingOnBehalf && (
             <div>
               <Label htmlFor={`${protocol}-planned-session`}>
@@ -411,7 +430,10 @@ function PowerProtocol({
                     type="button"
                     variant="outline"
                     disabled={save.isPending}
-                    onClick={() => select(attempt)}
+                    onClick={(event) => {
+                      editButtonRef.current = event.currentTarget;
+                      select(attempt);
+                    }}
                   >
                     {t('common.edit', 'Edit')}
                   </Button>

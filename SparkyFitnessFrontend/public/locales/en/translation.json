@@ -7051,6 +7051,7 @@
     "loadFailed": "Could not load your training consistency."
   },
   "cardioTests": {
+    "editingAttempt": "Editing Test Attempt",
     "title": "Cardio Tests",
     "intro": "Record Cooper, power, and ramp Test Attempts and compare results over time.",
     "saved": "Test Attempt saved.",
