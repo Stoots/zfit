@@ -1,6 +1,8 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import EditExerciseEntryDialog from '@/pages/Diary/EditExerciseEntryDialog';
+import LogExerciseEntryDialog from '@/pages/Diary/LogExerciseEntryDialog';
+import type { ExerciseToLog } from '@/types/workout';
 import type { ExerciseEntry } from '@/types/exercises';
 
 const mockUpdateExerciseEntry = jest.fn();
@@ -38,6 +40,10 @@ jest.mock('@/utils/logging', () => ({
 }));
 
 jest.mock('@/hooks/Exercises/useExerciseEntries', () => ({
+  useCreateExerciseEntryMutation: () => ({
+    mutateAsync: mockUpdateExerciseEntry,
+    isPending: false,
+  }),
   useUpdateExerciseEntryMutation: () => ({
     mutateAsync: mockUpdateExerciseEntry,
     isPending: false,
@@ -142,6 +148,64 @@ describe('EditExerciseEntryDialog cardio set write', () => {
   beforeEach(() => {
     mockUpdateExerciseEntry.mockClear();
     mockUpdateExerciseEntry.mockResolvedValue(undefined);
+  });
+
+  it('edits and clears RPE in a multi-set cardio table', async () => {
+    renderDialog(
+      makeEntry({
+        sets: [
+          { ...cardioSet, rpe: 8 },
+          { ...cardioSet, id: 8, set_number: 2, rpe: 6 },
+        ],
+      })
+    );
+    expect(screen.queryByText('RIR')).not.toBeInTheDocument();
+    const inputs = screen.getAllByLabelText('RPE');
+    expect(inputs[0]).toHaveValue(8);
+    fireEvent.change(inputs[0]!, { target: { value: '7' } });
+    fireEvent.change(inputs[1]!, { target: { value: '' } });
+    const { data } = await saveEntry();
+    expect(data.sets[0]).toMatchObject({ rpe: 7 });
+    expect(data.sets[1]).toMatchObject({ rpe: null });
+  });
+
+  it('logs RPE edits in a multi-set cardio table', async () => {
+    const exercise = {
+      id: 'ex-1',
+      name: 'Run',
+      modality: 'duration_distance',
+      category: 'Cardio',
+      calories_per_hour: 600,
+    } as ExerciseToLog;
+    render(
+      <LogExerciseEntryDialog
+        isOpen
+        onClose={jest.fn()}
+        exercise={exercise}
+        selectedDate="2026-10-18"
+        onSaveSuccess={jest.fn()}
+        initialSets={[
+          { ...cardioSet, rpe: 8 },
+          { ...cardioSet, set_number: 2, rpe: 6 },
+        ]}
+        energyUnit="kcal"
+        convertEnergy={(value) => value}
+        getEnergyUnitString={(unit) => unit}
+      />
+    );
+    expect(screen.queryByText('RIR')).not.toBeInTheDocument();
+    fireEvent.change(screen.getAllByLabelText('RPE')[0]!, {
+      target: { value: '7' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save Entry' }));
+    await waitFor(() =>
+      expect(mockUpdateExerciseEntry).toHaveBeenCalledTimes(1)
+    );
+    expect(mockUpdateExerciseEntry.mock.calls[0][0].sets).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ set_number: 1, rpe: 7 }),
+      ])
+    );
   });
 
   it('writes the entry-level duration/distance into the single cardio set', async () => {

@@ -1,4 +1,4 @@
-import { displaySetRir } from '@workspace/shared';
+import { displaySetRir, setEffortField } from '@workspace/shared';
 import { useState, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
@@ -167,7 +167,7 @@ export default function DashboardWorkoutPreview({
                                       { count: set.rest_time }
                                     )
                                   : null,
-                                exercise.modality === 'duration_distance'
+                                setEffortField(exercise) === 'rpe'
                                   ? set.rpe != null
                                     ? `RPE ${set.rpe}`
                                     : null

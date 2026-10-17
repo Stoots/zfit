@@ -13,9 +13,13 @@ import { carryDistanceUnitLabel } from '@workspace/shared';
 
 interface SetColumnHeadersProps {
   modality: SetTableModality;
+  effortField?: 'rpe' | 'rir';
 }
 
-export const SetColumnHeaders = ({ modality }: SetColumnHeadersProps) => {
+export const SetColumnHeaders = ({
+  modality,
+  effortField = 'rir',
+}: SetColumnHeadersProps) => {
   const { t } = useTranslation();
   const { distanceUnit } = usePreferences();
   const cell =
@@ -56,7 +60,7 @@ export const SetColumnHeaders = ({ modality }: SetColumnHeadersProps) => {
         )}
         <div className={cell}>
           <Activity className="h-3 w-3 text-teal-500" />
-          {t('workout.rir', 'RIR')}
+          {t(`workout.${effortField}`, effortField.toUpperCase())}
         </div>
         <div className={cell}>
           <Hourglass className="h-3 w-3 text-orange-500" />

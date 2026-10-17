@@ -46,6 +46,7 @@ interface SortableSetItemProps {
   onRemoveSet: (exerciseIndex: number, setIndex: number) => void;
   weightUnit: string;
   modality: SetTableModality;
+  effortField?: 'rpe' | 'rir';
 }
 
 export const SortableSetItem = React.memo(
@@ -59,6 +60,7 @@ export const SortableSetItem = React.memo(
     onRemoveSet,
     weightUnit,
     modality,
+    effortField = 'rir',
   }: SortableSetItemProps) => {
     const { t } = useTranslation();
     const { distanceUnit } = usePreferences();
@@ -200,13 +202,18 @@ export const SortableSetItem = React.memo(
                 max={RIR_MAX}
                 step="0.5"
                 placeholder="—"
-                aria-label={t('workout.rir', 'RIR')}
-                value={displaySetRir(set) ?? ''}
+                aria-label={t(
+                  `workout.${effortField}`,
+                  effortField.toUpperCase()
+                )}
+                value={
+                  (effortField === 'rpe' ? set.rpe : displaySetRir(set)) ?? ''
+                }
                 onChange={(e) =>
                   onSetChange(
                     exerciseIndex,
                     setIndex,
-                    'rir',
+                    effortField,
                     e.target.value === ''
                       ? null
                       : Math.min(

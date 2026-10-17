@@ -1,4 +1,4 @@
-import { displaySetRir, resolveExerciseModality } from '@workspace/shared';
+import { displaySetRir, setEffortField } from '@workspace/shared';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -70,16 +70,6 @@ function useFieldNames(): Record<WorkoutPlanBulkField, string> {
     ),
     description: t('workoutPlanBulk.fields.description', 'Preset description'),
   };
-}
-
-function setEffortField(exercise: {
-  modality?: string | null;
-  category?: string | null;
-}) {
-  return resolveExerciseModality(exercise.modality, exercise.category) ===
-    'duration_distance'
-    ? 'rpe'
-    : 'rir';
 }
 
 function PrescriptionValues({

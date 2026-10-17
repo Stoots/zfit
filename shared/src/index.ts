@@ -270,4 +270,8 @@ export * from "./nutrients/nutrientCalculation.ts";
 
 export { canLinkDiaryWorkout } from "./utils/diaryWorkoutCompletion.ts";
 
-export { displaySetRir, legacyRpePatch } from "./utils/setRir.ts";
+export {
+  displaySetRir,
+  legacyRpePatch,
+  setEffortField,
+} from "./utils/setRir.ts";

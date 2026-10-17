@@ -7,7 +7,11 @@ import {
 } from '@/api/Exercises/workoutPlanTemplates';
 import { workoutPlanKeys } from './useWorkoutPlans';
 import { trainingProgramKeys } from '@/api/keys/exercises';
-import { workoutPlanAssignmentInputSchema } from '@workspace/shared';
+import {
+  displaySetRir,
+  setEffortField,
+  workoutPlanAssignmentInputSchema,
+} from '@workspace/shared';
 import type { WorkoutPlanDraft } from '@/types/workout';
 
 export function buildBulkSourcePrescription(
@@ -19,7 +23,26 @@ export function buildBulkSourcePrescription(
   }).sessions?.[0]?.assignments.find(
     (assignment) => assignment.id === assignmentId
   );
-  return workoutPlanAssignmentInputSchema.parse(serialized);
+  const prescription = workoutPlanAssignmentInputSchema.parse(serialized);
+  const source = session.assignments.find(
+    (assignment) => Number(assignment.id) === assignmentId
+  );
+  if (prescription.preset_snapshot) {
+    for (const exercise of prescription.preset_snapshot.exercises) {
+      if (setEffortField(exercise) === 'rir') {
+        exercise.sets = exercise.sets.map((set) => ({
+          ...set,
+          rir: displaySetRir(set),
+        }));
+      }
+    }
+  } else if (source && setEffortField(source) === 'rir') {
+    prescription.sets = prescription.sets?.map((set) => ({
+      ...set,
+      rir: displaySetRir(set),
+    }));
+  }
+  return prescription;
 }
 
 export function useWorkoutPlanBulk(

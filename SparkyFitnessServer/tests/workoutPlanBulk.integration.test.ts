@@ -599,8 +599,9 @@ describe.runIf(run)('persisted authenticated bulk prescription APIs', () => {
                 .map((p) => p.id)
             : [],
       }));
-      for (const field of ['rpe', 'rir'] as const) {
-        const value = field === 'rpe' ? 8.5 : 2.5;
+      for (const mode of ['rpe', 'rir', 'legacy'] as const) {
+        const field = mode === 'legacy' ? 'rir' : mode;
+        const value = field === 'rpe' ? 8.5 : mode === 'legacy' ? 2 : 2.5;
         const prescription = workoutPlanAssignmentInputSchema.parse({
           ...source.assignments[0]!,
           preset_snapshot: source.assignments[0]!.preset_snapshot ?? undefined,
@@ -610,6 +611,10 @@ describe.runIf(run)('persisted authenticated bulk prescription APIs', () => {
           : prescription.sets!;
         sourceSets.forEach((set) => {
           set[field] = set.set_number === 1 ? value : null;
+          if (mode === 'legacy' && set.set_number === 1) {
+            delete set.rir;
+            set.rpe = 8;
+          }
         });
         const body: WorkoutPlanBulkRequest = {
           plan_id: effortPlan.id,
