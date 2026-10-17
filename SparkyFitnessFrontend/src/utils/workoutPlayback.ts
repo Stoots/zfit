@@ -119,6 +119,7 @@ export type WorkoutSetEditableField =
   | 'rest_time'
   | 'set_type'
   | 'rpe'
+  | 'rir'
   | 'notes'
   | 'timer_started_at_ms';
 
@@ -854,6 +855,7 @@ export function addWorkoutSetToExercise(
     rest_time: lastSet?.rest_time ?? DEFAULT_REST_SECONDS,
     notes: lastSet?.notes ?? null,
     rpe: lastSet?.rpe ?? null,
+    rir: lastSet?.rir ?? null,
     completed: false,
     completed_at: null,
   };

@@ -1,3 +1,4 @@
+import { legacyRpePatch } from '@workspace/shared';
 import React, { useState, useEffect, type ChangeEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -150,7 +151,11 @@ const LogExerciseEntryDialog: React.FC<LogExerciseEntryDialogProps> = ({
       const currentSet = prev[index];
       if (!currentSet) return prev;
       const newSets = [...prev];
-      newSets[index] = { ...currentSet, [field]: value };
+      newSets[index] = {
+        ...currentSet,
+        ...legacyRpePatch(field),
+        [field]: value,
+      };
       return newSets;
     });
   };
@@ -355,15 +360,11 @@ const LogExerciseEntryDialog: React.FC<LogExerciseEntryDialogProps> = ({
                 collisionDetection={closestCenter}
                 onDragEnd={handleDragEnd}
               >
-                <SetColumnHeaders
-                  modality={toSetTableModality(modality)}
-                  showRir
-                />
+                <SetColumnHeaders modality={toSetTableModality(modality)} />
                 <SortableContext items={sets.map((set) => set._dndId)}>
                   <div className="space-y-0.5">
                     {sets.map((set, index) => (
                       <SortableSetItem
-                        showRir
                         key={set._dndId}
                         id={set._dndId}
                         set={set}

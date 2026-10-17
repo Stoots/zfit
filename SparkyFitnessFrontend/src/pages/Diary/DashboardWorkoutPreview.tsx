@@ -1,3 +1,4 @@
+import { displaySetRir } from '@workspace/shared';
 import { useState, type ReactElement } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/ui/button';
@@ -166,8 +167,13 @@ export default function DashboardWorkoutPreview({
                                       { count: set.rest_time }
                                     )
                                   : null,
-                                set.rpe != null ? `RPE ${set.rpe}` : null,
-                                set.rir != null ? `RIR ${set.rir}` : null,
+                                exercise.modality === 'duration_distance'
+                                  ? set.rpe != null
+                                    ? `RPE ${set.rpe}`
+                                    : null
+                                  : displaySetRir(set) != null
+                                    ? `RIR ${displaySetRir(set)}`
+                                    : null,
                                 set.notes,
                               ]
                                 .filter(

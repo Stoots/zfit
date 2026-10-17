@@ -243,7 +243,11 @@ const WorkoutPlaybackExercisesList = ({
                             })
                           : t('workout.durationSec', 'Duration (s)')}
                     </span>
-                    <span>{t('workout.rpe', 'RPE')}</span>
+                    <span>
+                      {exercise.modality === 'duration_distance'
+                        ? t('workout.rpe', 'RPE')
+                        : t('workout.rir', 'RIR')}
+                    </span>
                   </div>
 
                   {exercise.sets.map((set, setIndex) => {
@@ -263,6 +267,7 @@ const WorkoutPlaybackExercisesList = ({
                         weight={set.weight}
                         duration={set.duration}
                         rpe={set.rpe}
+                        rir={set.rir}
                         timerStartedAtMs={set.timer_started_at_ms ?? null}
                         restTime={set.rest_time}
                         notes={set.notes}

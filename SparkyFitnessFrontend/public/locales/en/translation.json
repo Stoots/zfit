@@ -7373,6 +7373,7 @@
     "restSec": "Rest (s)",
     "rpe": "RPE",
     "rpeSet": "RPE set {{setNumber}}",
+    "rirSet": "RIR set {{setNumber}}",
     "exerciseNotes": "Exercise notes",
     "exerciseNotesNamed": "Exercise notes for {{name}}",
     "rir": "RIR",

@@ -276,7 +276,7 @@ jobs:
       # behaviour as the app role (superuser DB user seeds, app role is enforced).
       - name: Verify RLS, Strava cleanup, OIDC providers, Better Auth schema, sign-in rate limits, provider sync claims, sleep entry and custom category uniqueness, concurrent check-ins and startup locking
         run: |
-          pnpm exec vitest run tests/rlsPermissionMatrix.integration.test.ts tests/stravaActivityDetailCleanup.integration.test.ts tests/betterAuthSchemaCheck.integration.test.ts tests/oidcProviderRepository.integration.test.ts tests/authRateLimitDatabase.integration.test.ts tests/providerSyncClaim.integration.test.ts tests/uniqueWrites.integration.test.ts tests/checkInConcurrentWrites.integration.test.ts tests/trainingPrograms.integration.test.ts tests/workoutPlanSessionUpgrade.integration.test.ts tests/cardioTestAttempts.integration.test.ts tests/exerciseNameMigration.integration.test.ts tests/exerciseNameCapitalisation.integration.test.ts tests/exercisePresetCascade.integration.test.ts --no-file-parallelism
+          pnpm exec vitest run tests/rlsPermissionMatrix.integration.test.ts tests/stravaActivityDetailCleanup.integration.test.ts tests/betterAuthSchemaCheck.integration.test.ts tests/oidcProviderRepository.integration.test.ts tests/authRateLimitDatabase.integration.test.ts tests/providerSyncClaim.integration.test.ts tests/uniqueWrites.integration.test.ts tests/checkInConcurrentWrites.integration.test.ts tests/trainingPrograms.integration.test.ts tests/workoutPlanSessionUpgrade.integration.test.ts tests/cardioTestAttempts.integration.test.ts tests/exerciseNameMigration.integration.test.ts tests/exerciseNameCapitalisation.integration.test.ts tests/exercisePresetCascade.integration.test.ts tests/strengthRirMigration.integration.test.ts --no-file-parallelism
           # Initialization reapplies policies, so run it after the other database tests.
           RUN_DATABASE_INITIALIZATION_TEST=1 pnpm exec vitest run tests/initializeDatabase.integration.test.ts
         env:
@@ -295,6 +295,7 @@ jobs:
           # Better Auth instance is built the same way on every run.
           SPARKY_FITNESS_FRONTEND_URL: http://localhost:3004
           SPARKY_FITNESS_RUN_NAME_MIGRATION_TEST: "1"
+          SPARKY_FITNESS_RUN_RIR_MIGRATION_TEST: "1"
 
   # Prove an existing deployment can upgrade cleanly: apply the base branch's
   # migrations to an empty database, then apply this PR's new migrations on top.

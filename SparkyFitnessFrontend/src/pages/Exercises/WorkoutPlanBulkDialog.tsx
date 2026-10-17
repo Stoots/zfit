@@ -1,3 +1,4 @@
+import { displaySetRir } from '@workspace/shared';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -86,6 +87,7 @@ function PrescriptionValues({
       exercise_id: assignment.exercise_id,
       exercise_name: assignment.exercise_name,
       sets: assignment.sets,
+      modality: assignment.modality,
     },
   ];
   const displayValue = (value: unknown) =>
@@ -125,9 +127,19 @@ function PrescriptionValues({
                       })}{' '}
                     </span>
                     {(fields.includes('sets')
-                      ? Object.entries(set)
+                      ? Object.entries(
+                          exercise.modality === 'duration_distance'
+                            ? set
+                            : { ...set, rir: displaySetRir(set) }
+                        )
                           .filter(
-                            ([key]) => key !== 'id' && key !== 'set_number'
+                            ([key]) =>
+                              key !== 'id' &&
+                              key !== 'set_number' &&
+                              key !==
+                                (exercise.modality === 'duration_distance'
+                                  ? 'rir'
+                                  : 'rpe')
                           )
                           .map(
                             ([key, value]) =>
@@ -137,7 +149,7 @@ function PrescriptionValues({
                           .filter((field) => setFields.includes(field))
                           .map(
                             (field) =>
-                              `${fieldNames[field]}: ${displayValue(set[field])}`
+                              `${fieldNames[field]}: ${displayValue(field === 'rir' ? displaySetRir(set) : set[field])}`
                           )
                     ).join('; ')}
                   </li>
@@ -424,7 +436,13 @@ export default function WorkoutPlanBulkDialog({
               </legend>
               <div className="grid gap-x-6 sm:grid-cols-2">
                 {[
-                  ...setFields,
+                  ...setFields.filter(
+                    (field) =>
+                      field !==
+                      (source.assignment.modality === 'duration_distance'
+                        ? 'rir'
+                        : 'rpe')
+                  ),
                   ...(source.assignment.preset_snapshot ? presetFields : []),
                 ].map((field) => (
                   <Label

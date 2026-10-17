@@ -1,3 +1,4 @@
+import { displaySetRir } from '@workspace/shared';
 import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import {
@@ -740,8 +741,11 @@ function matchesPerformedWorkout(
         const actual = logged.sets[setIndex];
         return (
           !!actual &&
-          fields.every(
-            (field) => (set[field] ?? null) === (actual[field] ?? null)
+          fields.every((field) =>
+            field === 'rir'
+              ? displaySetRir({ ...set, rir: set.rir ?? undefined }) ===
+                displaySetRir({ ...actual, rir: actual.rir ?? undefined })
+              : (set[field] ?? null) === (actual[field] ?? null)
           ) &&
           (!set.completed_at ||
             Date.parse(set.completed_at) ===

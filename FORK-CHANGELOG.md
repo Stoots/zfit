@@ -1,5 +1,7 @@
 # Fork changelog
 
+- Strength sets now use RIR throughout the web player, diary, presets and plan prescriptions. Existing strength RPE converts to RIR only when missing; explicit RIR and cardio ratings are preserved. App Store RPE writes remain compatible.
+
 Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded here instead.
 
 ### Unreleased

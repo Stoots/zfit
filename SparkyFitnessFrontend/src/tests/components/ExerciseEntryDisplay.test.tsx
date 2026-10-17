@@ -55,6 +55,37 @@ const renderCard = (entry: ExerciseEntry) =>
     />
   );
 
+it('shows only explicit RIR for strength sets, including failure at zero', () => {
+  renderCard(
+    makeEntry({
+      exercise_snapshot: {
+        id: 'ex-1',
+        name: 'Bench Press',
+        category: 'strength',
+        modality: 'weight_reps',
+      },
+      sets: [
+        {
+          id: 1,
+          set_number: 1,
+          set_type: 'Working Set',
+          reps: 8,
+          weight: 60,
+          duration: null,
+          rest_time: 90,
+          notes: null,
+          rpe: 8,
+          rir: 0,
+          completed_at: null,
+          is_pr: false,
+        },
+      ],
+    } as unknown as Partial<ExerciseEntry>)
+  );
+  expect(screen.getByText('1: 8 reps · 60 kg · RIR 0')).toBeInTheDocument();
+  expect(screen.queryByText(/RPE/)).not.toBeInTheDocument();
+});
+
 describe('ExerciseEntryDisplay cardio distance', () => {
   it('shows the entry distance in the stats row and the set distance in the chip', () => {
     renderCard(

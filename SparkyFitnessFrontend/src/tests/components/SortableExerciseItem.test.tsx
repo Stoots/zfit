@@ -108,7 +108,7 @@ describe('SortableExerciseItem cardio duration boundary', () => {
 
 describe('SortableExerciseItem set table columns', () => {
   it('shows reps and weight for a weight_reps exercise', () => {
-    renderItem(
+    const { onSetChange } = renderItem(
       createExercise({
         category: 'strength',
         modality: 'weight_reps',
@@ -116,6 +116,10 @@ describe('SortableExerciseItem set table columns', () => {
       })
     );
 
+    expect(screen.getByText('RIR')).toBeInTheDocument();
+    expect(screen.queryByText('RPE')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('RIR'), { target: { value: '0' } });
+    expect(onSetChange).toHaveBeenLastCalledWith(0, 0, 'rir', 0);
     expect(screen.getByText('Reps')).toBeInTheDocument();
     expect(screen.getByText('weight')).toBeInTheDocument();
     expect(screen.getByText('Duration (s)')).toBeInTheDocument();
@@ -146,7 +150,7 @@ describe('SortableExerciseItem set table columns', () => {
     expect(screen.queryByText('Reps')).not.toBeInTheDocument();
     expect(screen.queryByText('weight')).not.toBeInTheDocument();
     expect(screen.getByText('Duration (s)')).toBeInTheDocument();
-    // RPE, duration, rest — no reps or weight input in the row.
+    // RIR, duration, rest — no reps or weight input in the row.
     expect(container.querySelectorAll('input')).toHaveLength(3);
   });
 

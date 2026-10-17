@@ -1174,8 +1174,8 @@ describe('WorkoutPlaybackPage', () => {
     fireEvent.click(screen.getByLabelText('Toggle notes for set 1'));
     expect(screen.queryByLabelText('Set notes 1')).not.toBeInTheDocument();
     fireEvent.click(screen.getByLabelText('Toggle notes for set 1'));
-    fireEvent.change(screen.getByLabelText('RPE set 1'), {
-      target: { value: '8.5' },
+    fireEvent.change(screen.getByLabelText('RIR set 1'), {
+      target: { value: '1.5' },
     });
     fireEvent.change(screen.getByLabelText('Exercise notes for Bench Press'), {
       target: { value: 'Use a narrower grip next time.' },
@@ -1187,13 +1187,13 @@ describe('WorkoutPlaybackPage', () => {
 
     await waitFor(() => {
       const saved = loadWorkoutPlaybackDraftFromStorage('2026-04-27');
-      expect(saved?.exercises[0]?.sets[0]?.rpe).toBe(8.5);
+      expect(saved?.exercises[0]?.sets[0]?.rir).toBe(1.5);
     });
     view.unmount();
     mockLocationState = null;
     render(<WorkoutPlaybackPage />);
     fireEvent.click(screen.getByLabelText('Expand Bench Press'));
-    expect(screen.getByLabelText('RPE set 1')).toHaveValue(8.5);
+    expect(screen.getByLabelText('RIR set 1')).toHaveValue(1.5);
     expect(screen.getByLabelText('Exercise notes for Bench Press')).toHaveValue(
       'Use a narrower grip next time.'
     );
@@ -1204,7 +1204,37 @@ describe('WorkoutPlaybackPage', () => {
     const payload = buildPresetSessionCreateRequestFromDraft(saved, 'UTC');
     expect(payload.exercises?.[0]).toMatchObject({
       notes: 'Use a narrower grip next time.',
-      sets: [{ rpe: 8.5, notes: 'Controlled pause.' }],
+      sets: [{ rir: 1.5, notes: 'Controlled pause.' }],
+    });
+  });
+
+  it('converts legacy strength effort for display and can clear it', async () => {
+    const preset = {
+      ...presetFixture,
+      exercises: [
+        {
+          ...presetFixture.exercises[0],
+          sets: [{ set_number: 1, reps: 8, weight: 60, rpe: 8 }],
+        },
+      ],
+    } as unknown as WorkoutPreset;
+    mockLocationState = {
+      draft: createWorkoutPlaybackDraftFromPreset(preset, '2026-04-27'),
+    };
+    render(<WorkoutPlaybackPage />);
+    expect(screen.queryByLabelText('RPE set 1')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('RIR set 1')).toHaveValue(2);
+    fireEvent.change(screen.getByLabelText('RIR set 1'), {
+      target: { value: '' },
+    });
+    fireEvent.click(screen.getByLabelText('Complete set 1'));
+    await waitFor(() => {
+      const draft = loadWorkoutPlaybackDraftFromStorage('2026-04-27')!;
+      const payload = buildPresetSessionCreateRequestFromDraft(draft, 'UTC');
+      expect(payload.exercises?.[0]?.sets[0]).toMatchObject({
+        rir: null,
+        rpe: null,
+      });
     });
   });
 

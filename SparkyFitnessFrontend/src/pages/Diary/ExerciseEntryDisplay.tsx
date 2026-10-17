@@ -1,3 +1,4 @@
+import { displaySetRir } from '@workspace/shared';
 import type React from 'react';
 import {
   Tooltip,
@@ -306,8 +307,12 @@ const ExerciseEntryDisplay: React.FC<ExerciseEntryDisplayProps> = ({
                 );
               if (set.distance != null)
                 parts.push(formatSetDistance(set.distance));
-              if (Number.isFinite(set.rpe)) parts.push(`RPE ${set.rpe}`);
-              if (Number.isFinite(set.rir)) parts.push(`RIR ${set.rir}`);
+              if (entryModality === 'duration_distance') {
+                if (Number.isFinite(set.rpe)) parts.push(`RPE ${set.rpe}`);
+              } else {
+                const rir = displaySetRir(set);
+                if (rir != null) parts.push(`RIR ${rir}`);
+              }
               if (parts.length === 0) return null;
               return (
                 <span

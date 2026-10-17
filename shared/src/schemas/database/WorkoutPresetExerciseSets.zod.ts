@@ -7,7 +7,7 @@ export const workoutPresetExerciseSetsIdSchema = z.number().and(
   }),
 );
 
-const workoutPresetExercisesIdSchema = z.any();
+const workoutPresetExercisesIdSchema = z.number();
 
 export const workoutPresetExerciseSetsSchema = z.object({
   id: workoutPresetExerciseSetsIdSchema,
@@ -22,6 +22,7 @@ export const workoutPresetExerciseSetsSchema = z.object({
   distance: z.number().nullable(),
   rest_time: z.number().nullable(),
   notes: z.string().nullable(),
+  rir: z.number().min(0).max(10).nullable().optional(),
   created_at: z.date().nullable(),
   updated_at: z.date().nullable(),
 });
@@ -39,6 +40,7 @@ export const workoutPresetExerciseSetsInitializerSchema = z.object({
   distance: z.number().optional().nullable(),
   rest_time: z.number().optional().nullable(),
   notes: z.string().optional().nullable(),
+  rir: z.number().min(0).max(10).optional().nullable(),
   created_at: z.date().optional().nullable(),
   updated_at: z.date().optional().nullable(),
 });
@@ -56,6 +58,7 @@ export const workoutPresetExerciseSetsMutatorSchema = z.object({
   distance: z.number().optional().nullable(),
   rest_time: z.number().optional().nullable(),
   notes: z.string().optional().nullable(),
+  rir: z.number().min(0).max(10).optional().nullable(),
   created_at: z.date().optional().nullable(),
   updated_at: z.date().optional().nullable(),
 });

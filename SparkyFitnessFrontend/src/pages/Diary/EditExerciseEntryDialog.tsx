@@ -1,3 +1,4 @@
+import { legacyRpePatch } from '@workspace/shared';
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQueryClient } from '@tanstack/react-query';
@@ -623,7 +624,15 @@ const EditExerciseEntryDialog = ({
     value: string | number | undefined
   ) => {
     setSets((prev) =>
-      prev.map((set, i) => (i !== setIndex ? set : { ...set, [field]: value }))
+      prev.map((set, i) =>
+        i !== setIndex
+          ? set
+          : {
+              ...set,
+              ...legacyRpePatch(field),
+              [field]: value,
+            }
+      )
     );
     triggerCalorieWarning();
   };
@@ -955,15 +964,11 @@ const EditExerciseEntryDialog = ({
                 collisionDetection={closestCenter}
                 onDragEnd={handleDragEnd}
               >
-                <SetColumnHeaders
-                  modality={toSetTableModality(modality)}
-                  showRir
-                />
+                <SetColumnHeaders modality={toSetTableModality(modality)} />
                 <SortableContext items={sets.map((set) => set._dndId)}>
                   <div className="space-y-0.5">
                     {sets.map((set, setIndex) => (
                       <SortableSetItem
-                        showRir
                         id={set._dndId}
                         key={set._dndId}
                         set={set}

@@ -102,6 +102,8 @@ access to Programs or workout history. The resulting plan keeps normal library
 sharing rules; the private Program calendar was not copied to its dates.
 Deleting a plan retained by the journal remains refused by its foreign key.
 
+Strength-set RIR (reps in reserve) follows the same sharing permissions as the surrounding diary entry, preset or Workout Plan prescription. Cardio effort ratings remain RPE.
+
 ### 5. Automatic Token Validation & Expiry
 
 If you set an **Access End Date** for a connection, the database automatically revokes all database read/write access the moment that timestamp passes. No manual action is needed.

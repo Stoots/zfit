@@ -17,6 +17,7 @@ import { useTranslation } from 'react-i18next';
 import { cn } from '@/lib/utils';
 import { excerciseWorkoutSetTypes } from '@/constants/excerciseWorkoutSetTypes';
 import {
+  displaySetRir,
   RIR_MAX,
   RIR_MIN,
   carryDistanceFromKm,
@@ -45,8 +46,6 @@ interface SortableSetItemProps {
   onRemoveSet: (exerciseIndex: number, setIndex: number) => void;
   weightUnit: string;
   modality: SetTableModality;
-  /** Diary entries record RIR; presets don't, so they leave this off. */
-  showRir?: boolean;
 }
 
 export const SortableSetItem = React.memo(
@@ -60,7 +59,6 @@ export const SortableSetItem = React.memo(
     onRemoveSet,
     weightUnit,
     modality,
-    showRir = false,
   }: SortableSetItemProps) => {
     const { t } = useTranslation();
     const { distanceUnit } = usePreferences();
@@ -80,7 +78,7 @@ export const SortableSetItem = React.memo(
       SET_TYPE_STYLES[set.set_type ?? ''] ?? 'bg-muted text-muted-foreground';
     const layout = SET_TABLE_LAYOUT[modality];
     const { showReps, showWeight, showDistance, signedWeight } = layout;
-    const gridClass = showRir ? layout.gridClassWithRir : layout.gridClass;
+    const gridClass = layout.gridClass;
     // Isometric sets predating the duration column stored their hold in `reps`.
     const durationValue =
       set.duration ?? (modality === 'duration' ? (set.reps ?? null) : null);
@@ -194,26 +192,7 @@ export const SortableSetItem = React.memo(
               />
             )}
 
-            {/* RPE */}
-            <Input
-              className="h-8 text-sm"
-              type="number"
-              min="0"
-              max="10"
-              step="0.5"
-              placeholder="—"
-              value={set.rpe ?? ''}
-              onChange={(e) =>
-                onSetChange(
-                  exerciseIndex,
-                  setIndex,
-                  'rpe',
-                  e.target.value === '' ? null : Number(e.target.value)
-                )
-              }
-            />
-
-            {showRir && (
+            {
               <Input
                 className="h-8 text-sm"
                 type="number"
@@ -222,7 +201,7 @@ export const SortableSetItem = React.memo(
                 step="0.5"
                 placeholder="—"
                 aria-label={t('workout.rir', 'RIR')}
-                value={set.rir ?? ''}
+                value={displaySetRir(set) ?? ''}
                 onChange={(e) =>
                   onSetChange(
                     exerciseIndex,
@@ -237,7 +216,7 @@ export const SortableSetItem = React.memo(
                   )
                 }
               />
-            )}
+            }
 
             {/* Duration */}
             <NumericInput
