@@ -686,13 +686,15 @@ it('renders cumulative repeated misses beside unchanged completion history after
 });
 
 it.each([
-  { type: 'preset', omitted: false },
-  { type: 'individual', omitted: false },
-  { type: 'preset', omitted: true },
-  { type: 'individual', omitted: true },
+  { type: 'preset', omitted: false, blankSet: false },
+  { type: 'individual', omitted: false, blankSet: false },
+  { type: 'preset', omitted: true, blankSet: false },
+  { type: 'individual', omitted: true, blankSet: false },
+  { type: 'individual', omitted: false, blankSet: true },
+  { type: 'individual', omitted: true, blankSet: true },
 ] as const)(
-  'links a $type diary workout after omission=$omitted without changing required dates',
-  async ({ type, omitted }) => {
+  'links a $type diary workout after omission=$omitted with blankSet=$blankSet without changing required dates',
+  async ({ type, omitted, blankSet }) => {
     stored = scheduleFixture();
     if (omitted) {
       const session = stored.phases[0]!.weeks[0]!.sessions[0]!;
@@ -758,7 +760,24 @@ it.each([
             distance: null,
             avg_heart_rate: null,
             source: 'manual',
-            sets: [],
+            sets: blankSet
+              ? [
+                  {
+                    id: 1,
+                    set_number: 1,
+                    set_type: null,
+                    reps: null,
+                    weight: null,
+                    duration: null,
+                    distance: null,
+                    rest_time: null,
+                    notes: null,
+                    rpe: null,
+                    completed_at: null,
+                    is_pr: false,
+                  },
+                ]
+              : [],
             exercise_snapshot: null,
             activity_details: [],
             superset_group: null,

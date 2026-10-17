@@ -28,7 +28,6 @@ export function canLinkDiaryWorkout(
       ) ||
       (workout.type === "individual" &&
         !exercise.is_weekly_prefill &&
-        exercise.sets.length === 0 &&
         exercise.duration_minutes > 0),
   );
 }

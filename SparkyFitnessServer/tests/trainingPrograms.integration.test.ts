@@ -967,6 +967,7 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
 
   it.each([
     'partial individual',
+    'duration with blank set',
     'logged prefill',
     'timed set',
     'distance set',
@@ -975,8 +976,8 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
     const db = await getSystemClient();
     try {
       await db.query(
-        'UPDATE exercise_entries SET duration_minutes = 0 WHERE id = $1',
-        [workout.id]
+        'UPDATE exercise_entries SET duration_minutes = $2 WHERE id = $1',
+        [workout.id, kind === 'duration with blank set' ? 30 : 0]
       );
       await db.query(
         `INSERT INTO exercise_entry_sets(exercise_entry_id,set_number,reps,duration,distance,completed_at)

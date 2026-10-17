@@ -6,7 +6,7 @@ Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded her
 
 #### Bug fixes
 
-- Prevent empty or untouched weekly-prefill diary workouts from completing a Program session through linking; keep partial workouts and duration-only individual entries linkable (#77).
+- Prevent empty or untouched weekly-prefill diary workouts from completing a Program session through linking; keep partial workouts and duration-only individual entries linkable, including historical entries with blank backing sets (#77).
 
 - Remove untouched future weekly-prefill workouts outside a changed weekday or date window, preserving retained workout identities and edited history.
 
