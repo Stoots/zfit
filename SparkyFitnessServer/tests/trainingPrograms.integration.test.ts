@@ -226,6 +226,394 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
     expect(response.status).toBe(201);
     return workoutPlanResponseSchema.parse(response.body);
   }
+  it('App Store list/detail reads project flat assignments from canonical sessions', async () => {
+    const exerciseId = await seedExercise();
+    const plan = await createPlan({
+      plan_name: 'App Store read',
+      schedule_type: 'sequential',
+      sessions: [
+        {
+          name: 'Optional strength',
+          sort_order: 0,
+          day_of_week: null,
+          is_optional: true,
+          assignments: [
+            { exercise_id: exerciseId, sort_order: 0, sets: prescribedSets(1) },
+          ],
+        },
+      ],
+    });
+    const detail = await reloadPlan(plan.id);
+    const list = await request(app)
+      .get('/api/workout-plan-templates')
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(list.status).toBe(200);
+    for (const read of [
+      detail,
+      list.body.find((item: { id: number }) => item.id === plan.id),
+    ]) {
+      expect(read.assignments).toEqual([
+        expect.objectContaining({
+          id: plan.sessions[0]!.assignments[0]!.id,
+          template_id: plan.id,
+          workout_session_id: plan.sessions[0]!.id,
+          day_of_week: null,
+          session_index: 1,
+          session_name: 'Optional strength',
+        }),
+      ]);
+      expect(read.sessions[0].is_optional).toBe(true);
+    }
+  });
+  it('App Store flat create captures a preset prescription without a client snapshot', async () => {
+    const exerciseId = await seedExercise();
+    const db: PoolClient = await getSystemClient();
+    let presetId: number;
+    try {
+      presetId = (
+        await db.query<{ id: number }>(
+          "INSERT INTO workout_presets(user_id,name,workout_format) VALUES ($1,'Legacy preset','standard') RETURNING id",
+          [owner]
+        )
+      ).rows[0]!.id;
+      const exercise = (
+        await db.query<{ id: number }>(
+          'INSERT INTO workout_preset_exercises(workout_preset_id,exercise_id) VALUES ($1,$2) RETURNING id',
+          [presetId, exerciseId]
+        )
+      ).rows[0]!.id;
+      await db.query(
+        'INSERT INTO workout_preset_exercise_sets(workout_preset_exercise_id,set_number,reps,weight) VALUES ($1,1,8,40)',
+        [exercise]
+      );
+    } finally {
+      db.release();
+    }
+    // Unchanged upstream SaveWorkoutPlanPayload: numeric IDs travel as strings.
+    const payload = {
+      plan_name: 'App Store authored',
+      description: '',
+      start_date: '2028-06-01',
+      end_date: null,
+      is_active: false,
+      schedule_type: 'sequential',
+      entry_mode: 'prompt',
+      currentClientDate: '2028-06-01',
+      assignments: [
+        {
+          workout_preset_id: String(presetId),
+          day_of_week: null,
+          session_index: 1,
+          session_name: 'Strength A',
+          sort_order: 0,
+          sets: [],
+        },
+      ],
+    };
+    const response = await request(app)
+      .post('/api/workout-plan-templates')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send(payload);
+    expect(response.status).toBe(201);
+    const saved = await reloadPlan(response.body.id);
+    expect(saved.sessions).toEqual([
+      expect.objectContaining({
+        name: 'Strength A',
+        assignments: [
+          expect.objectContaining({
+            workout_preset_id: presetId,
+            preset_snapshot: expect.objectContaining({
+              name: 'Legacy preset',
+              exercises: [
+                expect.objectContaining({
+                  exercise_id: exerciseId,
+                  sets: [expect.objectContaining({ reps: 8, weight: 40 })],
+                }),
+              ],
+            }),
+          }),
+        ],
+      }),
+    ]);
+    const canonical = planInput(saved);
+    canonical.sessions[0]!.is_optional = true;
+    expect(
+      (
+        await request(app)
+          .put(`/api/workout-plan-templates/${saved.id}`)
+          .set('Authorization', `Bearer ${ownerToken}`)
+          .send(canonical)
+      ).status
+    ).toBe(200);
+    const library = await getSystemClient();
+    try {
+      await library.query(
+        "UPDATE workout_presets SET name = 'Changed live preset' WHERE id = $1",
+        [presetId]
+      );
+      await library.query(
+        'UPDATE workout_preset_exercise_sets SET reps = 20 WHERE workout_preset_exercise_id IN (SELECT id FROM workout_preset_exercises WHERE workout_preset_id = $1)',
+        [presetId]
+      );
+    } finally {
+      library.release();
+    }
+    const edit = {
+      ...payload,
+      plan_name: 'Renamed from App Store',
+      assignments: [
+        {
+          ...payload.assignments[0]!,
+          id: String(saved.sessions[0]!.assignments[0]!.id),
+        },
+      ],
+    };
+    for (let attempt = 0; attempt < 2; attempt++) {
+      expect(
+        (
+          await request(app)
+            .put(`/api/workout-plan-templates/${saved.id}`)
+            .set('Authorization', `Bearer ${ownerToken}`)
+            .send(edit)
+        ).status
+      ).toBe(200);
+      const reread = await reloadPlan(saved.id);
+      expect(reread.sessions[0]!.id).toBe(saved.sessions[0]!.id);
+      expect(reread.sessions[0]!.is_optional).toBe(true);
+      expect(reread.sessions[0]!.assignments).toEqual(
+        saved.sessions[0]!.assignments
+      );
+    }
+  });
+  it('App Store flat update retains exact identities when removing an unlinked session', async () => {
+    const exerciseId = await seedExercise();
+    const snapshot = {
+      id: 123,
+      name: 'Frozen',
+      description: null,
+      workout_format: 'standard' as const,
+      exercises: [],
+    };
+    const plan = await createPlan({
+      plan_name: 'Flat update',
+      schedule_type: 'sequential',
+      sessions: [
+        {
+          name: 'Optional',
+          sort_order: 0,
+          day_of_week: null,
+          is_optional: true,
+          assignments: [{ preset_snapshot: snapshot, sort_order: 0 }],
+        },
+        {
+          name: 'Strength',
+          sort_order: 1,
+          day_of_week: null,
+          assignments: [
+            {
+              exercise_id: exerciseId,
+              sort_order: 0,
+              sets: prescribedSets(1).map((set) => ({ ...set, rpe: 7 })),
+            },
+          ],
+        },
+      ],
+    });
+    const assignment = plan.sessions[1]!.assignments[0]!;
+    expect(assignment.sets[0]!.rpe).toBe(7);
+    const payload = {
+      plan_name: 'Flat saved',
+      description: '',
+      start_date: '2028-06-01',
+      end_date: null,
+      is_active: false,
+      schedule_type: 'sequential',
+      entry_mode: 'prompt',
+      currentClientDate: '2028-06-01',
+      assignments: [
+        {
+          id: String(assignment.id),
+          exercise_id: exerciseId,
+          day_of_week: null,
+          session_index: 2,
+          session_name: 'Strength',
+          sort_order: 0,
+          sets: prescribedSets(1).map((set) => ({ ...set, reps: 10 })),
+        },
+      ],
+    };
+    // This unlinked detached assignment can be explicitly removed, retaining the other exact session.
+    const response = await request(app)
+      .put(`/api/workout-plan-templates/${plan.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send(payload);
+    expect(response.status).toBe(200);
+    const saved = await reloadPlan(plan.id);
+    expect(saved.sessions).toHaveLength(1);
+    expect(saved.sessions[0]!.id).toBe(plan.sessions[1]!.id);
+    expect(saved.sessions[0]!.assignments[0]!.id).toBe(assignment.id);
+    expect(saved.sessions[0]!.assignments[0]!.sets[0]!.reps).toBe(10);
+    expect(saved.sessions[0]!.assignments[0]!.sets[0]!.rpe).toBe(7);
+  });
+  it('App Store flat authoring rejects ambiguous weekdays and protected history atomically', async () => {
+    const exerciseId = await seedExercise();
+    const plan = await createPlan({
+      plan_name: 'Two Monday sessions',
+      schedule_type: 'weekly',
+      sessions: [
+        {
+          name: 'Morning',
+          day_of_week: 1,
+          sort_order: 0,
+          assignments: [
+            { exercise_id: exerciseId, sort_order: 0, sets: prescribedSets(1) },
+          ],
+        },
+        {
+          name: 'Evening',
+          day_of_week: 1,
+          sort_order: 1,
+          is_optional: true,
+          assignments: [
+            { exercise_id: exerciseId, sort_order: 0, sets: prescribedSets(1) },
+          ],
+        },
+      ],
+    });
+    const flat = {
+      plan_name: 'Must not save',
+      schedule_type: 'weekly',
+      assignments: plan.sessions.flatMap((session) =>
+        session.assignments.map((assignment) => ({
+          id: String(assignment.id),
+          exercise_id: exerciseId,
+          day_of_week: 1,
+          session_index: null,
+          session_name: null,
+          sort_order: 0,
+          sets: prescribedSets(1),
+        }))
+      ),
+    };
+    const rejected = await request(app)
+      .put(`/api/workout-plan-templates/${plan.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send(flat);
+    expect(rejected.status).toBe(409);
+    expect(rejected.body.error).toMatch(/weekday/i);
+    expect((await reloadPlan(plan.id)).sessions).toEqual(plan.sessions);
+    expect((await reloadPlan(plan.id)).plan_name).toBe('Two Monday sessions');
+
+    const protectedPlan = await createPlan({
+      plan_name: 'Logged plan',
+      schedule_type: 'sequential',
+      sessions: [
+        {
+          name: 'Strength',
+          day_of_week: null,
+          sort_order: 0,
+          is_optional: true,
+          assignments: [
+            { exercise_id: exerciseId, sort_order: 0, sets: prescribedSets(1) },
+          ],
+        },
+      ],
+    });
+    expect(
+      (await startSession(protectedPlan.sessions[0]!.id, '2028-06-01')).status
+    ).toBe(201);
+    const before = await reloadPlan(protectedPlan.id);
+    const removed = await request(app)
+      .put(`/api/workout-plan-templates/${protectedPlan.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ plan_name: 'Must not save', assignments: [] });
+    expect(removed.status).toBe(409);
+    expect(await reloadPlan(protectedPlan.id)).toEqual(before);
+  });
+  it('App Store weekly authoring groups assignments and preserves optionality on repeat saves', async () => {
+    const exerciseId = await seedExercise();
+    const payload = {
+      plan_name: 'Weekly from App Store',
+      description: '',
+      start_date: '2028-06-01',
+      end_date: null,
+      is_active: false,
+      schedule_type: 'weekly',
+      entry_mode: 'prompt',
+      assignments: [0, 1].map((sort_order) => ({
+        exercise_id: exerciseId,
+        day_of_week: 1,
+        session_index: null,
+        session_name: null,
+        sort_order,
+        sets: prescribedSets(1),
+      })),
+    };
+    const created = await request(app)
+      .post('/api/workout-plan-templates')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send(payload);
+    expect(created.status).toBe(201);
+    const saved = await reloadPlan(created.body.id);
+    expect(saved.sessions).toHaveLength(1);
+    expect(saved.sessions[0]!.assignments).toHaveLength(2);
+    const canonical = planInput(saved);
+    canonical.sessions[0]!.is_optional = true;
+    expect(
+      (
+        await request(app)
+          .put(`/api/workout-plan-templates/${saved.id}`)
+          .set('Authorization', `Bearer ${ownerToken}`)
+          .send(canonical)
+      ).status
+    ).toBe(200);
+    const flat = {
+      ...payload,
+      assignments: payload.assignments.map((assignment, index) => ({
+        ...assignment,
+        id: String(saved.sessions[0]!.assignments[index]!.id),
+      })),
+    };
+    expect(
+      (
+        await request(app)
+          .put(`/api/workout-plan-templates/${saved.id}`)
+          .set('Authorization', `Bearer ${ownerToken}`)
+          .send(flat)
+      ).status
+    ).toBe(200);
+    const reread = await reloadPlan(saved.id);
+    expect(reread.sessions[0]!.id).toBe(saved.sessions[0]!.id);
+    expect(reread.sessions[0]!.is_optional).toBe(true);
+    expect(reread.sessions[0]!.assignments).toEqual(
+      saved.sessions[0]!.assignments
+    );
+    for (const invalid of [
+      { ...flat, sessions: [] },
+      { ...flat, assignments: [flat.assignments[0], flat.assignments[0]] },
+      {
+        ...flat,
+        assignments: [
+          {
+            ...flat.assignments[0],
+            sets: [prescribedSets(1)[0], prescribedSets(1)[0]],
+          },
+        ],
+      },
+      { ...flat, assignments: [{ ...flat.assignments[0], id: '999999999' }] },
+      { ...flat, assignments: [{ ...flat.assignments[0], day_of_week: 7 }] },
+    ]) {
+      expect(
+        (
+          await request(app)
+            .put(`/api/workout-plan-templates/${saved.id}`)
+            .set('Authorization', `Bearer ${ownerToken}`)
+            .send(invalid)
+        ).status
+      ).toBe(400);
+      expect(await reloadPlan(saved.id)).toEqual(reread);
+    }
+  });
   async function reloadPlan(id: number) {
     const response = await request(app)
       .get(`/api/workout-plan-templates/${id}`)

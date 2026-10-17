@@ -1,3 +1,10 @@
+import {
+  compatiblePlanCreateSchema,
+  compatiblePlanUpdateSchema,
+  type CompatiblePlanCreate,
+  type CompatiblePlanUpdate,
+} from '../schemas/workoutPlanCompatibility.js';
+import { legacyPlanSessions } from './workoutPlanCompatibility.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import type { PoolClient } from 'pg';
@@ -24,8 +31,6 @@ import {
   type WorkoutPlanAssignmentResponse,
   type WorkoutPlanSessionInput,
   type WorkoutPlanSessionResponse,
-  type WorkoutPlanCreateRequest,
-  type WorkoutPlanUpdateRequest,
   type WorkoutPlanResponse,
   type WorkoutPlanPresetSnapshot,
 } from '@workspace/shared';
@@ -38,10 +43,10 @@ export type {
   WorkoutPlanAssignmentSetInput,
   WorkoutPlanSessionInput,
 };
-export type WorkoutPlanTemplateCreateInput = WorkoutPlanCreateRequest & {
+export type WorkoutPlanTemplateCreateInput = CompatiblePlanCreate & {
   user_id: string;
 };
-export type WorkoutPlanTemplateUpdateInput = WorkoutPlanUpdateRequest;
+export type WorkoutPlanTemplateUpdateInput = CompatiblePlanUpdate;
 export type WorkoutPlanAssignmentRow = WorkoutPlanAssignmentResponse;
 export type WorkoutPlanSessionRow = WorkoutPlanSessionResponse;
 export type WorkoutPlanTemplateRow = Omit<
@@ -410,11 +415,21 @@ async function createWorkoutPlanTemplate(
   prefillDate?: string
 ): Promise<WorkoutPlanTemplateRow> {
   const { user_id: userId, ...body } = planData;
-  const input = workoutPlanCreateRequestSchema.parse(body);
+  const parsed = compatiblePlanCreateSchema.parse(body);
   const client: PoolClient = await getClient(userId);
   try {
     await client.query('BEGIN');
-    const scheduleType = input.schedule_type ?? 'sequential';
+    const scheduleType = parsed.schedule_type ?? 'sequential';
+    let input: ReturnType<typeof workoutPlanCreateRequestSchema.parse>;
+    if ('assignments' in parsed) {
+      const { assignments, ...fields } = parsed;
+      input = workoutPlanCreateRequestSchema.parse({
+        ...fields,
+        sessions: await legacyPlanSessions(client, assignments, scheduleType),
+      });
+    } else {
+      input = workoutPlanCreateRequestSchema.parse(parsed);
+    }
     const inserted = await client.query<{ id: number }>(
       `INSERT INTO workout_plan_templates
       (user_id, plan_name, description, start_date, end_date, is_active, schedule_type, entry_mode)
@@ -668,7 +683,7 @@ async function updateWorkoutPlanTemplate(
   updateData: WorkoutPlanTemplateUpdateInput,
   clientDate?: string | null
 ): Promise<WorkoutPlanTemplateRow> {
-  const input = workoutPlanUpdateRequestSchema.parse(updateData);
+  const parsed = compatiblePlanUpdateSchema.parse(updateData);
   const client: PoolClient = await getClient(userId);
   try {
     await client.query('BEGIN');
@@ -700,7 +715,26 @@ async function updateWorkoutPlanTemplate(
         userId,
       ])
     )[0]!;
-    const scheduleType = input.schedule_type ?? previous.schedule_type;
+    const scheduleType = parsed.schedule_type ?? previous.schedule_type;
+    let input: ReturnType<typeof workoutPlanUpdateRequestSchema.parse>;
+    if ('assignments' in parsed) {
+      if (scheduleType !== previous.schedule_type)
+        conflict(
+          'Changing schedule type through the App Store editor is ambiguous. Edit this plan on the web.'
+        );
+      const { assignments, ...fields } = parsed;
+      input = workoutPlanUpdateRequestSchema.parse({
+        ...fields,
+        sessions: await legacyPlanSessions(
+          client,
+          assignments,
+          scheduleType,
+          previous.sessions
+        ),
+      });
+    } else {
+      input = workoutPlanUpdateRequestSchema.parse(parsed);
+    }
     if (scheduleType !== previous.schedule_type && input.sessions === undefined)
       invalid('Changing schedule_type requires providing sessions.');
     if (
