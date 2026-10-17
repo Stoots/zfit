@@ -8,10 +8,12 @@ import {
   type ExerciseEntryResponse,
   type ExerciseEntrySetResponse,
   type ExerciseHistoryResponse,
+  type ExerciseHistoryQuery,
   type ExerciseModality,
   type ExerciseSessionResponse,
 } from '@workspace/shared';
 
+import type { PoolClient } from 'pg';
 import { getClient } from '../db/poolManager.js';
 import { log } from '../config/logging.js';
 import { EXERCISE_ENTRY_TELEMETRY_COLUMNS } from '../models/exerciseEntry.js';
@@ -189,61 +191,87 @@ function _buildExerciseEntryWithSnapshot(
   } satisfies ExerciseEntryResponse;
 }
 
-/** Count the total number of "sessions" (preset entries + standalone exercise entries). */
+type HistoryFilters = Pick<ExerciseHistoryQuery, 'before' | 'performed_only'>;
+
+// canLinkDiaryWorkout's individual-entry rule, with sets required for a set reference.
+const historySessionsSql = `WITH matching_entries AS NOT MATERIALIZED (
+  SELECT ee.* FROM exercise_entries ee
+  WHERE ee.user_id = $1
+    AND ($2::uuid IS NULL OR ee.exercise_id = $2)
+    AND ($3::date IS NULL OR ee.entry_date < $3)
+    AND (NOT $4::boolean OR (
+      EXISTS (SELECT 1 FROM exercise_entry_sets present WHERE present.exercise_entry_id = ee.id)
+      AND (
+        EXISTS (
+          SELECT 1 FROM exercise_entry_sets work WHERE work.exercise_entry_id = ee.id
+          AND (work.completed_at IS NOT NULL OR (
+            NOT COALESCE(ee.is_weekly_prefill, false)
+            AND ee.source IS DISTINCT FROM 'Workout Plan'
+            AND (work.reps > 0 OR work.duration > 0 OR work.distance > 0)
+          ))
+        ) OR (
+          NOT COALESCE(ee.is_weekly_prefill, false)
+          AND ee.source IS DISTINCT FROM 'Workout Plan' AND ee.duration_minutes > 0
+        )
+      )
+    ))
+), sessions AS (
+  SELECT epe.id, epe.entry_date,
+    CASE WHEN $4::boolean THEN (SELECT MAX(ce.created_at) FROM matching_entries ce
+      WHERE ce.exercise_preset_entry_id = epe.id) ELSE epe.created_at END AS created_at,
+    'preset' AS session_type
+  FROM exercise_preset_entries epe
+  WHERE epe.user_id = $1
+    AND ($3::date IS NULL OR epe.entry_date < $3)
+    AND (($2::uuid IS NULL AND NOT $4::boolean) OR EXISTS (
+      SELECT 1 FROM matching_entries ce WHERE ce.exercise_preset_entry_id = epe.id
+    ))
+  UNION ALL
+  SELECT id, entry_date, created_at, 'individual' AS session_type
+  FROM matching_entries WHERE exercise_preset_entry_id IS NULL
+)`;
+
+/** Count and pagination use exactly the same eligible sessions. */
 async function countExerciseEntrySessions(
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
-  client: { query: Function },
+  client: PoolClient,
   userId: string,
-  exerciseId: string | null
+  exerciseId: string | null,
+  filters: HistoryFilters
 ): Promise<number> {
-  const result = await client.query(
-    `WITH sessions AS (
-       SELECT epe.id FROM exercise_preset_entries epe
-       WHERE epe.user_id = $1
-         AND ($2::uuid IS NULL OR EXISTS (
-           SELECT 1 FROM exercise_entries ce
-           WHERE ce.exercise_preset_entry_id = epe.id AND ce.exercise_id = $2
-         ))
-       UNION ALL
-       SELECT id FROM exercise_entries
-       WHERE user_id = $1 AND exercise_preset_entry_id IS NULL
-         AND ($2::uuid IS NULL OR exercise_id = $2)
-     )
-     SELECT COUNT(*)::int AS count FROM sessions`,
-    [userId, exerciseId]
+  const result = await client.query<{ count: number }>(
+    `${historySessionsSql} SELECT COUNT(*)::int AS count FROM sessions`,
+    [
+      userId,
+      exerciseId,
+      filters.before ?? null,
+      filters.performed_only ?? false,
+    ]
   );
-  return result.rows[0].count;
+  return result.rows[0]!.count;
 }
 
 /** Fetch paginated session stubs and their full details. */
 async function getExerciseEntryHistorySessions(
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
-  client: { query: Function },
+  client: PoolClient,
   userId: string,
   limit: number,
   offset: number,
-  exerciseId: string | null
+  exerciseId: string | null,
+  filters: HistoryFilters
 ): Promise<ExerciseSessionResponse[]> {
-  // Phase 1: Get paginated session stubs
   const stubsResult = await client.query(
-    `WITH sessions AS (
-       SELECT epe.id, epe.entry_date, epe.created_at, 'preset' AS session_type
-       FROM exercise_preset_entries epe
-       WHERE epe.user_id = $1
-         AND ($4::uuid IS NULL OR EXISTS (
-           SELECT 1 FROM exercise_entries ce
-           WHERE ce.exercise_preset_entry_id = epe.id AND ce.exercise_id = $4
-         ))
-       UNION ALL
-       SELECT id, entry_date, created_at, 'individual' AS session_type
-       FROM exercise_entries
-       WHERE user_id = $1 AND exercise_preset_entry_id IS NULL
-         AND ($4::uuid IS NULL OR exercise_id = $4)
-     )
+    `${historySessionsSql}
      SELECT id, entry_date, created_at, session_type
-     FROM sessions ORDER BY entry_date DESC, created_at DESC
-     LIMIT $2 OFFSET $3`,
-    [userId, limit, offset, exerciseId]
+     FROM sessions ORDER BY entry_date DESC, created_at DESC, id DESC
+     LIMIT $5 OFFSET $6`,
+    [
+      userId,
+      exerciseId,
+      filters.before ?? null,
+      filters.performed_only ?? false,
+      limit,
+      offset,
+    ]
   );
   const stubs = stubsResult.rows as Array<{
     id: string;
@@ -471,7 +499,8 @@ export async function getExerciseEntryHistory(
   targetUserId: string,
   page: number,
   pageSize: number,
-  exerciseId: string | null = null
+  exerciseId: string | null = null,
+  filters: HistoryFilters = {}
 ): Promise<ExerciseHistoryResponse> {
   const offset = (page - 1) * pageSize;
   const client = await getClient(targetUserId);
@@ -482,9 +511,10 @@ export async function getExerciseEntryHistory(
         targetUserId,
         pageSize,
         offset,
-        exerciseId
+        exerciseId,
+        filters
       ),
-      countExerciseEntrySessions(client, targetUserId, exerciseId),
+      countExerciseEntrySessions(client, targetUserId, exerciseId, filters),
     ]);
 
     return {

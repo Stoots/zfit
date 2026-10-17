@@ -72,7 +72,7 @@ function makeClient(
     query: vi.fn((sql: string) => {
       if (sql.includes('SELECT COUNT'))
         return Promise.resolve({ rows: [{ count: 1 }] });
-      if (sql.includes('WITH sessions')) {
+      if (sql.includes('WITH matching_entries')) {
         return Promise.resolve({
           rows: [
             {

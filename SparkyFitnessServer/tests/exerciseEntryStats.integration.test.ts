@@ -21,7 +21,10 @@
  */
 import pg from 'pg';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { exerciseHistoryResponseSchema } from '@workspace/shared';
+import {
+  exerciseHistoryResponseSchema,
+  canLinkDiaryWorkout,
+} from '@workspace/shared';
 import { getSystemClient, endPool } from '../db/poolManager.js';
 import exerciseEntryDb from '../models/exerciseEntry.js';
 import exercisePresetEntryDb from '../models/exercisePresetEntryRepository.js';
@@ -519,6 +522,128 @@ describe.runIf(RUN)('exercise stats SQL (warmup + session exclusion)', () => {
     expect(Number(sessions[0].sets?.[0]?.weight)).toBe(50);
   });
 
+  it('filters long excluded history before limiting and agrees with diary completion rules', async () => {
+    const sys: pg.PoolClient = await getSystemClient();
+    let exerciseId: string;
+    try {
+      exerciseId = (
+        await sys.query<{ id: string }>(
+          "INSERT INTO exercises (user_id, name, source) VALUES ($1, 'Last time filter', 'test') RETURNING id",
+          [U]
+        )
+      ).rows[0]!.id;
+      await sys.query(
+        `INSERT INTO exercise_entries (user_id, exercise_id, exercise_name, entry_date, duration_minutes, calories_burned, source, is_weekly_prefill)
+        SELECT $1, $2, 'Last time filter', CASE WHEN n % 2 = 0 THEN '2026-07-02'::date ELSE '2026-06-30'::date END, 10, 0, 'Workout Plan', true FROM generate_series(1, 200) AS series(n)`,
+        [U, exerciseId]
+      );
+      await sys.query(
+        `INSERT INTO exercise_entry_sets (exercise_entry_id, set_number, reps, weight)
+        SELECT id, 1, 8, 60 FROM exercise_entries WHERE user_id=$1 AND exercise_id=$2`,
+        [U, exerciseId]
+      );
+      const cases = [
+        { source: 'manual', prefill: false, duration: 0, sets: [{ reps: 8 }] },
+        {
+          source: 'manual',
+          prefill: false,
+          duration: 0,
+          sets: [{ duration: 30 }],
+        },
+        {
+          source: 'manual',
+          prefill: false,
+          duration: 0,
+          sets: [{ distance: 0.1 }],
+        },
+        { source: 'manual', prefill: false, duration: 10, sets: [{}] },
+        { source: 'manual', prefill: false, duration: 10, sets: [] },
+        { source: 'manual', prefill: false, duration: 0, sets: [{}] },
+        {
+          source: 'Workout Plan',
+          prefill: false,
+          duration: 10,
+          sets: [{ reps: 8 }],
+        },
+        { source: 'manual', prefill: true, duration: 10, sets: [{ reps: 8 }] },
+        {
+          source: 'Workout Plan',
+          prefill: true,
+          duration: 10,
+          sets: [{ completed_at: '2026-06-01T10:00:00Z' }],
+        },
+      ] satisfies {
+        source: string;
+        prefill: boolean;
+        duration: number;
+        sets: {
+          reps?: number;
+          duration?: number;
+          distance?: number;
+          completed_at?: string;
+        }[];
+      }[];
+      const expected: string[] = [];
+      for (const [index, item] of cases.entries()) {
+        const id = (
+          await sys.query<{ id: string }>(
+            `INSERT INTO exercise_entries
+          (user_id, exercise_id, exercise_name, entry_date, duration_minutes, calories_burned, source, is_weekly_prefill, created_at)
+          VALUES ($1,$2,'Last time filter','2026-06-01',$3,0,$4,$5,'2026-06-01T10:00:00Z'::timestamptz + $6 * interval '1 second') RETURNING id`,
+            [U, exerciseId, item.duration, item.source, item.prefill, index]
+          )
+        ).rows[0]!.id;
+        for (const set of item.sets)
+          await sys.query(
+            `INSERT INTO exercise_entry_sets (exercise_entry_id, set_number, reps, duration, distance, completed_at)
+          VALUES ($1,1,$2,$3,$4,$5)`,
+            [
+              id,
+              'reps' in set ? set.reps : null,
+              'duration' in set ? set.duration : null,
+              'distance' in set ? set.distance : null,
+              'completed_at' in set ? set.completed_at : null,
+            ]
+          );
+        if (
+          item.sets.length &&
+          canLinkDiaryWorkout({
+            type: 'individual',
+            source: item.source,
+            is_weekly_prefill: item.prefill,
+            duration_minutes: item.duration,
+            sets: item.sets,
+          })
+        )
+          expected.unshift(id);
+      }
+      const latest = await getExerciseEntryHistory(U, 1, 1, exerciseId, {
+        before: '2026-07-01',
+        performed_only: true,
+      });
+      expect(latest.sessions.map((s) => s.id)).toEqual(expected.slice(0, 1));
+      expect(latest.pagination.totalCount).toBe(5);
+      const all = await getExerciseEntryHistory(U, 1, 100, exerciseId, {
+        before: '2026-07-01',
+        performed_only: true,
+      });
+      expect(all.sessions.map((s) => s.id)).toEqual(expected);
+      const legacy = await getExerciseEntryHistory(U, 1, 1, exerciseId);
+      expect(legacy.pagination.totalCount).toBe(209);
+      expect(legacy.sessions[0]?.entry_date).toBe('2026-07-02');
+    } finally {
+      await sys.query(
+        "DELETE FROM exercise_entries WHERE user_id=$1 AND exercise_name='Last time filter'",
+        [U]
+      );
+      await sys.query(
+        "DELETE FROM exercises WHERE user_id=$1 AND name='Last time filter'",
+        [U]
+      );
+      sys.release();
+    }
+  });
+
   it('filters history to sessions containing the exercise, keeping full preset content', async () => {
     const result = await getExerciseEntryHistory(U, 1, 20, E2);
     exerciseHistoryResponseSchema.parse(result);
@@ -537,6 +662,34 @@ describe.runIf(RUN)('exercise stats SQL (warmup + session exclusion)', () => {
         [E2, E3].sort()
       );
     }
+  });
+
+  it('applies optional filters to preset and standalone sessions without dropping siblings', async () => {
+    const result = await getExerciseEntryHistory(U, 1, 20, E2, {
+      before: '2026-07-08',
+      performed_only: true,
+    });
+    expect(result.pagination.totalCount).toBe(3);
+    expect(result.sessions.map((s) => s.id).sort()).toEqual(
+      [EN2_INDIV, PE_CURRENT, PE_OTHER].sort()
+    );
+    const current = result.sessions.find((s) => s.id === PE_CURRENT);
+    expect(current?.type).toBe('preset');
+    if (current?.type === 'preset')
+      expect(current.exercises.map((e) => e.exercise_id).sort()).toEqual(
+        [E2, E3].sort()
+      );
+    const earlier = await getExerciseEntryHistory(U, 1, 1, E2, {
+      before: '2026-07-07',
+      performed_only: true,
+    });
+    expect(earlier.sessions).toEqual([]);
+    expect(earlier.pagination.totalCount).toBe(0);
+    const dateOnly = await getExerciseEntryHistory(U, 1, 20, E2, {
+      before: '2026-07-08',
+      performed_only: false,
+    });
+    expect(dateOnly.pagination.totalCount).toBe(3);
   });
 
   it('excludes sessions that do not contain the filtered exercise', async () => {

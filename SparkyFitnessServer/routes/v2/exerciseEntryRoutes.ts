@@ -50,6 +50,17 @@ router.use(checkPermissionMiddleware('diary'));
  *         schema:
  *           type: string
  *         description: Only return sessions containing this exercise
+ *       - in: query
+ *         name: before
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Only diary days strictly before this date
+ *       - in: query
+ *         name: performed_only
+ *         schema:
+ *           type: boolean
+ *         description: Only performed exercise entries with sets, excluding untouched prescriptions before pagination
  *     responses:
  *       200:
  *         description: Paginated exercise history
@@ -74,6 +85,8 @@ const historyHandler: RequestHandler = async (req, res, next) => {
       pageSize,
       userId: queryUserId,
       exerciseId,
+      before,
+      performed_only,
     } = parsedQuery.data;
 
     // Family access permission check
@@ -98,7 +111,8 @@ const historyHandler: RequestHandler = async (req, res, next) => {
       targetUserId,
       page,
       pageSize,
-      exerciseId ?? null
+      exerciseId ?? null,
+      { before, performed_only }
     );
     const response = exerciseHistoryResponseSchema.parse(result);
     res.status(200).json(response);
