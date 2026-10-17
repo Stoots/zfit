@@ -695,6 +695,19 @@ async function updateWorkoutPlanTemplate(
     const scheduleType = input.schedule_type ?? previous.schedule_type;
     if (scheduleType !== previous.schedule_type && input.sessions === undefined)
       invalid('Changing schedule_type requires providing sessions.');
+    if (
+      previous.schedule_type === 'weekly' &&
+      previous.entry_mode === 'prefill'
+    ) {
+      await deleteDisposablePrefillEntries(
+        client,
+        previous.sessions.flatMap((session) =>
+          session.assignments.map((assignment) => assignment.id)
+        ),
+        userId,
+        today
+      );
+    }
     if (input.sessions !== undefined) {
       const submitted = new Map(
         input.sessions.flatMap((session) =>

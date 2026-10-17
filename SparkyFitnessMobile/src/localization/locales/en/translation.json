@@ -357,7 +357,16 @@
       "workout": "Workout",
       "exercise": "Exercise",
       "set": "Set",
-      "setOf": "of"
+      "setOf": "of",
+      "subtractFifteenSeconds": "Subtract 15 seconds",
+      "subtractFifteenSecondsShort": "-15s",
+      "skip": "Skip",
+      "next": "Next",
+      "setProgress": "Set {{number}} of {{total}}",
+      "nextSet": "Next: {{set}}",
+      "nextSetWithTarget": "Next: {{set}} ({{target}})",
+      "repCount_one": "{{count}} rep",
+      "repCount_other": "{{count}} reps"
     },
     "bar": {
       "clearWorkout": "Clear workout",
@@ -503,6 +512,7 @@
     "pastSets": "Past sets & reps",
     "wellness": "Wellness",
     "symptoms": "Symptoms",
+    "mood": "Mood",
     "progressPhotos": "Progress Photos",
     "askSparky": "Ask Sparky",
     "syncHealth": "Sync Health Data",
@@ -564,6 +574,7 @@
     "medications": "Medications",
     "medication": "Medication",
     "symptomLog": "Log Symptom",
+    "moodLog": "Mood",
     "symptomHistory": "Symptom History",
     "manageSymptoms": "Manage Symptoms",
     "symptomDefinition": "Symptom Details",
@@ -608,7 +619,8 @@
     "cardioSession": "Cardio Session",
     "cooperRunTests": "Cooper Run Test Attempts",
     "watchSettings": "Apple Watch",
-    "aiSettings": "AI"
+    "aiSettings": "AI",
+    "warmupSettings": "Warm-up Calculator"
   },
   "cardioTests": {
     "title": "Cardio Tests",
@@ -1071,6 +1083,8 @@
     "medicationsSubtitle": "Show the medications card on the Dashboard",
     "symptoms": "Symptoms",
     "symptomsSubtitle": "Show symptom status, active episodes, and quick logging",
+    "mood": "Mood",
+    "moodSubtitle": "Show today's mood, a 7-day trend, and quick logging",
     "healthTrends": "Health Trends",
     "healthTrendsSubtitle": "Choose which graphs show on the Dashboard and their order",
     "progressPhotos": "Progress Photos",
@@ -1171,7 +1185,9 @@
     "adaptiveCoachingAccessibility": "Adaptive suggestions",
     "duckMusic": "Lower music during cues",
     "duckMusicSubtitle": "Briefly turn down music from other apps while a workout beep or spoken cue plays.",
-    "duckMusicAccessibility": "Lower music during cues"
+    "duckMusicAccessibility": "Lower music during cues",
+    "warmupCalculator": "Warm-up calculator",
+    "warmupCalculatorSubtitle": "The ramp, and the weights it rounds to, for warm-up sets you add to an exercise."
   },
   "restPeriod": {
     "title": "Rest period",
@@ -1449,6 +1465,27 @@
       "removeNutrient": "Remove {{name}}",
       "nutrientCount_one": "{{count}} nutrient",
       "nutrientCount_other": "{{count}} nutrients",
+      "scan": "Scan barcode to fill in",
+      "lookingUp": "Looking up the label…",
+      "fromOpenFoodFacts": "From Open Food Facts. Check the amounts against the label.",
+      "scanLabel": "Scan label to fill in",
+      "scanLabelHint": "Photograph the Supplement Facts panel.",
+      "takePhoto": "Take photo",
+      "choosePhoto": "Choose from library",
+      "readingLabel": "Reading the label…",
+      "photoFailed": "Could not use that photo. Try another one.",
+      "labelNoMatchTitle": "Nothing readable",
+      "labelNoMatchMessage": "No supplement facts could be read from that photo. Crop closely to the Supplement Facts panel, or enter the label by hand.",
+      "labelFailed": "Could not read the label. Check that an AI provider is set up and try again.",
+      "labelReadOnDevice": "Label read on this iPhone",
+      "labelReadByServer": "Label read by the server AI",
+      "noMatchTitle": "No match found",
+      "noMatchMessage": "No supplement was found for that barcode. You can enter the label by hand.",
+      "lookupFailed": "Could not reach the supplement label database. Try again later.",
+      "servingNote": "Label serving: {{serving}}",
+      "notAdded": "Not added from the label: {{names}}",
+      "notAddedMore_one": "{{names}} and {{count}} more",
+      "notAddedMore_other": "{{names}} and {{count}} more",
       "scheduleResetFailed": "Failed to reset the schedule doses: {{error}}",
       "scheduleRestoreFailed": "The dose for {{schedules}} could not be restored. Set it again on the schedule.",
       "unnamedSchedule": "a schedule",
@@ -1894,7 +1931,8 @@
     "repCount_one": "{{formattedCount}} rep",
     "repCount_other": "{{formattedCount}} reps",
     "modalityWeightDistance": "Weight & Distance (carries)",
-    "modalityWeightDuration": "Weight & Duration (loaded holds)"
+    "modalityWeightDuration": "Weight & Duration (loaded holds)",
+    "addWarmups": "Add warm-ups"
   },
   "cycleCard": {
     "mode": {
@@ -4876,6 +4914,43 @@
     "saveFailed": "Save failed",
     "saveMessage": "Could not save measurements. Please try again."
   },
+  "mood": {
+    "logTitle": "Mood",
+    "overall": "Overall mood",
+    "tags": "Moods",
+    "notesPlaceholder": "Add a note (optional)",
+    "loggingForDate": "Logging for {{date}}",
+    "chartTitle": "Mood over time",
+    "mostCommon": "Most common moods",
+    "chartEmpty": "No mood logged for this period",
+    "chartLoadFailed": "Failed to load mood data",
+    "loadFailed": "Could not load this day's mood",
+    "saveFailed": "Could not save mood",
+    "names": {
+      "angry": "Angry",
+      "anxious": "Anxious",
+      "calm": "Calm",
+      "confident": "Confident",
+      "energetic": "Energetic",
+      "excited": "Excited",
+      "happy": "Happy",
+      "irritable": "Irritable",
+      "low": "Low energy",
+      "neutral": "Neutral",
+      "sad": "Sad",
+      "sensitive": "Sensitive",
+      "thoughtful": "Thoughtful",
+      "tired": "Tired",
+      "worried": "Worried"
+    },
+    "card": {
+      "notLogged": "No mood logged for this day",
+      "emptyA11y": "Mood on {{date}}: none logged",
+      "loggedA11y": "Mood on {{date}}: {{mood}}",
+      "log": "+ Log",
+      "trend7d": "7-Day Trend"
+    }
+  },
   "symptoms": {
     "title": "Symptoms",
     "history": "History",
@@ -5630,6 +5705,8 @@
   "watchSettings": {
     "gesturesTitle": "Gestures",
     "doubleTapTitle": "Double-tap to log a set",
+    "rpeTitle": "Ask for effort (RPE) after each set",
+    "rpeSubtitle": "After you log a set on the watch, turn the Digital Crown to pick how hard it was, from 1 to 10, then tap Save, or tap Skip.",
     "doubleTapSubtitle": "Double-tap on a supported watch (Series 9, Ultra 2 or later, watchOS 11) logs the set on screen during a workout.",
     "pagesTitle": "Pages",
     "description": "Drag a page by its handle to change the order you swipe through them on your watch. Toggle a page off to hide it. The Workout page still appears while a workout is running.",
@@ -5943,6 +6020,25 @@
         "description": "Read nutrition labels with Apple Intelligence on this device. If it cannot read a label, the server AI provider is used instead."
       }
     }
+  },
+  "warmupSettings": {
+    "title": "Warm-up Calculator",
+    "description": "Use the warm-up calculator to quickly add percentage-based warm-up sets to exercises.",
+    "enabled": "Warm-up Calculator",
+    "enabledSubtitle": "When active, tap the three dots next to an exercise to add warm-up sets.",
+    "enabledAccessibility": "Warm-up calculator",
+    "method": "Warmup Method",
+    "methodSubtitle": "Each warm-up set is a percent of your first working set, for a number of reps.",
+    "setLetter": "W",
+    "percentLabel": "Warm-up {{number}} percent",
+    "repsLabel": "Warm-up {{number}} reps",
+    "removeSet": "Remove set",
+    "addSet": "Add set",
+    "reset": "Reset to default",
+    "plateRounding": "Plate rounding",
+    "plateRoundingSubtitle": "Set preferred plate weight increments for your warm-up calculations.",
+    "dumbbellRounding": "Dumbbell rounding",
+    "dumbbellRoundingSubtitle": "Set preferred dumbbell weight increments for your warm-up calculations."
   },
   "mindfulness": {
     "card": {

@@ -33,6 +33,7 @@ import {
   describeActiveSetAssumed,
   evaluateExerciseProgression,
   resolveAssumedSetValues,
+  alignPreviousSets,
   resolveLiveAssumedSetValues,
   extractPlannedSetValues,
   stripPlannedSetValues,
@@ -1993,6 +1994,7 @@ describe('workoutSession', () => {
           name: 'Bench Press',
           category: 'Strength',
           modality: null,
+          equipment: null,
           images: ['bench.png'],
         });
         expect(card.sets[0]).toMatchObject({
@@ -4039,6 +4041,45 @@ describe('workoutSession', () => {
         reps,
       });
 
+      it('keeps warm-ups added ahead of the working sets from taking their history', () => {
+        const sets = [
+          makeSet(1, { set_type: 'warmup' }),
+          makeSet(2, { set_type: 'warmup' }),
+          makeSet(3),
+          makeSet(4),
+        ];
+        const previous = [prev(70, 14), prev(90, 10)];
+        const aligned = alignPreviousSets(sets, previous);
+        expect(aligned[0]).toBeUndefined();
+        expect(aligned[1]).toBeUndefined();
+        expect(aligned[2]).toBe(previous[0]);
+        expect(aligned[3]).toBe(previous[1]);
+        expect(resolveAssumedSetValues(sets, previous)[2]).toMatchObject({
+          weight: 70,
+          reps: 14,
+        });
+      });
+
+      it("pairs warm-ups with last time's warm-ups and working sets with its working sets", () => {
+        const sets = [
+          makeSet(1, { set_type: 'warmup' }),
+          makeSet(2),
+          makeSet(3),
+        ];
+        const previous = [prev(40, 10, 'warmup'), prev(100, 8), prev(100, 6)];
+        expect(alignPreviousSets(sets, previous)).toEqual([
+          previous[0],
+          previous[1],
+          previous[2],
+        ]);
+        // No warm-ups planned this time: the working sets still take the
+        // working history, not last time's warm-up.
+        expect(alignPreviousSets([makeSet(2), makeSet(3)], previous)).toEqual([
+          previous[1],
+          previous[2],
+        ]);
+      });
+
       it('assumes each set from its same-position previous-session set', () => {
         const result = resolveAssumedSetValues(
           [makeSet(1), makeSet(2), makeSet(3)],
@@ -5793,6 +5834,55 @@ describe('workoutSession', () => {
           allCompleted(session)
         )
       ).toBeNull();
+    });
+
+    describe('structureOnly', () => {
+      it('ignores a weight or reps change', () => {
+        const session = makePreset({
+          exercises: [
+            makeSessionExercise({
+              sets: [makeSessionSet({ weight: 105, reps: 8 })],
+            }),
+          ],
+        });
+        expect(
+          buildPresetUpdateExercises(session, makeTargetPreset(), {
+            ...allCompleted(session),
+            structureOnly: true,
+          })
+        ).toBeNull();
+      });
+
+      it('still reports an added set', () => {
+        const session = makePreset({
+          exercises: [
+            makeSessionExercise({
+              sets: [makeSessionSet(), makeSessionSet({ id: 102 })],
+            }),
+          ],
+        });
+        const payload = buildPresetUpdateExercises(
+          session,
+          makeTargetPreset(),
+          { ...allCompleted(session), structureOnly: true }
+        );
+        expect(payload?.[0]?.sets).toHaveLength(2);
+      });
+
+      it('still reports an added exercise', () => {
+        const session = makePreset({
+          exercises: [
+            makeSessionExercise(),
+            makeSessionExercise({ id: 'entry-2', exercise_id: EX_B }),
+          ],
+        });
+        expect(
+          buildPresetUpdateExercises(session, makeTargetPreset(), {
+            ...allCompleted(session),
+            structureOnly: true,
+          })
+        ).not.toBeNull();
+      });
     });
 
     it('returns the full payload when a completed set value changed', () => {

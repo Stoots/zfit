@@ -5,6 +5,7 @@ import express from 'express';
 import measurementService from '../services/measurementService.js';
 import errorHandler from '../middleware/errorHandler.js';
 import measurementRoutes from '../routes/measurementRoutes.js';
+import { CustomCategoryExistsError } from '../utils/errors.js';
 
 vi.mock('../services/measurementService.js', () => ({
   default: {
@@ -17,6 +18,7 @@ vi.mock('../services/measurementService.js', () => ({
     getLatestManualCustomEntriesOnOrBeforeDate: vi.fn(),
     getCheckInMeasurementsByDateRange: vi.fn(),
     getCustomMeasurementsByDateRange: vi.fn(),
+    createCustomCategory: vi.fn(),
   },
 }));
 
@@ -595,5 +597,26 @@ describe('Measurement Routes - GET /custom-entries/latest-manual-on-or-before-da
     );
 
     expect(res.statusCode).toBe(403);
+  });
+});
+
+describe('Measurement Routes - POST /api/measurements/custom-categories', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('answers 409 when the user already has a category with that name', async () => {
+    vi.mocked(measurementService.createCustomCategory).mockRejectedValue(
+      new CustomCategoryExistsError('Waist')
+    );
+
+    const res = await request(app)
+      .post('/api/measurements/custom-categories')
+      .send({ name: 'Waist', frequency: 'Daily', measurement_type: 'cm' });
+
+    expect(res.statusCode).toBe(409);
+    expect(res.body).toEqual({
+      error: 'A category named "Waist" already exists.',
+    });
   });
 });

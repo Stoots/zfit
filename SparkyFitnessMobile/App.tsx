@@ -20,7 +20,7 @@ import { FoodImageSourceProvider } from './src/components/FoodImageSourceProvide
 import { LightboxProvider } from './src/components/LightboxProvider';
 import { Uniwind, useUniwind, useCSSVariable } from 'uniwind';
 
-import { queryClient, serverConnectionQueryKey, serverConfigsQueryKey, useSyncHealthData, useCycleMode, useServerConnection, drainQuickActionNavigation, useQuickActions, useWatchCheckInBridge, useWatchPlanSync, useWatchSetTargetsSync, useWatchWorkoutBridge } from './src/hooks';
+import { queryClient, serverConnectionQueryKey, serverConfigsQueryKey, useSyncHealthData, useCycleMode, useServerConnection, drainQuickActionNavigation, useControlRouteHandoff, useQuickActions, useWatchCheckInBridge, useWatchPlanSync, useWatchSetTargetsSync, useWatchWorkoutBridge } from './src/hooks';
 import { useWatchWorkoutStart } from './src/hooks/useWatchWorkoutStart';
 import {
   useStartLiveWorkout,
@@ -90,6 +90,7 @@ import {
   SafeWatchSettings,
   SafeDiarySettings,
   SafeWorkoutSettings,
+  SafeWarmupSettings,
   SafeServerSettings,
   SafePasskeySettings,
   SafeAppSettings,
@@ -115,6 +116,7 @@ import {
   SafeMedicationForm,
   SafeMedicationScheduleForm,
   SafeSymptomLog,
+  SafeMoodLog,
   SafeSymptomHistory,
   SafeManageSymptoms,
   SafeSymptomDefinitionEditor,
@@ -142,6 +144,8 @@ import ActiveWorkoutBar, {
   notifyActiveWorkoutBarSwipeProgress,
 } from './src/components/ActiveWorkoutBar';
 import { ActiveWorkoutTransitionScreenLayout } from './src/components/ActiveWorkoutTransitionProbe';
+import PendingPresetUpdatePrompt from './src/components/PendingPresetUpdatePrompt';
+import { usePendingPresetUpdateStore } from './src/stores/pendingPresetUpdateStore';
 import ActiveWorkoutKeepAwake from './src/components/ActiveWorkoutKeepAwake';
 import MedicationReminderReconciler from './src/components/MedicationReminderReconciler';
 import { useNativeIOSTabsActive, useNativeIOSHeadersActive } from './src/services/nativeTabBarPreference';
@@ -182,6 +186,8 @@ function WatchCheckInGate() {
 function QuickActionsGate() {
   const { isConnected: isServerConnected } = useServerConnection();
   useQuickActions(isServerConnected);
+  // The Scan food and Log food controls hand their screen over through the app group.
+  useControlRouteHandoff(isServerConnected);
   return null;
 }
 
@@ -196,11 +202,26 @@ function QuickActionsGate() {
 // from outside any screen. If the phone is sitting on that workout, move it
 // to the same completion screen the phone's own Finish lands on; anywhere
 // else, clearing is enough (the active-workout bar just disappears).
-function handleWatchFinishedWorkout(celebration: WorkoutCelebration | null) {
+function handleWatchFinishedWorkout(
+  celebration: WorkoutCelebration | null,
+  sessionId: string
+) {
+  // Always held for the prompt mounted in the navigator, even when the
+  // completion screen opens: that prompt is what asks the watch first, and
+  // the completion screen then leaves the check to it.
+  const holdsPresetCheck = celebration?.sourcePresetId != null;
+  if (celebration != null && holdsPresetCheck) {
+    usePendingPresetUpdateStore.getState().setPending({ celebration, sessionId });
+  }
   if (!rootNavigationRef.isReady()) return;
   if (rootNavigationRef.getCurrentRoute()?.name !== 'ActiveWorkout') return;
   if (celebration != null) {
-    rootNavigationRef.dispatch(StackActions.replace('WorkoutComplete', celebration));
+    rootNavigationRef.dispatch(
+      StackActions.replace('WorkoutComplete', {
+        ...celebration,
+        presetCheckHandledElsewhere: holdsPresetCheck,
+      })
+    );
   } else if (rootNavigationRef.canGoBack()) {
     rootNavigationRef.goBack();
   }
@@ -283,6 +304,7 @@ function AppContent() {
     handleAddMeasurements,
     handleAddProgressPhotos,
     handleAddSymptoms,
+    handleAddMood,
     handleAskSparky,
     handleOpenCycle,
     handleSyncHealthData,
@@ -418,6 +440,7 @@ function AppContent() {
       <WatchCheckInGate />
       <QuickActionsGate />
       <WatchWorkoutGate />
+      <PendingPresetUpdatePrompt />
       <SafeAreaProvider>
         {/* Inside SafeAreaProvider on purpose: the viewer positions its close
             button against the insets, so mounting it at the app root crashes
@@ -873,6 +896,11 @@ function AppContent() {
             options={createStackScreenOptions(t('screens.workoutSettings', { defaultValue: 'Workout Settings' }), { headerBackTitle: t('navigation.settings', { defaultValue: 'Settings' }) })}
           />
           <Stack.Screen
+            name="WarmupSettings"
+            component={SafeWarmupSettings}
+            options={createStackScreenOptions(t('screens.warmupSettings', { defaultValue: 'Warm-up Calculator' }), { headerBackTitle: t('screens.workoutSettings', { defaultValue: 'Workout Settings' }) })}
+          />
+          <Stack.Screen
             name="ServerSettings"
             component={SafeServerSettings}
             options={createStackScreenOptions(t('screens.serverSettings', { defaultValue: 'Server Settings' }), { headerBackTitle: t('navigation.settings', { defaultValue: 'Settings' }) })}
@@ -977,6 +1005,15 @@ function AppContent() {
             })}
           />
           <Stack.Screen
+            name="MoodLog"
+            component={SafeMoodLog}
+            options={createStackScreenOptions(t('screens.moodLog', { defaultValue: 'Mood' }), {
+              presentation: 'modal',
+              headerBackButtonDisplayMode: 'minimal',
+              ...(Platform.OS === 'android' ? androidModalAnimation : {}),
+            })}
+          />
+          <Stack.Screen
             name="AiSettings"
             component={SafeAiSettings}
             options={createStackScreenOptions(t('screens.aiSettings', { defaultValue: 'AI' }), { headerBackTitle: t('navigation.settings', { defaultValue: 'Settings' }) })}
@@ -1016,6 +1053,7 @@ function AppContent() {
           onAddMeasurements={handleAddMeasurements}
           onAddProgressPhotos={handleAddProgressPhotos}
           onAddSymptoms={handleAddSymptoms}
+          onAddMood={handleAddMood}
           onAddMindfulness={handleAddMindfulness}
           onAskSparky={handleAskSparky}
           onOpenCycle={handleOpenCycle}

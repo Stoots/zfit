@@ -66,6 +66,8 @@ jobs:
               - 'SparkyFitnessServer/tests/stravaActivityDetailCleanup.integration.test.ts'
               - 'SparkyFitnessServer/tests/oidcProviderRepository.integration.test.ts'
               - 'SparkyFitnessServer/tests/providerSyncClaim.integration.test.ts'
+              - 'SparkyFitnessServer/tests/uniqueWrites.integration.test.ts'
+              - 'SparkyFitnessServer/tests/checkInConcurrentWrites.integration.test.ts'
               - 'SparkyFitnessServer/models/oidcProviderRepository.ts'
               - 'SparkyFitnessServer/package.json'
               - '.github/workflows/ci-tests.yml'
@@ -272,10 +274,9 @@ jobs:
       # The schema + RLS policies are now applied and the non-superuser app role
       # exists, so the permission matrix can verify every table's real RLS
       # behaviour as the app role (superuser DB user seeds, app role is enforced).
-      - name: Verify RLS, Strava cleanup, OIDC providers, Better Auth schema, sign-in rate limits, provider sync claims, Training Programs, Workout Plan Session upgrade, Cardio Test Attempts and startup locking
+      - name: Verify RLS, Strava cleanup, OIDC providers, Better Auth schema, sign-in rate limits, provider sync claims, sleep entry and custom category uniqueness, concurrent check-ins and startup locking
         run: |
-          # The suites share one database and some apply migrations, so run files serially to avoid deadlocks.
-          pnpm exec vitest run tests/rlsPermissionMatrix.integration.test.ts tests/stravaActivityDetailCleanup.integration.test.ts tests/betterAuthSchemaCheck.integration.test.ts tests/oidcProviderRepository.integration.test.ts tests/authRateLimitDatabase.integration.test.ts tests/providerSyncClaim.integration.test.ts tests/trainingPrograms.integration.test.ts tests/workoutPlanSessionUpgrade.integration.test.ts tests/cardioTestAttempts.integration.test.ts tests/exerciseNameMigration.integration.test.ts tests/exerciseNameCapitalisation.integration.test.ts tests/exercisePresetCascade.integration.test.ts --no-file-parallelism
+          pnpm exec vitest run tests/rlsPermissionMatrix.integration.test.ts tests/stravaActivityDetailCleanup.integration.test.ts tests/betterAuthSchemaCheck.integration.test.ts tests/oidcProviderRepository.integration.test.ts tests/authRateLimitDatabase.integration.test.ts tests/providerSyncClaim.integration.test.ts tests/uniqueWrites.integration.test.ts tests/checkInConcurrentWrites.integration.test.ts tests/trainingPrograms.integration.test.ts tests/workoutPlanSessionUpgrade.integration.test.ts tests/cardioTestAttempts.integration.test.ts tests/exerciseNameMigration.integration.test.ts tests/exerciseNameCapitalisation.integration.test.ts tests/exercisePresetCascade.integration.test.ts --no-file-parallelism
           # Initialization reapplies policies, so run it after the other database tests.
           RUN_DATABASE_INITIALIZATION_TEST=1 pnpm exec vitest run tests/initializeDatabase.integration.test.ts
         env:

@@ -435,6 +435,18 @@ async function prepareExerciseEntryForCreate(
     avg_heart_rate: entryData.avg_heart_rate ?? null,
   };
 }
+/**
+ * Creates a diary exercise entry, with its sets and any activity details.
+ *
+ * @param authenticatedUserId - User the entry belongs to.
+ * @param actingUserId - User performing the action (differs for caregivers).
+ * @param entryData - Entry fields, sets and optional activity_details.
+ * @param options - `skipDuplicateCheck` always inserts instead of merging into
+ *   an existing entry for the same assignment and date; `entrySource` is the
+ *   stored source (default 'Manual'; workout plans pass
+ *   WORKOUT_PLAN_ENTRY_SOURCE).
+ * @returns The created entry.
+ */
 async function createExerciseEntry(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   authenticatedUserId: any,
@@ -442,9 +454,10 @@ async function createExerciseEntry(
   actingUserId: any,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   entryData: any,
-  options: { skipDuplicateCheck?: boolean } = {}
+  options: { skipDuplicateCheck?: boolean; entrySource?: string } = {}
 ) {
   try {
+    const { entrySource = 'Manual', ...createOptions } = options;
     const snapshotEntryData = await prepareExerciseEntryForCreate(
       authenticatedUserId,
       entryData
@@ -454,9 +467,9 @@ async function createExerciseEntry(
       authenticatedUserId,
       snapshotEntryData,
       actingUserId,
-      'Manual',
+      entrySource,
       null,
-      options
+      createOptions
     );
     // If activity_details are provided, create them
     if (entryData.activity_details && entryData.activity_details.length > 0) {

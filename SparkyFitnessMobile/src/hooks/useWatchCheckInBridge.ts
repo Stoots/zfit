@@ -200,6 +200,7 @@ export function useWatchCheckInBridge(enabled: boolean): void {
   const { preferences } = usePreferences();
   // Device-local settings the watch's haptics follow.
   const hapticsEnabled = useAppPreferencesStore((s) => s.hapticsEnabled);
+  const watchRpeEnabled = useAppPreferencesStore((s) => s.watchRpeEnabled);
   const watchDoubleTapEnabled = useAppPreferencesStore(
     (s) => s.watchDoubleTapEnabled
   );
@@ -588,6 +589,7 @@ export function useWatchCheckInBridge(enabled: boolean): void {
         hapticsEnabled,
         restAlertsEnabled,
         doubleTapEnabled: watchDoubleTapEnabled,
+        rpeEnabled: watchRpeEnabled,
         // The native picker admits scheduled tokens only when also startable.
         startableWorkouts: startableWorkoutsForWatch(
           presets,
@@ -626,6 +628,7 @@ export function useWatchCheckInBridge(enabled: boolean): void {
     restAlertsEnabled,
     watchDoubleTapEnabled,
     presets,
+    watchRpeEnabled,
     scheduledWorkouts,
     waterGoalMl,
     waterDisplayUnit,

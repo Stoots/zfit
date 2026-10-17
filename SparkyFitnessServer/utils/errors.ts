@@ -34,6 +34,14 @@ export class TrainingProgramCompletionConflict extends HttpError {
   }
 }
 
+/** A custom category with this name already exists for the user. */
+export class CustomCategoryExistsError extends Error {
+  constructor(name: string) {
+    super(`A category named "${name}" already exists.`);
+    this.name = 'CustomCategoryExistsError';
+  }
+}
+
 // A thrown value only has to be renderable, not an Error, and `error.message`
 // on its own is not always enough to diagnose one. Node's Happy Eyeballs
 // connector rejects with an `AggregateError` whose `message` is the empty

@@ -117,8 +117,14 @@ async function upsertStepData(
       );
       result = updateResult.rows[0];
     } else {
+      // A concurrent write may have created the day since the lookup; apply
+      // the same max-wins update to it instead of failing on the unique key.
       const insertResult = await client.query(
-        'INSERT INTO check_in_measurements (user_id, entry_date, steps, created_by_user_id, updated_by_user_id, created_at, updated_at) VALUES ($1, $2, $3, $4, $4, now(), now()) RETURNING *',
+        `INSERT INTO check_in_measurements AS cm (user_id, entry_date, steps, created_by_user_id, updated_by_user_id, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $4, now(), now())
+         ON CONFLICT (user_id, entry_date) DO UPDATE
+         SET steps = GREATEST(EXCLUDED.steps, cm.steps), updated_at = now(), updated_by_user_id = EXCLUDED.updated_by_user_id
+         RETURNING *`,
         [userId, date, value, actingUserId]
       );
       result = insertResult.rows[0];
@@ -404,7 +410,15 @@ async function upsertCheckInMeasurements(
         new Date().toISOString(),
         new Date().toISOString(),
       ];
-      query = `INSERT INTO check_in_measurements (${cols.join(', ')}) VALUES (${placeholders}) RETURNING *`;
+      // A concurrent write may have created the day since the lookup; update
+      // it the same way the branch above would instead of failing on the key.
+      const conflictUpdates = measurementKeys
+        .map((key) => `${key} = EXCLUDED.${key}`)
+        .join(', ');
+      query = `INSERT INTO check_in_measurements (${cols.join(', ')}) VALUES (${placeholders})
+        ON CONFLICT (user_id, entry_date) DO UPDATE
+        SET ${conflictUpdates}, updated_at = now(), updated_by_user_id = EXCLUDED.updated_by_user_id
+        RETURNING *`;
     }
     const result = await client.query(query, values);
     return result.rows[0];
@@ -542,10 +556,22 @@ async function bulkUpsertCheckInMeasurements(
           nowIso,
           nowIso,
         ]);
+        // A concurrent write may have created a day since the lookup; merge
+        // into it exactly as the batch UPDATE above does.
+        const conflictUpdates = insertColumns
+          .map((column) =>
+            column === 'steps'
+              ? 'steps = GREATEST(EXCLUDED.steps, cm.steps)'
+              : `${column} = COALESCE(EXCLUDED.${column}, cm.${column})`
+          )
+          .join(', ');
         const insertResult = await client.query(
           format(
-            `INSERT INTO check_in_measurements (user_id, entry_date, ${insertColumns.join(', ')}, created_by_user_id, updated_by_user_id, created_at, updated_at)
-             VALUES %L RETURNING *`,
+            `INSERT INTO check_in_measurements AS cm (user_id, entry_date, ${insertColumns.join(', ')}, created_by_user_id, updated_by_user_id, created_at, updated_at)
+             VALUES %L
+             ON CONFLICT (user_id, entry_date) DO UPDATE
+             SET ${conflictUpdates}, updated_at = now(), updated_by_user_id = EXCLUDED.updated_by_user_id
+             RETURNING *`,
             insertRows
           )
         );
@@ -749,12 +775,27 @@ async function getCustomCategories(userId: any) {
   }
 }
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+interface CustomCategoryRow {
+  id: string;
+  name: string;
+  display_name: string | null;
+  frequency: string;
+  measurement_type: string;
+  data_type: string | null;
+}
 async function createCustomCategory(categoryData: any) {
   const client = await getClient(categoryData.created_by_user_id); // User-specific operation, using created_by_user_id for RLS context
   try {
+    // One category per user and name. A concurrent create of the same name
+    // waits for the first and then gets that category, with its settings, so a
+    // caller never applies its own defaults to a category someone else made.
+    const columns =
+      'id, name, display_name, frequency, measurement_type, data_type';
     const result = await client.query(
       `INSERT INTO custom_categories (user_id, name, display_name, frequency, measurement_type, data_type, created_by_user_id, updated_by_user_id, created_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $7, now(), now()) RETURNING id`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $7, now(), now())
+       ON CONFLICT (user_id, name) DO NOTHING
+       RETURNING ${columns}`,
       [
         categoryData.user_id,
         categoryData.name,
@@ -765,7 +806,16 @@ async function createCustomCategory(categoryData: any) {
         categoryData.created_by_user_id,
       ]
     );
-    return result.rows[0];
+    if (result.rows.length > 0) {
+      const category: CustomCategoryRow = result.rows[0];
+      return { id: category.id, created: true, category };
+    }
+    const existing = await client.query(
+      `SELECT ${columns} FROM custom_categories WHERE user_id = $1 AND name = $2`,
+      [categoryData.user_id, categoryData.name]
+    );
+    const category: CustomCategoryRow = existing.rows[0];
+    return { id: category.id, created: false, category };
   } finally {
     client.release();
   }

@@ -7,6 +7,7 @@ import {
 } from '@workspace/shared';
 import { log } from '../../config/logging.js';
 import measurementService from '../../services/measurementService.js';
+import { CustomCategoryExistsError } from '../../utils/errors.js';
 import preferenceService from '../../services/preferenceService.js';
 import moodRepository from '../../models/moodRepository.js';
 import fastingRepository from '../../models/fastingRepository.js';
@@ -839,7 +840,10 @@ Actions:
           }
         } catch (error) {
           log('error', '[Checkin Tool] Error:', error);
-          if (error instanceof Error && error.message.includes('not found')) {
+          if (
+            error instanceof CustomCategoryExistsError ||
+            (error instanceof Error && error.message.includes('not found'))
+          ) {
             return ERRORS.VALIDATION(error.message);
           }
           return ERRORS.DB_ERROR(error);

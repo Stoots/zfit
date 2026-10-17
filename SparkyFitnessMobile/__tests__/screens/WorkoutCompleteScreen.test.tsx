@@ -588,12 +588,12 @@ describe('WorkoutCompleteScreen', () => {
       };
     }
 
-    /** The matching preset with one weight off — the session deviates from it. */
+    /** The matching preset a set short — the session deviates from it. */
     function makeDeviatingPreset(
       overrides: Partial<WorkoutPreset> = {}
     ): WorkoutPreset {
       const preset = makeMatchingPreset(overrides);
-      preset.exercises[0].sets[0].weight = 95;
+      preset.exercises[0].sets.pop();
       return preset;
     }
 
@@ -707,6 +707,17 @@ describe('WorkoutCompleteScreen', () => {
       expect(Toast.show).not.toHaveBeenCalledWith(
         expect.objectContaining({ type: 'success' })
       );
+    });
+
+    it('does not prompt when only a weight differs from the preset', async () => {
+      const preset = makeMatchingPreset();
+      preset.exercises[0].sets[0].weight = 95;
+      mockGetPresetById.mockResolvedValue(preset);
+      renderScreen(promptParams);
+      await flushFetch();
+      firePromptTimer();
+
+      expect(alertSpy).not.toHaveBeenCalled();
     });
 
     it('does not prompt when the performed workout matches the preset', async () => {

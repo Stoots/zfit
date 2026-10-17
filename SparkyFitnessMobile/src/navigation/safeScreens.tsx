@@ -47,6 +47,7 @@ import HealthTrendsSettingsScreen from '../screens/HealthTrendsSettingsScreen';
 import WatchSettingsScreen from '../screens/WatchSettingsScreen';
 import DiarySettingsScreen from '../screens/DiarySettingsScreen';
 import WorkoutSettingsScreen from '../screens/WorkoutSettingsScreen';
+import WarmupSettingsScreen from '../screens/WarmupSettingsScreen';
 import ServerSettingsScreen from '../screens/ServerSettingsScreen';
 import PasskeySettingsScreen from '../screens/PasskeySettingsScreen';
 import AppSettingsScreen from '../screens/AppSettingsScreen';
@@ -69,6 +70,7 @@ import MedicationDetailScreen from '../screens/MedicationDetailScreen';
 import MedicationFormScreen from '../screens/MedicationFormScreen';
 import MedicationScheduleFormScreen from '../screens/MedicationScheduleFormScreen';
 import SymptomLogScreen from '../screens/SymptomLogScreen';
+import MoodLogScreen from '../screens/MoodLogScreen';
 import SymptomHistoryScreen from '../screens/SymptomHistoryScreen';
 import ManageSymptomsScreen from '../screens/ManageSymptomsScreen';
 import SymptomDefinitionEditorScreen from '../screens/SymptomDefinitionEditorScreen';
@@ -148,6 +150,7 @@ export const SafeHealthTrendsSettings = withErrorBoundary(HealthTrendsSettingsSc
 export const SafeWatchSettings = withErrorBoundary(WatchSettingsScreen, 'WatchSettings', { canGoBack: true });
 export const SafeDiarySettings = withErrorBoundary(DiarySettingsScreen, 'DiarySettings', { canGoBack: true });
 export const SafeWorkoutSettings = withErrorBoundary(WorkoutSettingsScreen, 'WorkoutSettings', { canGoBack: true });
+export const SafeWarmupSettings = withErrorBoundary(WarmupSettingsScreen, 'WarmupSettings', { canGoBack: true });
 export const SafeServerSettings = withErrorBoundary(ServerSettingsScreen, 'ServerSettings', { canGoBack: true });
 export const SafePasskeySettings = withErrorBoundary(PasskeySettingsScreen, 'PasskeySettings', { canGoBack: true });
 export const SafeAppSettings = withErrorBoundary(AppSettingsScreen, 'AppSettings', { canGoBack: true });
@@ -174,6 +177,7 @@ export const SafeMedicationDetail = withErrorBoundary(MedicationDetailScreen, 'M
 export const SafeMedicationForm = withErrorBoundary(MedicationFormScreen, 'MedicationForm', { canGoBack: true });
 export const SafeMedicationScheduleForm = withErrorBoundary(MedicationScheduleFormScreen, 'MedicationScheduleForm', { canGoBack: true });
 
+export const SafeMoodLog = withErrorBoundary(MoodLogScreen, 'MoodLog', { canGoBack: true });
 export const SafeSymptomLog = withErrorBoundary(SymptomLogScreen, 'SymptomLog', { canGoBack: true });
 export const SafeSymptomHistory = withErrorBoundary(SymptomHistoryScreen, 'SymptomHistory', { canGoBack: true });
 export const SafeManageSymptoms = withErrorBoundary(ManageSymptomsScreen, 'ManageSymptoms', { canGoBack: true });

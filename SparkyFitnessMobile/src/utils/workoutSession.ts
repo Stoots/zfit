@@ -837,6 +837,8 @@ export interface WorkoutCardExercise {
     modality?: string | null;
     images?: string[] | null;
     mechanic?: string | null;
+    /** Used to round dumbbell warm-ups to dumbbell steps. */
+    equipment?: string[] | null;
   } | null;
   sets: WorkoutCardSet[];
   /** Raw draft string backing the edit-mode calories input (draft mapper only). */
@@ -866,6 +868,7 @@ export function draftExerciseToCardExercise(
     name: exercise.exerciseName,
     category: exercise.exerciseCategory,
     modality: exercise.exerciseModality ?? null,
+    equipment: exercise.exerciseEquipment ?? null,
     images: exercise.images,
   };
   const modality = resolveSnapshotModality(snapshot);
@@ -1110,6 +1113,32 @@ export interface AssumedSetOverrides {
  * weight. The base is the first set's *placeholder*, never what was typed or
  * logged into it, so lifting heavier on set 1 does not move later sets.
  */
+/**
+ * Pairs each current set with its counterpart in the last session, warm-ups
+ * with warm-ups and working sets with working sets, each in order. Pairing by
+ * plain position let warm-ups added ahead of the working sets take their
+ * history, leaving the working sets with a dash. A set with no counterpart
+ * (more sets than last time, or warm-ups where there were none) is undefined.
+ */
+export function alignPreviousSets<T extends { setType?: string | null }>(
+  sets: readonly { set_type?: string | null }[],
+  previousSets: readonly T[] | undefined
+): (T | undefined)[] {
+  const warmups = (previousSets ?? []).filter((s) =>
+    isWarmupSetType(s.setType)
+  );
+  const working = (previousSets ?? []).filter(
+    (s) => !isWarmupSetType(s.setType)
+  );
+  let warmupIndex = 0;
+  let workingIndex = 0;
+  return sets.map((set) =>
+    isWarmupSetType(set.set_type)
+      ? warmups[warmupIndex++]
+      : working[workingIndex++]
+  );
+}
+
 export function resolveAssumedSetValues(
   sets: readonly AssumableSet[],
   previousSets: readonly ExerciseRecentSessionSet[] | undefined,
@@ -1137,9 +1166,10 @@ export function resolveAssumedSetValues(
       distance: null,
     } as AssumedSetValues,
   };
+  const alignedPrevious = alignPreviousSets(sets, previousSets);
   return sets.map((set, index) => {
     const tier = set.set_type === 'warmup' ? 'warmup' : 'working';
-    const previous = previousSets?.[index];
+    const previous = alignedPrevious[index];
     const planned = plannedBySetId?.[String(set.id)];
 
     const progressedPreviousWeight =
@@ -2503,6 +2533,21 @@ function canonicalExercisesEqual(
   );
 }
 
+/** Same exercises in the same order, with the same number and kind of sets:
+ * what changes when the lifter adds, drops or reorders work, as opposed to
+ * just loading a different weight or reps. */
+function canonicalExerciseStructureEqual(
+  a: CanonicalPresetExercise,
+  b: CanonicalPresetExercise
+): boolean {
+  return (
+    a.exercise_id === b.exercise_id &&
+    a.superset_group === b.superset_group &&
+    a.sets.length === b.sets.length &&
+    a.sets.every((set, i) => set.set_type === b.sets[i]?.set_type)
+  );
+}
+
 export function buildPresetUpdateExercises(
   session: PresetSessionResponse,
   preset: WorkoutPreset,
@@ -2515,6 +2560,12 @@ export function buildPresetUpdateExercises(
      * difference from the preset counts.
      */
     assumeSources?: Omit<AssumedValueSources, 'plannedSetValues'>;
+    /**
+     * Only a change in structure counts as different (exercises, order,
+     * supersets, set count and types). Weights, reps and the like do not,
+     * so a lifter who just loaded more weight is not asked about it.
+     */
+    structureOnly?: boolean;
   }
 ): WorkoutPresetExercisePayload[] | null {
   // An exercise whose library row has been deleted cannot go into a preset at
@@ -2663,7 +2714,9 @@ export function buildPresetUpdateExercises(
   const equivalent =
     fromSession.length === fromPreset.length &&
     fromSession.every((exercise, i) =>
-      canonicalExercisesEqual(exercise, fromPreset[i])
+      opts.structureOnly
+        ? canonicalExerciseStructureEqual(exercise, fromPreset[i])
+        : canonicalExercisesEqual(exercise, fromPreset[i])
     );
   return equivalent ? null : fromSession;
 }

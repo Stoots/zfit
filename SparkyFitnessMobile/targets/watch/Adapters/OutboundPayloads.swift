@@ -30,6 +30,7 @@ enum OutboundPayloads {
         static let setTimerStarted = "setTimerStarted"
         static let setTimerStopped = "setTimerStopped"
         static let workoutStartRequested = "workoutStartRequested"
+        static let presetUpdateAnswer = "presetUpdateAnswer"
     }
 
     /// A morning check-in awaiting a server write.
@@ -88,6 +89,17 @@ enum OutboundPayloads {
         return payload
     }
 
+    /// The wearer's answer to "update this workout?" on the summary. The phone
+    /// owns the server write, so it applies (or drops) the change. `sessionId`
+    /// pairs the answer with the workout the question was about.
+    static func presetUpdateAnswer(sessionId: String, update: Bool) -> [String: Any] {
+        [
+            "type": Kind.presetUpdateAnswer,
+            "sessionId": sessionId,
+            "update": update,
+        ]
+    }
+
     /// One set logged during an active workout, with whatever the wearer
     /// actually did. Delivery must not be lost — unlike a heart-rate sample,
     /// a dropped set is a hole in the diary the wearer would have no way to
@@ -116,6 +128,9 @@ enum OutboundPayloads {
         }
         if let distanceKm = completedSet.distanceKm {
             payload["distanceKm"] = distanceKm
+        }
+        if let rpe = completedSet.rpe {
+            payload["rpe"] = rpe
         }
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]

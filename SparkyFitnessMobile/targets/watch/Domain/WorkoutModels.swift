@@ -94,6 +94,9 @@ struct ActiveWorkoutPlan: Codable, Equatable {
     let excludedPauseSeconds: Int?
     /// Phone's pause/resume counter. A lower number is an older message.
     let intervalRevision: Int?
+    /// The workout was started from a saved one, so Finish asks whether to
+    /// update it when the exercises or sets changed. Nil from an older phone.
+    let fromPreset: Bool?
 
     init(
         sessionId: String,
@@ -107,7 +110,8 @@ struct ActiveWorkoutPlan: Codable, Equatable {
         capEndsAt: Date? = nil,
         pausedAt: Date? = nil,
         excludedPauseSeconds: Int? = nil,
-        intervalRevision: Int? = nil
+        intervalRevision: Int? = nil,
+        fromPreset: Bool? = nil
     ) {
         self.sessionId = sessionId
         self.workoutName = workoutName
@@ -121,6 +125,7 @@ struct ActiveWorkoutPlan: Codable, Equatable {
         self.pausedAt = pausedAt
         self.excludedPauseSeconds = excludedPauseSeconds
         self.intervalRevision = intervalRevision
+        self.fromPreset = fromPreset
     }
 }
 
@@ -195,6 +200,9 @@ struct WorkoutSummary: Equatable {
     let averageBpm: Double?
     let maxBpm: Double?
     let activeEnergyKcal: Double?
+    /// The workout it describes, so a question the phone asks about it can be
+    /// matched to this summary and not to a later one.
+    var sessionId: String? = nil
 }
 
 /// What the wearer actually did for a set, once they have adjusted the
@@ -243,6 +251,8 @@ struct CompletedSet: Codable, Equatable {
     var duration: Int? = nil
     /// A carry's distance in km, entered in metres on the watch.
     var distanceKm: Double? = nil
+    /// Effort (6 to 10) the wearer picked. Nil when skipped.
+    var rpe: Double? = nil
     /// When the wearer tapped the set, not when the phone received it.
     let completedAt: Date
 }

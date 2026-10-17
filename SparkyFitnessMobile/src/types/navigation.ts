@@ -310,6 +310,9 @@ export type RootStackParamList = {
     sourcePresetId: number | null;
     sourceServerConfigId: string | null;
     plannedSetValues: Record<string, AssumedSetValues>;
+    // Set when the workout was finished on the watch: the app-level prompt
+    // asks "Update preset?" (on the watch first), so this screen does not.
+    presetCheckHandledElsewhere?: boolean;
     // The rest of the live placeholder inputs, so the prompt can ignore
     // values the ramp or progression filled in. Optional: older snapshots.
     previousSessionSets?: Record<string, ExerciseRecentSessionSet[]>;
@@ -350,6 +353,7 @@ export type RootStackParamList = {
   WatchSettings: undefined;
   DiarySettings: undefined;
   WorkoutSettings: undefined;
+  WarmupSettings: undefined;
   ServerSettings: undefined;
   PasskeySettings: undefined;
   AppSettings: undefined;
@@ -358,7 +362,13 @@ export type RootStackParamList = {
   WhatsNew: undefined;
   MedicationsList: undefined;
   MedicationDetail: { medicationId: string };
-  MedicationForm: { medicationId?: string; isSupplement?: boolean };
+  MedicationForm: {
+    medicationId?: string;
+    isSupplement?: boolean;
+    /** Set by the barcode scanner when it returns a code. */
+    pendingScannedBarcode?: string;
+    scannedBarcodeNonce?: number;
+  };
   MedicationScheduleForm: { medicationId: string; scheduleId?: string };
   SymptomLog:
     | {
@@ -368,6 +378,7 @@ export type RootStackParamList = {
         date?: string;
       }
     | undefined;
+  MoodLog: { date?: string } | undefined;
   SymptomHistory: { symptomId?: string } | undefined;
   ManageSymptoms: undefined;
   SymptomDefinitionEditor: { definitionId?: string } | undefined;

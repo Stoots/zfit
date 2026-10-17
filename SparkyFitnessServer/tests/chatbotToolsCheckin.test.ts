@@ -7,6 +7,7 @@ import moodRepository from '../models/moodRepository.js';
 import fastingRepository from '../models/fastingRepository.js';
 import sleepRepository from '../models/sleepRepository.js';
 import { toolOpts } from './helpers/toolExecutionOptions.js';
+import { CustomCategoryExistsError } from '../utils/errors.js';
 
 vi.mock('../services/measurementService', () => ({
   default: {
@@ -443,6 +444,21 @@ describe('list_categories / create_category', () => {
         data_type: 'numeric',
         frequency: 'Daily',
       }
+    );
+  });
+
+  it('reports a category name the user already has', async () => {
+    vi.mocked(measurementService.createCustomCategory).mockRejectedValue(
+      new CustomCategoryExistsError('Hydration')
+    );
+
+    const result = await tools.sparky_manage_checkin.execute!(
+      { action: 'create_category', category_name: 'Hydration' },
+      opts
+    );
+
+    expect(result).toBe(
+      'Error [VALIDATION]: A category named "Hydration" already exists.'
     );
   });
 

@@ -153,8 +153,8 @@ function attributionSteps(state: {
  *
  * `onWatchFinishedWorkout` fires when the WEARER ended the workout on the
  * watch and this hook cleared the phone's live session, with the completion
- * screen's params (null when there was nothing to celebrate). The caller owns
- * navigation — this hook is headless.
+ * screen's params (null when there was nothing to celebrate) and the watch's
+ * session id. The caller owns navigation — this hook is headless.
  *
  * iOS-only; a no-op everywhere else.
  */
@@ -296,7 +296,10 @@ export function useWatchWorkoutBridge(
   enabled: boolean,
   serverConnected: boolean = true,
   onTelemetryPendingChange?: (pending: boolean) => void,
-  onWatchFinishedWorkout?: (celebration: WorkoutCelebration | null) => void
+  onWatchFinishedWorkout?: (
+    celebration: WorkoutCelebration | null,
+    sessionId: string
+  ) => void
 ): void {
   const sessionsRef = useRef<Map<string, SessionTelemetry>>(new Map());
   // Sessions the wearer discarded on the watch. A restore that was still
@@ -406,6 +409,14 @@ export function useWatchWorkoutBridge(
       if (payload.duration != null)
         patch.duration = Math.round(payload.duration);
       if (payload.distanceKm != null) patch.distance = payload.distanceKm;
+      if (
+        payload.rpe != null &&
+        Number.isFinite(payload.rpe) &&
+        payload.rpe >= 1 &&
+        payload.rpe <= 10
+      ) {
+        patch.rpe = payload.rpe;
+      }
       if (Object.keys(patch).length > 0) {
         state.updateSetField(payload.setId, patch);
       }
@@ -784,7 +795,7 @@ export function useWatchWorkoutBridge(
         useActiveWorkoutStore.getState()
       );
       useActiveWorkoutStore.getState().clearWorkout();
-      onWatchFinishedRef.current?.(celebration);
+      onWatchFinishedRef.current?.(celebration, payload.sessionId);
     },
     [flushHeartRate]
   );

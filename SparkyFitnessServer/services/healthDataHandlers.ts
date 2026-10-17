@@ -572,8 +572,8 @@ export function createCategoryResolver(): HealthBatchContext['resolveCategory'] 
     };
     const newCategory =
       await measurementRepository.createCustomCategory(newCategoryData);
-    // To return the full category object including the id and the default data_type
-    const created = { id: newCategory.id, ...newCategoryData };
+    // The stored settings win: a concurrent create may have made the category first.
+    const created = { ...newCategoryData, ...newCategory.category };
     byName.set(categoryName, created);
     return created;
   };

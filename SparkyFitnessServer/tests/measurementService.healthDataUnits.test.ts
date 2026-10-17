@@ -23,9 +23,14 @@ describe('processHealthData default units (#567)', () => {
     vi.clearAllMocks();
     vi.mocked(loadUserTimezone).mockResolvedValue('UTC');
     measurementRepository.getCustomCategories = vi.fn().mockResolvedValue([]);
+    // A fresh create stores what it was given.
     measurementRepository.createCustomCategory = vi
       .fn()
-      .mockResolvedValue({ id: 'cat-new' });
+      .mockImplementation(async (data) => ({
+        id: 'cat-new',
+        created: true,
+        category: { ...data, id: 'cat-new' },
+      }));
     measurementRepository.bulkUpsertCustomMeasurements = vi
       .fn()
       .mockResolvedValue([{ id: 'entry-1' }]);
@@ -264,9 +269,14 @@ describe('Aggregated health metric default units', () => {
     vi.clearAllMocks();
     vi.mocked(loadUserTimezone).mockResolvedValue('UTC');
     measurementRepository.getCustomCategories = vi.fn().mockResolvedValue([]);
+    // A fresh create stores what it was given.
     measurementRepository.createCustomCategory = vi
       .fn()
-      .mockResolvedValue({ id: 'cat-new' });
+      .mockImplementation(async (data) => ({
+        id: 'cat-new',
+        created: true,
+        category: { ...data, id: 'cat-new' },
+      }));
     measurementRepository.bulkUpsertCustomMeasurements = vi
       .fn()
       .mockResolvedValue([{ id: 'entry-1' }]);

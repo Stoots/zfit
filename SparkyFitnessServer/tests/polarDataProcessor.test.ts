@@ -415,6 +415,15 @@ describe('polar daily_health_metrics merge sources (issue #2471)', () => {
     vi.mocked(measurementRepository.getCustomCategories).mockResolvedValue([]);
     vi.mocked(measurementRepository.createCustomCategory).mockResolvedValue({
       id: 'cat-new',
+      created: true,
+      category: {
+        id: 'cat-new',
+        name: 'Resting Heart Rate',
+        display_name: null,
+        frequency: 'Daily',
+        measurement_type: 'N/A',
+        data_type: 'numeric',
+      },
     });
   });
 
