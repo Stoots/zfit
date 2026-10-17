@@ -11,6 +11,9 @@ import { FoodPhotoEstimateToolUI } from '@/components/ai/FoodPhotoEstimateToolUI
 import { ToolFallback } from '@/components/tool-fallback';
 import { TooltipIconButton } from '@/components/tooltip-icon-button';
 import { Button } from '@/components/ui/button';
+import { useTranslation } from 'react-i18next';
+import { useChatQuestionSource } from '@/hooks/AI/useChatQuestionSource';
+import { chatErrorMessage } from '@/utils/chatError';
 import { cn } from '@/lib/utils';
 import {
   ActionBarMorePrimitive,
@@ -174,6 +177,7 @@ const ThreadSuggestionItem: FC<{ prompt: string }> = ({ prompt }) => {
 };
 
 const Composer: FC = () => {
+  useChatQuestionSource();
   return (
     <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
       <ComposerPrimitive.AttachmentDropzone asChild>
@@ -236,10 +240,23 @@ const ComposerAction: FC = () => {
 };
 
 const MessageError: FC = () => {
+  const { t } = useTranslation();
+  const error = useAuiState((s) =>
+    s.message.status?.type === 'incomplete' ? s.message.status.error : undefined
+  );
   return (
     <MessagePrimitive.Error>
-      <ErrorPrimitive.Root className="aui-message-error-root border-destructive bg-destructive/10 text-destructive dark:bg-destructive/5 mt-2 rounded-md border p-3 text-sm dark:text-red-200">
-        <ErrorPrimitive.Message className="aui-message-error-message line-clamp-2" />
+      <ErrorPrimitive.Root
+        role="alert"
+        className="aui-message-error-root border-destructive bg-destructive/10 text-destructive dark:bg-destructive/5 mt-2 rounded-md border p-3 text-sm dark:text-red-200"
+      >
+        <p>{chatErrorMessage(error, t('chat.transportError'))}</p>
+        <ActionBarPrimitive.Reload asChild>
+          <Button variant="outline" className="mt-3 min-h-11">
+            <RefreshCwIcon aria-hidden="true" />
+            {t('chat.retry')}
+          </Button>
+        </ActionBarPrimitive.Reload>
       </ErrorPrimitive.Root>
     </MessagePrimitive.Error>
   );
@@ -456,6 +473,7 @@ const UserActionBar: FC = () => {
 };
 
 const EditComposer: FC = () => {
+  useChatQuestionSource();
   return (
     <MessagePrimitive.Root
       data-slot="aui_edit-composer-wrapper"

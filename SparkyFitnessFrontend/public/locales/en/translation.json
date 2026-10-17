@@ -165,7 +165,11 @@
     "translate": "Translate"
   },
   "chat": {
+    "errorTitle": "Chat unavailable",
+    "transportError": "Couldn't get a reply. Check your connection and try again.",
+    "retry": "Retry",
     "trainingAnalysis": {
+      "newQuestionRequired": "Analysis needs a new question. This reply will use ordinary chat.",
       "title": "Training analysis (read-only)",
       "scope": "Data for your next question",
       "description": "Only your next question and the selected records go to your configured provider. Nothing is changed. Choose up to 366 days; health metrics must already be synced from Apple Health. Each question stands alone.",
