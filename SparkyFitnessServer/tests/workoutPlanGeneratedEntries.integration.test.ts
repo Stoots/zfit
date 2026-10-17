@@ -151,14 +151,35 @@ describe.runIf(RUN)('workout plan generated entries (#2677)', () => {
         sessions: [
           {
             name: 'Weekly',
+            sort_order: 0,
             day_of_week: DOW,
             assignments: [
               {
                 day_of_week: DOW,
                 exercise_id: EXERCISE,
+                sort_order: 0,
                 sets: [{ set_number: 1, reps: 8, weight: 50 }],
               },
-              { day_of_week: DOW, workout_preset_id: presetId },
+              {
+                workout_preset_id: presetId,
+                sort_order: 1,
+                preset_snapshot: {
+                  id: presetId,
+                  name: 'Plan fixture preset',
+                  description: null,
+                  workout_format: 'standard',
+                  exercises: [
+                    {
+                      exercise_id: EXERCISE,
+                      exercise_name: 'Plan fixture',
+                      category: 'Strength',
+                      image_url: null,
+                      superset_group: null,
+                      sets: [{ set_number: 1, reps: 10, weight: 40 }],
+                    },
+                  ],
+                },
+              },
             ],
           },
         ],
@@ -198,13 +219,11 @@ describe.runIf(RUN)('workout plan generated entries (#2677)', () => {
     const afterEdit = await rowsOn(TODAY);
     expect(afterEdit.standalone).toHaveLength(0);
     expect(afterEdit.sessions.map((r) => r.id)).toEqual([sessionId]);
-    // Untouched rows of the next week were regenerated, once each.
+    // Renaming preserves untouched frozen prescriptions and their stable identities.
     const nextWeekAfter = await rowsOn(NEXT_WEEK);
     expect(nextWeekAfter.standalone).toHaveLength(0);
     expect(nextWeekAfter.sessions).toHaveLength(1);
-    expect(nextWeekAfter.sessions[0].id).not.toBe(
-      nextWeekBefore.sessions[0].id
-    );
+    expect(nextWeekAfter.sessions[0].id).toBe(nextWeekBefore.sessions[0].id);
 
     await workoutPlanTemplateService.updateWorkoutPlanTemplate(OWNER, planId, {
       ...planFields,

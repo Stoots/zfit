@@ -39,6 +39,13 @@ function getProviderFoodUrl(food: Food): string | null {
       const code = food.barcode || food.provider_external_id;
       return code ? `https://world.openfoodfacts.org/product/${code}` : null;
     }
+    case 'livsmedelsverket': {
+      if (!food.provider_external_id) {
+        return 'https://soknaringsinnehall.livsmedelsverket.se/';
+      }
+      const query = encodeURIComponent(food.name || '');
+      return `https://soknaringsinnehall.livsmedelsverket.se/Home/FoodDetails/${food.provider_external_id}?sokord=${query}&soktyp=1&kategoriId=`;
+    }
     default:
       return null;
   }

@@ -50,6 +50,11 @@ import type { WaterContainer } from '@/types/settings';
 import type { DrinkPresetCatalogEntry } from '@workspace/shared';
 import { Utensils, X, Edit2, Link2, Plus, Coffee, Beer } from 'lucide-react';
 
+// 0 is a valid factor (a drink that should count as no water), so only a
+// non-finite value falls back to 1.0.
+const toHydrationFactor = (value: number) =>
+  Number.isFinite(value) ? value : 1.0;
+
 const WaterContainerManager: React.FC = () => {
   const { user } = useAuth();
   const { t } = useTranslation();
@@ -269,7 +274,7 @@ const WaterContainerManager: React.FC = () => {
       is_primary: false,
       servings_per_container: linkedFood ? 1 : Number(servingsPerContainer),
       linked_quantity: linkedFood ? Number(linkedQuantity) : 1,
-      hydration_factor: Number(hydrationFactor) || 1.0,
+      hydration_factor: toHydrationFactor(Number(hydrationFactor)),
       linked_food_id: linkedFood ? linkedFood.id : null,
       linked_variant_id: linkedVariantId,
       linked_meal_type_id: linkedMealTypeId,
@@ -366,7 +371,7 @@ const WaterContainerManager: React.FC = () => {
         unit: editUnit,
         servings_per_container: editLinkedFood ? 1 : Number(editServings),
         linked_quantity: editLinkedFood ? Number(editLinkedQuantity) : 1,
-        hydration_factor: Number(editHydrationFactor) || 1.0,
+        hydration_factor: toHydrationFactor(Number(editHydrationFactor)),
         linked_food_id: editLinkedFood ? editLinkedFood.id : null,
         linked_variant_id: editLinkedVariantId ?? null,
         linked_meal_type_id: editLinkedMealTypeId ?? null,

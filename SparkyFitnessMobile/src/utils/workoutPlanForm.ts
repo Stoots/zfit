@@ -74,10 +74,16 @@ export function createWorkoutPlanDraft(
       workout_preset_id: assignment.workout_preset_id
         ? String(assignment.workout_preset_id)
         : null,
-      workout_preset_name: assignment.workout_preset_name ?? null,
+      workout_preset_name:
+        assignment.workout_preset_name ??
+        assignment.preset_snapshot?.name ??
+        null,
       exercise_id: assignment.exercise_id ?? null,
       exercise_name: assignment.exercise_name ?? null,
       sets: assignment.sets ?? [],
+      ...(assignment.preset_snapshot
+        ? { preset_snapshot: assignment.preset_snapshot }
+        : {}),
     };
   });
 
@@ -161,7 +167,10 @@ export function buildWorkoutPlanPayload(
   const sequential = draft.scheduleType === 'sequential';
   const assignments = draft.assignments
     .filter(
-      (assignment) => assignment.workout_preset_id || assignment.exercise_id
+      (assignment) =>
+        assignment.workout_preset_id ||
+        assignment.exercise_id ||
+        assignment.preset_snapshot
     )
     .map((assignment) => {
       const sameSlot = draft.assignments.filter((other) =>
@@ -178,9 +187,14 @@ export function buildWorkoutPlanPayload(
         session_index: sequential ? (assignment.session_index ?? 1) : null,
         session_name: sessionName,
         sort_order: sameSlot.indexOf(assignment),
+        ...(assignment.preset_snapshot
+          ? { preset_snapshot: assignment.preset_snapshot }
+          : {}),
         ...(assignment.workout_preset_id
           ? { workout_preset_id: assignment.workout_preset_id }
-          : { exercise_id: assignment.exercise_id as string }),
+          : assignment.exercise_id
+            ? { exercise_id: assignment.exercise_id }
+            : {}),
         sets: assignment.exercise_id
           ? assignment.sets.map(({ id: _id, ...set }) => set)
           : [],

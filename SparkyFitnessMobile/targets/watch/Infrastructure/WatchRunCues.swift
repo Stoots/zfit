@@ -98,6 +98,67 @@ final class WatchRunCues: NSObject, AVSpeechSynthesizerDelegate {
         String(localized: "watch.run.cue.step", defaultValue: "\(label), \(duration(seconds)).")
     }
 
+    /// Words for a distance step beginning: "Fast, 400 meters." or "Fast, 0.25 miles."
+    static func stepText(label: String, meters: Double, inMiles: Bool = false) -> String {
+        "\(label), \(distance(meters, inMiles: inMiles))."
+    }
+
+    /// Said near the end of a distance step: "100 meters to go." or "0.1 miles to go."
+    static func toGoText(inMiles: Bool) -> String {
+        "\(distance(toGoMeters(inMiles: inMiles), inMiles: inMiles)) to go."
+    }
+
+    /// How close to the end of a distance step the "to go" cue is said (100 m,
+    /// or a tenth of a mile), and the shortest step that gets one. The phone
+    /// uses the same figures (`stepToGoMeters`, `STEP_TO_GO_MIN_METERS`).
+    static func toGoMeters(inMiles: Bool) -> Double { inMiles ? 160.9344 : 100 }
+    static let toGoMinimumStep: Double = 300
+
+    /// "400 meters", "1.5 kilometers" from a kilometre up, or "0.25 miles".
+    private static func distance(_ meters: Double, inMiles: Bool) -> String {
+        if inMiles {
+            let miles = (meters / 1609.344 * 100).rounded() / 100
+            return miles == 1 ? "1 mile" : "\(WatchRunPlan.trimmed(miles, digits: 2)) miles"
+        }
+        if meters >= 1000 {
+            let km = (meters / 100).rounded() / 10
+            return km == 1 ? "1 kilometer" : "\(WatchRunPlan.trimmed(km, digits: 1)) kilometers"
+        }
+        let whole = Int(meters.rounded())
+        return whole == 1 ? "1 meter" : "\(whole) meters"
+    }
+
+    /// "Ten seconds. Next, Run." or, on the last step, "Ten seconds to go."
+    static func stepWarningText(next: String?) -> String {
+        next.map { "Ten seconds. Next, \($0)." } ?? "Ten seconds to go."
+    }
+
+    static let stepCountdownText = "Three. Two. One."
+
+    /// Said when the distance passes 5K, 10K, a half marathon or a marathon.
+    static func milestoneText(meters: Double) -> String {
+        if meters >= 42195 { return "Marathon distance. Incredible." }
+        if meters >= 21097.5 { return "Half marathon distance. Amazing." }
+        if meters >= 10000 { return "10K done. Strong effort." }
+        return "5K done. Nice work."
+    }
+
+    static let halfwayText = "Halfway there. Keep it up."
+    static let lastMinuteText = "One minute left. Finish strong."
+
+    /// The periodic update: the time, and outdoors the distance and average
+    /// pace. Indoors the distance is only an estimate, so just the time.
+    static func checkInText(seconds: TimeInterval, distanceMeters: Double?, usesMiles: Bool) -> String {
+        let time = duration(seconds)
+        guard let distanceMeters, distanceMeters >= 10 else { return "\(time) done." }
+        let unitMeters = usesMiles ? 1609.344 : 1000.0
+        let count = (distanceMeters / unitMeters * 10).rounded() / 10
+        let amount = count == count.rounded() ? String(Int(count)) : String(format: "%.1f", count)
+        let unitWord = usesMiles ? (count == 1 ? "mile" : "miles") : (count == 1 ? "kilometer" : "kilometers")
+        let pace = duration((seconds / distanceMeters * unitMeters).rounded())
+        return "\(time). \(amount) \(unitWord). Average pace \(pace) per \(usesMiles ? "mile" : "kilometer")."
+    }
+
     /// Words for a completed split. Durations are spelled out because a speech
     /// engine reads "5:24" as a time of day.
     static func splitText(number: Int, seconds: TimeInterval, usesMiles: Bool) -> String {

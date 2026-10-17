@@ -1,3 +1,4 @@
+import Button from '../components/ui/Button';
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
@@ -14,6 +15,8 @@ import { useScreenHeader } from '../hooks/useScreenHeader';
 import { useExerciseDashboard } from '../hooks/useExerciseDashboard';
 import { useTrainingConsistency } from '../hooks/useTrainingConsistency';
 import { useCardioSessions } from '../hooks/useCardioSessions';
+import { useRunningTrends } from '../hooks/useRunningTrends';
+import { usePaceZones } from '../hooks/usePaceZones';
 import { usePreferences } from '../hooks/usePreferences';
 import { useProfile } from '../hooks/useProfile';
 import { formatLocalizedNumber } from '../localization';
@@ -21,14 +24,17 @@ import { localizeExerciseTaxonomyValue } from '../localization/exerciseTaxonomy'
 import { useNativeIOSHeadersActive } from '../services/nativeTabBarPreference';
 import { useActiveWorkoutBarPadding } from '../components/ActiveWorkoutBar';
 import SegmentedControl from '../components/SegmentedControl';
-import Button from '../components/ui/Button';
 import ReportRangeControl from '../components/reports/ReportRangeControl';
 import { useAppPreferencesStore } from '../stores/appPreferencesStore';
 import type { ReportSectionKey } from '../constants/reports';
 import StatusView from '../components/StatusView';
 import CollapsibleSection from '../components/CollapsibleSection';
 import CardioSessionList from '../components/exerciseStats/CardioSessionList';
+import RunningTrendsCard from '../components/exerciseStats/RunningTrendsCard';
 import TrainingConsistencyCard from '../components/exerciseStats/TrainingConsistencyCard';
+import PaceZonesCard from '../components/exerciseStats/PaceZonesCard';
+import TrainingLoadCard from '../components/exerciseStats/TrainingLoadCard';
+import { useTrainingLoad } from '../hooks/useTrainingLoad';
 import MuscleFigure, {
   MUSCLE_HEAT_COLORS,
 } from '../components/exerciseStats/MuscleFigure';
@@ -132,7 +138,10 @@ const ExerciseStatisticsScreen: React.FC<ExerciseStatisticsScreenProps> = ({
 
   const { data, isLoading } = useExerciseDashboard(range, customRange);
   const consistency = useTrainingConsistency();
+  const trainingLoad = useTrainingLoad();
   const cardio = useCardioSessions(range, view === 'cardio', customRange);
+  const running = useRunningTrends(view === 'cardio');
+  const paceZones = usePaceZones(view === 'cardio');
   const { preferences } = usePreferences();
   const weightUnit: 'kg' | 'lbs' =
     preferences?.default_weight_unit === 'lbs' ||
@@ -178,8 +187,19 @@ const ExerciseStatisticsScreen: React.FC<ExerciseStatisticsScreenProps> = ({
   const hasActivity =
     (data?.keyStats.totalWorkouts ?? 0) > 0 || setRows.length > 0;
 
+  // A fixed 28-day window, so it still has something to say when the selected
+  // range holds no workouts.
+  const loadCard = isSectionShown('exercise.load') ? (
+    <TrainingLoadCard
+      data={trainingLoad.load}
+      isLoading={trainingLoad.isLoading}
+      isError={trainingLoad.isError}
+    />
+  ) : null;
+
   const renderCardio = () => (
     <>
+      {' '}
       <Button
         variant="outline"
         accessibilityRole="button"
@@ -189,56 +209,74 @@ const ExerciseStatisticsScreen: React.FC<ExerciseStatisticsScreenProps> = ({
           defaultValue: 'Cooper Run Test Attempts',
         })}
       </Button>
-      {cardio.isLoading ? (
-        <StatusView inline loading />
-      ) : cardio.sessions.length === 0 ? (
-        cardio.isError ? (
-          <StatusView
-            inline
-            icon="alert-circle"
-            iconTone="danger"
-            title={t('exerciseStatistics.cardio.loadFailed', {
-              defaultValue: 'Failed to load cardio sessions',
-            })}
-            subtitle={t('common.connectionRetry', {
-              defaultValue: 'Please check your connection and try again.',
-            })}
-          />
-        ) : (
-          <StatusView
-            inline
-            icon="exercise-running"
-            iconTone="muted"
-            title={t('exerciseStatistics.cardio.empty', {
-              defaultValue: 'No cardio workouts in this range',
-            })}
-          />
-        )
-      ) : (
-        <>
-          <Text className="text-text-secondary text-xs mb-3">
-            {t('exerciseStatistics.cardio.hint', {
-              defaultValue: 'Tap a workout for its route and heart rate.',
-            })}
-          </Text>
-          <CardioSessionList
-            sessions={cardio.sessions}
-            distanceUnit={cardio.distanceUnit}
-            today={getTodayDate()}
-            hasMore={cardio.hasNextPage}
-            isLoadingMore={cardio.isFetchingNextPage}
-            onLoadMore={() => void cardio.fetchNextPage()}
-            onOpen={(session) =>
-              navigation.navigate('CardioSession', {
-                session,
-                distanceUnit: cardio.distanceUnit,
-              })
-            }
-          />
-        </>
-      )}
+      {renderCardioContent()}
     </>
   );
+  const renderCardioContent = () => {
+    if (cardio.isLoading) {
+      return <StatusView inline loading />;
+    }
+    if (cardio.sessions.length === 0) {
+      return cardio.isError ? (
+        <StatusView
+          inline
+          icon="alert-circle"
+          iconTone="danger"
+          title={t('exerciseStatistics.cardio.loadFailed', {
+            defaultValue: 'Failed to load cardio sessions',
+          })}
+          subtitle={t('common.connectionRetry', {
+            defaultValue: 'Please check your connection and try again.',
+          })}
+        />
+      ) : (
+        <StatusView
+          inline
+          icon="exercise-running"
+          iconTone="muted"
+          title={t('exerciseStatistics.cardio.empty', {
+            defaultValue: 'No cardio workouts in this range',
+          })}
+        />
+      );
+    }
+    return (
+      <>
+        {running.trends && running.trends.totalRuns > 0 ? (
+          <RunningTrendsCard
+            trends={running.trends}
+            raceTimes={running.raceTimes}
+            distanceUnit={cardio.distanceUnit}
+          />
+        ) : null}
+        {paceZones.result ? (
+          <PaceZonesCard
+            result={paceZones.result}
+            distanceUnit={cardio.distanceUnit}
+          />
+        ) : null}
+        <Text className="text-text-secondary text-xs mb-3">
+          {t('exerciseStatistics.cardio.hint', {
+            defaultValue: 'Tap a workout for its route and heart rate.',
+          })}
+        </Text>
+        <CardioSessionList
+          sessions={cardio.sessions}
+          distanceUnit={cardio.distanceUnit}
+          today={getTodayDate()}
+          hasMore={cardio.hasNextPage}
+          isLoadingMore={cardio.isFetchingNextPage}
+          onLoadMore={() => void cardio.fetchNextPage()}
+          onOpen={(session) =>
+            navigation.navigate('CardioSession', {
+              session,
+              distanceUnit: cardio.distanceUnit,
+            })
+          }
+        />
+      </>
+    );
+  };
 
   const renderBody = () => {
     if (isLoading) {
@@ -263,18 +301,21 @@ const ExerciseStatisticsScreen: React.FC<ExerciseStatisticsScreenProps> = ({
     }
     if (!hasActivity) {
       return (
-        <StatusView
-          inline
-          icon="exercise-weights"
-          iconTone="muted"
-          title={t('exerciseStatistics.states.empty', {
-            defaultValue: 'No workouts in this range',
-          })}
-          subtitle={t('exerciseStatistics.states.emptyHint', {
-            defaultValue:
-              'Log a workout and its sets will show up here by muscle.',
-          })}
-        />
+        <>
+          <StatusView
+            inline
+            icon="exercise-weights"
+            iconTone="muted"
+            title={t('exerciseStatistics.states.empty', {
+              defaultValue: 'No workouts in this range',
+            })}
+            subtitle={t('exerciseStatistics.states.emptyHint', {
+              defaultValue:
+                'Log a workout and its sets will show up here by muscle.',
+            })}
+          />
+          {loadCard}
+        </>
       );
     }
 
@@ -474,6 +515,8 @@ const ExerciseStatisticsScreen: React.FC<ExerciseStatisticsScreenProps> = ({
             ) : null}
           </View>
         ) : null}
+
+        {loadCard}
 
         {isSectionShown('exercise.consistency') ? (
           <TrainingConsistencyCard

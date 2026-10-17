@@ -2235,6 +2235,25 @@
       "processed2": "Processed: <processed>{{processed}}</processed> / <total>{{total}}</total>",
       "importedUpdated": "Imported: <imported>{{imported}}</imported> | Updated: <updated>{{updated}}</updated>"
     },
+    "livsmedelsverket": {
+      "dialogTitle": "Swedish Food Agency (Livsmedelsverket) Bulk Import",
+      "dialogDescription": "Download the official Swedish Food Composition Database (~2,600 foods) into your food library for offline and instant search.",
+      "importing": "Importing foods...",
+      "progressText": "{{processed}} / {{total}} foods processed ({{imported}} imported, {{updated}} updated)",
+      "completed": "Last import completed: {{imported}} imported, {{updated}} updated ({{total}} total).",
+      "failed": "Import failed: ",
+      "language": "Language",
+      "syncMode": "Sync Mode",
+      "libraryOnly": "Library foods only (recommended)",
+      "libraryAndPast": "Library foods and refresh past diary entries",
+      "testMode": "Test Mode (import only 10 foods to verify)",
+      "attributionText": "Data provided by the Swedish Food Agency (Livsmedelsverket) licensed under <1>Creative Commons Attribution 4.0 (CC BY 4.0)</1>.",
+      "clearLibrary": "Purge Library Foods",
+      "startImport": "Start Import",
+      "confirmDeleteTitle": "Purge Livsmedelsverket Library Foods?",
+      "confirmDeleteMessage": "This will permanently delete all Swedish Food Agency items from your personal food library. Past food diary entries logged from these items will be preserved.",
+      "providerCardLicence": "Contains information published by the Swedish Food Agency (Livsmedelsverket) licensed under <1>Creative Commons Attribution 4.0 (CC BY 4.0)</1>. Supported languages: <3>Swedish (sv)</3> and <5>English (en)</5>. <7>Swedish Food Composition Database</7>"
+    },
     "foodExerciseDataProviders": {
       "title": "Food & Exercise Data Providers",
       "description": "Configure external food and exercise data sources and synchronize data with Garmin Connect",
@@ -5522,6 +5541,7 @@
     "triceps": "Triceps"
   },
   "equipment": {
+    "title": "Equipment",
     "barbell": "Barbell",
     "dumbbell": "Dumbbell",
     "kettlebells": "Kettlebells",
@@ -7757,6 +7777,26 @@
       "min": "{{durationMinutes}} min"
     },
     "cardio": {
+      "trends": {
+        "title": "Running, last 12 weeks",
+        "thisWeek": "This week",
+        "thisWeekAbove": "This week, {{percent}}% above your recent average",
+        "thisWeekBelow": "This week, {{percent}}% below your recent average",
+        "longestRun": "Longest run",
+        "efficiency": "Efficiency",
+        "efficiencyHint": "Efficiency is distance per heartbeat on runs of 20 minutes or more, earlier weeks against recent ones. Higher means fitter at the same effort.",
+        "raceTimes": "Race time estimates",
+        "race5k": "5K",
+        "race10k": "10K",
+        "raceHalf": "Half marathon",
+        "raceMarathon": "Marathon",
+        "basis1k": "1K",
+        "basis1mi": "mile",
+        "basis15k": "15K",
+        "yourRecord": "your record",
+        "fromBest": "from your {{distance}}",
+        "raceTimesHint": "Estimates scale your best efforts to each distance. They run optimistic for distances you have not trained for."
+      },
       "sessionsTitle": "Sessions",
       "sessionsHint": "Tap a workout for its route and heart rate.",
       "noSessions": "No cardio workouts in this date range.",
@@ -9256,5 +9296,45 @@
     "tagInput": {
       "removeTag": "Remove {{tag}}"
     }
+  },
+  "shoes": {
+    "title": "Shoes",
+    "subtitle": "Keep track of the mileage on each pair of running shoes.",
+    "shoe": "Shoe",
+    "noShoe": "No shoe",
+    "addShoe": "Add shoe",
+    "editShoe": "Edit shoe",
+    "formDescription": "Track the mileage on a pair and get a nudge when it is time to replace it.",
+    "name": "Name",
+    "brand": "Brand",
+    "model": "Model",
+    "nickname": "Nickname",
+    "purchaseDate": "Purchase date",
+    "purchasePrice": "Price",
+    "startingDistance": "Starting mileage ({{unit}})",
+    "retireAt": "Retire at ({{unit}})",
+    "useAsDefault": "Use as my default pair",
+    "default": "Default pair",
+    "retired": "Retired",
+    "retiredSection": "Retired",
+    "wornOut": "Worn out",
+    "mileage": "Mileage",
+    "ofLimit": "of {{limit}} {{unit}}",
+    "runCount_one": "{{count}} run",
+    "runCount_other": "{{count}} runs",
+    "lastUsed": "last used {{date}}",
+    "retire": "Retire",
+    "retirePrompt": "This pair has reached its limit. Retire it?",
+    "reactivate": "Reactivate",
+    "empty": "No shoes yet. Add a pair, then pick it on a run to start counting its mileage.",
+    "deleteTitle": "Delete this shoe?",
+    "deleteDescription": "Runs logged with this pair stay in your diary, but they will no longer be linked to a shoe.",
+    "added": "Shoe added.",
+    "updated": "Shoe updated.",
+    "deleted": "Shoe deleted.",
+    "failedToLoad": "Failed to load shoes.",
+    "failedToSave": "Failed to save shoe.",
+    "failedToDelete": "Failed to delete shoe.",
+    "failedToAssign": "Failed to update the shoe for this run."
   }
 }

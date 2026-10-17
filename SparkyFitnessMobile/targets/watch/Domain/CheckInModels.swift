@@ -475,6 +475,8 @@ struct WatchContext: Codable, Equatable {
     /// The phone's "Auto-pause" switch, the default for a run begun on the
     /// wrist. Nil (an older phone build) reads as on.
     var runAutoPause: Bool? = nil
+    /// Minutes between spoken check-ins, the default for a run begun on the wrist.
+    var runCheckInMinutes: Int? = nil
     /// The pace range last used on the phone, in seconds per km, and the
     /// heart-rate range; the start screen offers them as a starting point.
     /// An alert is only ever on for the run it was chosen for.

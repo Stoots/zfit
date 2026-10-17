@@ -82,6 +82,11 @@ import {
   getProviderCategory,
   resolveFoodProviderId,
 } from '@/utils/settings.ts';
+import {
+  isPublicFoodProvider,
+  foodProviderNeedsDetailFetch,
+  type FoodProviderType,
+} from '@workspace/shared';
 
 // Stable empty fallback so the providers reference does not change each render
 // (an inline [] default would re-run the online search effect during loading).
@@ -764,6 +769,25 @@ const EnhancedFoodSearch = ({
           hasMore: data.pagination?.hasMore ?? false,
         };
       },
+      livsmedelsverket: async (term, id, _provider, page) => {
+        const data = await queryClient.fetchQuery(
+          searchFoodsV2Options(
+            'livsmedelsverket',
+            term,
+            id,
+            undefined,
+            undefined,
+            page
+          )
+        );
+        return {
+          items: data.foods.map((food: Food) => ({
+            provider_type: 'livsmedelsverket' as const,
+            food,
+          })),
+          hasMore: data.pagination?.hasMore ?? false,
+        };
+      },
     }),
     [queryClient, autoScaleOpenFoodFactsImports, itemDisplayLimit]
   );
@@ -955,17 +979,8 @@ const EnhancedFoodSearch = ({
           return;
         }
 
-        type BarcodeProviderType =
-          | 'openfoodfacts'
-          | 'usda'
-          | 'fatsecret'
-          | 'mealie'
-          | 'tandoor'
-          | 'yazio'
-          | 'norish'
-          | 'swissfood';
         const mapped: ExternalResultWrapper = {
-          provider_type: data.source as BarcodeProviderType,
+          provider_type: data.source as FoodProviderType,
           food: data.food,
         } as ExternalResultWrapper;
 
@@ -1071,22 +1086,14 @@ const EnhancedFoodSearch = ({
     providerIdOverride?: string
   ) => {
     const needsDetailFetch =
-      (food.provider_type === 'fatsecret' ||
-        food.provider_type === 'usda' ||
-        food.provider_type === 'yazio' ||
-        food.provider_type === 'swissfood' ||
-        food.provider_type === 'canadian-nutrient-file') &&
+      foodProviderNeedsDetailFetch(food.provider_type) &&
       food.provider_external_id;
 
     if (needsDetailFetch) {
       // In All Providers mode searchProviderId isn't set, so callers pass the
       // result's own provider id to fetch full nutrients with the right creds.
       const providerId = providerIdOverride || searchProviderId || undefined;
-      if (
-        !providerId &&
-        food.provider_type !== 'swissfood' &&
-        food.provider_type !== 'canadian-nutrient-file'
-      ) {
+      if (!providerId && !isPublicFoodProvider(food.provider_type)) {
         // No provider credentials available — data is already complete (barcode flow)
         setEditingProduct(food);
         setShowEditDialog(true);

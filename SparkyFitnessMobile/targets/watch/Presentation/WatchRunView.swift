@@ -43,10 +43,10 @@ struct WatchRunView: View {
                 ? { (now: Date) -> GpsSignal in GpsSignal(accuracy: run.gpsAccuracy, at: run.gpsAccuracyAt, now: now) }
                 : nil,
             banner: { _ in
-                if let plan = run.plan, let position = plan.position(at: run.elapsed) {
+                if run.plan != nil, let position = run.currentPlanPosition() {
                     CardioPlanStep(
                         label: position.label,
-                        remaining: position.finished ? nil : RecordingState.clock(position.remaining),
+                        remaining: position.finished ? nil : (position.remainingMeters.map { WatchRunPlan.distance($0, inMiles: position.inMiles) } ?? RecordingState.clock(position.remaining)),
                         next: position.next
                     )
                 }

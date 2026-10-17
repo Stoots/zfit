@@ -1,5 +1,6 @@
-import type { WorkoutPlanAssignmentSetInput } from '@workspace/shared';
 import type {
+  WorkoutPlanAssignmentSetInput,
+  WorkoutPlanPresetSnapshot,
   WorkoutPlanAssignmentResponse,
   WorkoutPlanResponse,
   WorkoutPlanSessionResponse,
@@ -21,6 +22,7 @@ export interface WorkoutPlanDraftAssignment {
   session_index: number | null;
   workout_preset_id: string | null;
   workout_preset_name: string | null;
+  preset_snapshot?: WorkoutPlanPresetSnapshot;
   /**
    * A single-exercise assignment made elsewhere (the web app). Kept as it is
    * and sent back unchanged, since this form only adds saved workouts.
@@ -68,6 +70,7 @@ export interface SaveWorkoutPlanPayload {
     session_name: string | null;
     sort_order: number;
     workout_preset_id?: string;
+    preset_snapshot?: WorkoutPlanPresetSnapshot;
     exercise_id?: string;
     sets: WorkoutPlanAssignmentSetInput[];
   }[];

@@ -49,6 +49,8 @@ Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded her
 
 #### Developer tooling
 
+- Sync upstream through #2944 on 2026-10-17, retaining fork Training Programs, Cardio Tests, Training analysis and the web redesign.
+
 - Retire the completed one-off Program consolidation tool and its acceptance job (#50); retain the historical journal, migration, schema and owner-only RLS coverage.
 
 - Add a warm-cache deployment smoke command that verifies the browser's loaded frontend asset and live upcoming-workout order, with private JSON/screenshot evidence and CI acceptance checks (`agent-docs/deployment-smoke.md`).

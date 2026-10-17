@@ -81,7 +81,7 @@ it('keeps negative and zero budgets, energy units and target bands readable with
     />
   );
   expect(screen.getByText('-125')).toBeInTheDocument();
-  expect(screen.getByText('kJ remaining')).toBeInTheDocument();
+  expect(screen.getByText('remaining kJ')).toBeInTheDocument();
   expect(screen.getByText('target 7500–8000')).toBeInTheDocument();
   expect(container.querySelector('svg')).toBeNull();
   rerender(

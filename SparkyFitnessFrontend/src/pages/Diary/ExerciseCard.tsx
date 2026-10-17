@@ -973,7 +973,7 @@ const ExerciseCard = ({
         {/* Edit Exercise Entry Dialog */}
         {editingEntry && (
           <EditExerciseEntryDialog
-            key={editingEntry ? 'open' : 'close'}
+            key={editingEntry.id}
             entry={editingEntry as ExerciseEntry}
             open={!!editingEntry}
             onOpenChange={(open) => {

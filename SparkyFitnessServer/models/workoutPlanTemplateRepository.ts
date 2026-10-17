@@ -697,7 +697,10 @@ async function updateWorkoutPlanTemplate(
       invalid('Changing schedule_type requires providing sessions.');
     if (
       previous.schedule_type === 'weekly' &&
-      previous.entry_mode === 'prefill'
+      previous.entry_mode === 'prefill' &&
+      (input.is_active === false ||
+        input.entry_mode === 'prompt' ||
+        scheduleType !== 'weekly')
     ) {
       await deleteDisposablePrefillEntries(
         client,

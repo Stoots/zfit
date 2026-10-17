@@ -79,7 +79,7 @@ const ExerciseEntryDisplay: React.FC<ExerciseEntryDisplayProps> = ({
       className: 'bg-primary/10 text-primary bg-primary/10 text-primary',
     },
     nutritionix: {
-      label: t('diary.exerciseEntryDisplay.nutritionix', 'Nutritionix'),
+      label: 'Nutritionix',
       className: 'bg-warning/10 text-warning bg-warning/10 text-warning',
     },
   };

@@ -2236,7 +2236,9 @@ private struct PlanPlaceView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: WatchStyle.s(6)) {
-                ForEach([WatchRunPlace.outdoor, .indoor], id: \.self) { place in
+                // Distance steps follow the watch's GPS distance, so a plan with
+                // them is outdoor only.
+                ForEach(plan.hasDistanceSteps ? [WatchRunPlace.outdoor] : [.outdoor, .indoor], id: \.self) { place in
                     Button {
                         Haptics.tap()
                         onChoose(plan.kind, place, plan)
@@ -2251,6 +2253,11 @@ private struct PlanPlaceView: View {
                             .contentShape(WatchStyle.shape)
                     }
                     .buttonStyle(.plain)
+                }
+                if plan.hasDistanceSteps {
+                    Text(String(localized: "watch.cardio.distanceOutdoorOnly", defaultValue: "Distance steps need GPS, so this plan is outdoor only."))
+                        .font(.system(size: WatchStyle.s(11)))
+                        .foregroundStyle(.secondary)
                 }
             }
             .padding(.horizontal, WatchStyle.s(2))

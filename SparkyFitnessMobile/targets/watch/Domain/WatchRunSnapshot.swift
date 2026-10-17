@@ -28,6 +28,9 @@ struct WatchRunSnapshot: Codable {
     var distanceSeries: [[Double]]?
     /// The plan being followed, so a relaunch keeps following it. Optional for older snapshots.
     var plan: WatchRunPlan?
+    /// Where the plan's current step began. Optional for older snapshots,
+    /// whose plans were all timed and are placed again from `elapsed`.
+    var planCursor: WatchRunPlan.Cursor?
     /// Auto-pause and voice cues as last set. Optional for older snapshots.
     var settings: WatchRunSettings?
 

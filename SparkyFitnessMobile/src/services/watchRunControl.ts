@@ -20,6 +20,8 @@ export async function startRunOnWatch(options: {
   /** The Record screen's switches for this run. */
   autoPause: boolean;
   voiceCues: boolean;
+  /** Minutes between spoken check-ins; 0 or absent for none. */
+  checkInMinutes?: number;
   /** A pace range to stay inside, in seconds per km. */
   paceBand?: { minSecondsPerKm: number; maxSecondsPerKm: number };
   /** A heart-rate range to stay inside. */
@@ -35,6 +37,9 @@ export async function startRunOnWatch(options: {
     requestedAt,
     autoPause: options.autoPause,
     voiceCues: options.voiceCues,
+    ...(options.voiceCues && (options.checkInMinutes ?? 0) > 0
+      ? { checkInMinutes: options.checkInMinutes }
+      : {}),
     ...(options.paceBand
       ? {
           paceMin: options.paceBand.minSecondsPerKm,

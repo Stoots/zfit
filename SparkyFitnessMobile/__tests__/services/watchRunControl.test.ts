@@ -65,6 +65,26 @@ it('sends the pace range with the start request when one is set', async () => {
   expect(second).not.toHaveProperty('paceMin');
 });
 
+it('sends the check-in interval only with voice cues on', async () => {
+  await startRunOnWatch({
+    kind: 'run',
+    place: 'outdoor',
+    autoPause: true,
+    voiceCues: true,
+    checkInMinutes: 10,
+  });
+  await startRunOnWatch({
+    kind: 'run',
+    place: 'outdoor',
+    autoPause: true,
+    voiceCues: false,
+    checkInMinutes: 10,
+  });
+  const [first, second] = module.startRun.mock.calls.map(([r]) => r);
+  expect(first).toMatchObject({ checkInMinutes: 10 });
+  expect(second).not.toHaveProperty('checkInMinutes');
+});
+
 it('sends a switch change for the run with a fresh control id', async () => {
   await sendRunControl('r1', 'autoPauseOff');
   await sendRunControl('r1', 'autoPauseOff');

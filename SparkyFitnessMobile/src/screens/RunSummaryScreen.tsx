@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import Toast from 'react-native-toast-message';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Button from '../components/ui/Button';
 import FormInput from '../components/FormInput';
 import Icon from '../components/Icon';
+import EffortScale from '../components/recording/EffortScale';
 import RouteMap from '../components/exerciseStats/RouteMap';
 import PaceChart from '../components/exerciseStats/PaceChart';
 import { paceSeriesFromDistance } from '../utils/cardioSession';
@@ -396,50 +397,11 @@ const RunSummaryScreen: React.FC<Props> = ({ navigation, route }) => {
             </Text>
             {summary.program.rate ? (
               <View className="mt-3">
-                <Text className="text-text-primary text-sm font-semibold mb-2">
-                  {t('runSummary.effortQuestion', {
-                    defaultValue: 'How hard was that?',
-                  })}
-                </Text>
-                <View className="flex-row flex-wrap" style={{ gap: 6 }}>
-                  {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
-                    <Pressable
-                      key={n}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: rating === n }}
-                      accessibilityLabel={t('runSummary.effortA11y', {
-                        defaultValue: 'Effort {{rating}} of 10',
-                        rating: n,
-                      })}
-                      disabled={moved != null}
-                      onPress={() => rate(n)}
-                      className={`h-10 rounded-lg items-center justify-center ${
-                        rating === n ? 'bg-accent-primary' : 'bg-raised'
-                      }`}
-                      style={{ width: '17.5%' }}
-                    >
-                      <Text
-                        className={`text-base font-semibold ${
-                          rating === n ? 'text-white' : 'text-text-primary'
-                        }`}
-                      >
-                        {n}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-                <View className="flex-row justify-between mt-1">
-                  <Text className="text-text-muted text-xs">
-                    {t('runSummary.effortLow', {
-                      defaultValue: '1 = very easy',
-                    })}
-                  </Text>
-                  <Text className="text-text-muted text-xs">
-                    {t('runSummary.effortHigh', {
-                      defaultValue: '10 = all out',
-                    })}
-                  </Text>
-                </View>
+                <EffortScale
+                  rating={rating}
+                  disabled={moved != null}
+                  onSelect={rate}
+                />
                 {moved ? (
                   <Text className="text-text-secondary text-sm mt-2">
                     {moved === 'repeat'

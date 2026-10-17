@@ -80,6 +80,8 @@ import {
   toSetTableModality,
 } from '@/constants/exercises';
 import { CardioLog } from '../Exercises/CardioLog';
+import { ShoeSelect } from '@/components/Shoes/ShoeSelect';
+import { useAssignShoeMutation } from '@/hooks/Shoes/useShoes';
 import { cn } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
 import {
@@ -317,6 +319,7 @@ const EditExerciseEntryDialog = ({
       ? Number(convertDistance(entry.distance, 'km', distanceUnit).toFixed(1))
       : ''
   );
+  const [shoeId, setShoeId] = useState<string | null>(entry.shoe_id ?? null);
   const [avgHeartRateInput, setAvgHeartRateInput] = useState<number | ''>(
     entry.avg_heart_rate != null ? entry.avg_heart_rate : ''
   );
@@ -568,6 +571,7 @@ const EditExerciseEntryDialog = ({
 
   const { mutateAsync: updateExerciseEntry, isPending: loading } =
     useUpdateExerciseEntryMutation();
+  const { mutateAsync: assignShoe } = useAssignShoeMutation();
   const queryClient = useQueryClient();
 
   const handleCopyRawData = async () => {
@@ -833,6 +837,10 @@ const EditExerciseEntryDialog = ({
         },
       });
 
+      if (isCardio && shoeId !== (entry.shoe_id ?? null)) {
+        await assignShoe({ exerciseEntryId: entry.id, shoeId });
+      }
+
       info(
         loggingLevel,
         'EditExerciseEntryDialog: saved successfully:',
@@ -905,6 +913,19 @@ const EditExerciseEntryDialog = ({
               className="bg-muted"
             />
           </div>
+
+          {isCardio && (
+            <div className="space-y-2">
+              <Label htmlFor="exercise-entry-shoe">
+                {t('shoes.shoe', 'Shoe')}
+              </Label>
+              <ShoeSelect
+                id="exercise-entry-shoe"
+                value={shoeId}
+                onChange={setShoeId}
+              />
+            </div>
+          )}
 
           {/* ── Cardio log or strength sets ── */}
           {cardioForm ? (

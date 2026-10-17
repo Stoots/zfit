@@ -49,6 +49,8 @@ BEGIN
     'mood_entries',
     'mindfulness_sessions',
     'run_programs',
+    'shoes',
+    'custom_run_programs',
     'onboarding_data',
     'onboarding_status',
     'openfoodfacts_product_read_rate_limit',
@@ -705,6 +707,8 @@ SELECT create_checkin_policy('custom_categories');
 SELECT create_checkin_policy('custom_measurements');
 SELECT create_diary_policy('exercise_entries');
 -- is_weekly_prefill changes no access boundary: it inherits exercise_entries diary RLS.
+-- Running shoes belong to the exercise diary, so diary delegates manage them.
+SELECT create_diary_policy('shoes');
 -- Custom policy for exercise_entries to allow access if linked to an owned exercise_preset_entry
 CREATE POLICY select_exercise_preset_entry_linked_policy ON public.exercise_entries FOR SELECT TO PUBLIC
 USING (
@@ -779,6 +783,7 @@ SELECT create_owner_policy('pregnancy_photos');
 SELECT create_owner_policy('pregnancy_checklist_state');
 SELECT create_owner_policy('health_appointments');
 SELECT create_owner_policy('run_programs');
+SELECT create_owner_policy('custom_run_programs');
 
 -- User-defined mood tags. Mood is check-in data (mood_entries uses the check-in
 -- policy), and custom check-in definitions like custom_categories are shared with

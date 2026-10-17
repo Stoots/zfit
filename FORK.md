@@ -28,7 +28,7 @@ The fork adds a narrow `Promise.withResolvers` restriction in upstream-owned `Sp
 
 ## Syncing upstream
 
-The fork was 184 commits behind upstream as of 2026-10-12.
+Synced through upstream #2944 on 2026-10-17.
 
 ```bash
 git remote add upstream https://github.com/CodeWithCJ/SparkyFitness.git   # if missing

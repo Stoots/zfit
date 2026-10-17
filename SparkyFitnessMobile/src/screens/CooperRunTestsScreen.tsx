@@ -20,13 +20,13 @@ import {
   CHART_LABEL_FONT_SIZE,
   formatChartYLabel,
   formatXLabel30d90d,
-  makeChartFont,
+  useChartFont,
 } from '../components/charts/chartFormatting';
 import LineSeriesMark from '../components/charts/LineSeriesMark';
-const chartFont = makeChartFont(CHART_LABEL_FONT_SIZE);
 
 const CooperRunTestsScreen: React.FC = () => {
   const { t, i18n } = useTranslation();
+  const chartFont = useChartFont(CHART_LABEL_FONT_SIZE);
   const insets = useSafeAreaInsets();
   const usesNativeHeader = useNativeIOSHeadersActive();
   const calendarRef = useRef<CalendarSheetRef>(null);

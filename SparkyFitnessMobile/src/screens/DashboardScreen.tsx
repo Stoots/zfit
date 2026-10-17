@@ -45,6 +45,7 @@ import { MindfulnessCard } from '../components/mindfulness/MindfulnessCard';
 import SymptomsCard from '../components/SymptomsCard';
 import MoodCard from '../components/mood/MoodCard';
 import ProgressPhotosCard from '../components/ProgressPhotosCard';
+import TrainingLoadDashboardCard from '../components/TrainingLoadDashboardCard';
 import SegmentedControl, { type Segment } from '../components/SegmentedControl';
 import StatusView from '../components/StatusView';
 import { NUTRIENT_META, getNutrientLabel } from '../constants/nutrients';
@@ -65,7 +66,10 @@ import {
   useWidgetSync,
 } from '../hooks';
 import { useCheckInPhotoDates } from '../hooks/useCheckInPhotos';
-import { moodEntriesRootQueryKey } from '../hooks/queryKeys';
+import {
+  moodEntriesRootQueryKey,
+  trainingLoadRootQueryKey,
+} from '../hooks/queryKeys';
 import { useHeaderActionColors } from '../hooks/useHeaderActionColors';
 import {
   useMindfulnessDay,
@@ -384,6 +388,9 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) => {
   const mindfulnessCardVisible = useAppPreferencesStore(
     (s) => s.mindfulnessCardVisible
   );
+  const trainingLoadCardVisible = useAppPreferencesStore(
+    (s) => s.trainingLoadCardVisible
+  );
 
   const { sessions: mindfulSessions, totalMindfulMinutes } =
     useMindfulnessDay(selectedDate);
@@ -425,6 +432,10 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) => {
       queryClient.invalidateQueries({ queryKey: ['mindfulness'] }),
       // MoodCard owns its own query.
       queryClient.invalidateQueries({ queryKey: moodEntriesRootQueryKey }),
+      // TrainingLoadDashboardCard owns its query, and a pull is not a focus.
+      trainingLoadCardVisible
+        ? queryClient.invalidateQueries({ queryKey: trainingLoadRootQueryKey })
+        : Promise.resolve(),
     ]);
     setRefreshing(false);
   }, [
@@ -435,6 +446,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) => {
     refetchCustomNutrients,
     refetchNutrientPrefs,
     refetchCaffeine,
+    trainingLoadCardVisible,
     queryClient,
   ]);
 
@@ -882,6 +894,13 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) => {
                     onPageSelected={setChartPage}
                   />
                 </View>
+              ) : null;
+            case 'trainingLoad':
+              return trainingLoadCardVisible ? (
+                <TrainingLoadDashboardCard
+                  key="trainingLoad"
+                  navigation={navigation}
+                />
               ) : null;
             case 'mindfulness':
               return mindfulnessCardVisible ? (

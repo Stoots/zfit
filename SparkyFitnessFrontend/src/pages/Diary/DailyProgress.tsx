@@ -471,8 +471,11 @@ const DailyProgress = ({
                     <span>{display.eaten}</span>
                   </div>
                   <div className="text-xs text-muted-foreground whitespace-nowrap">
-                    {getEnergyUnitString(energyUnit)}{' '}
-                    {t('exercise.dailyProgress.eaten', 'eaten')}
+                    {t(
+                      'exercise.dailyProgress.eaten2',
+                      '{{energyUnitString}} eaten',
+                      { energyUnitString: getEnergyUnitString(energyUnit) }
+                    )}
                   </div>
                 </div>
 
@@ -486,8 +489,13 @@ const DailyProgress = ({
                           <span>{display.burnedTotal}</span>
                         </div>
                         <div className="text-xs text-muted-foreground whitespace-nowrap">
-                          {getEnergyUnitString(energyUnit)}{' '}
-                          {t('exercise.dailyProgress.burned', 'burned')}
+                          {t(
+                            'exercise.dailyProgress.burned2',
+                            '{{energyUnitString}} burned',
+                            {
+                              energyUnitString: getEnergyUnitString(energyUnit),
+                            }
+                          )}
                         </div>
                       </div>
                     </TooltipTrigger>
@@ -543,16 +551,17 @@ const DailyProgress = ({
                       {!!bmr && (
                         <p>
                           {t(
-                            'exercise.dailyProgress.bmrCalories',
-                            'BMR: {{bmr}} {{energyUnit}}',
+                            bmrSource === 'measured'
+                              ? 'exercise.dailyProgress.bmrMeasured'
+                              : 'exercise.dailyProgress.bmrAlgorithm',
+                            bmrSource === 'measured'
+                              ? 'BMR: {{bmr}} {{energyUnit}} (Measured)'
+                              : 'BMR: {{bmr}} {{energyUnit}} (Algorithm)',
                             {
                               bmr: display.bmr,
                               energyUnit: getEnergyUnitString(energyUnit),
                             }
                           )}
-                          {bmrSource === 'measured'
-                            ? ` (${t('exercise.dailyProgress.bmrSourceMeasured', 'Measured')})`
-                            : ` (${t('exercise.dailyProgress.bmrSourceAlgorithm', 'Algorithm')})`}
                         </p>
                       )}
 
@@ -585,8 +594,11 @@ const DailyProgress = ({
                     </span>
                   </div>
                   <div className="text-xs text-muted-foreground whitespace-nowrap">
-                    {getEnergyUnitString(energyUnit)}{' '}
-                    {t('exercise.dailyProgress.goal', 'goal')}
+                    {t(
+                      'exercise.dailyProgress.goal2',
+                      '{{energyUnitString}} goal',
+                      { energyUnitString: getEnergyUnitString(energyUnit) }
+                    )}
                   </div>
                 </div>
               </div>
@@ -645,16 +657,17 @@ const DailyProgress = ({
                   {!!bmr && (
                     <div className="text-xs text-primary">
                       {t(
-                        'exercise.dailyProgress.bmrCalories',
-                        'BMR: {{bmr}} {{energyUnit}}',
+                        bmrSource === 'measured'
+                          ? 'exercise.dailyProgress.bmrMeasured'
+                          : 'exercise.dailyProgress.bmrAlgorithm',
+                        bmrSource === 'measured'
+                          ? 'BMR: {{bmr}} {{energyUnit}} (Measured)'
+                          : 'BMR: {{bmr}} {{energyUnit}} (Algorithm)',
                         {
                           bmr: display.bmr,
                           energyUnit: getEnergyUnitString(energyUnit),
                         }
                       )}
-                      {bmrSource === 'measured'
-                        ? ` (${t('exercise.dailyProgress.bmrSourceMeasured', 'Measured')})`
-                        : ` (${t('exercise.dailyProgress.bmrSourceAlgorithm', 'Algorithm')})`}
                     </div>
                   )}
                 </div>

@@ -86,6 +86,7 @@ enum ContextPayloadMapper {
             stepGoal: (payload["stepGoal"] as? NSNumber)?.intValue ?? previous.stepGoal,
             runVoiceCues: payload["runVoiceCues"] as? Bool ?? previous.runVoiceCues,
             runAutoPause: payload["runAutoPause"] as? Bool ?? previous.runAutoPause,
+            runCheckInMinutes: (payload["runCheckInMinutes"] as? NSNumber)?.intValue ?? previous.runCheckInMinutes,
             runPaceBand: WatchPaceBand.normalized(
                 min: (payload["runPaceMinSecondsPerKm"] as? NSNumber)?.doubleValue,
                 max: (payload["runPaceMaxSecondsPerKm"] as? NSNumber)?.doubleValue
@@ -179,6 +180,7 @@ enum ContextPayloadMapper {
                 let label = step["label"] as? String,
                 let seconds = (step["seconds"] as? NSNumber)?.doubleValue, seconds > 0
             else { return nil }
+            let meters = (step["meters"] as? NSNumber)?.doubleValue
             return WatchRunPlan.Step(
                 label: label,
                 seconds: seconds,
@@ -189,7 +191,9 @@ enum ContextPayloadMapper {
                 heartRate: WatchHeartRateBand.normalized(
                     min: (step["hrMin"] as? NSNumber)?.doubleValue,
                     max: (step["hrMax"] as? NSNumber)?.doubleValue
-                )
+                ),
+                meters: meters.flatMap { $0 > 0 ? $0 : nil },
+                unit: (step["unit"] as? String) == "mi" ? "mi" : nil
             )
         }
         guard !steps.isEmpty else { return nil }
@@ -199,7 +203,9 @@ enum ContextPayloadMapper {
             programId: row["programId"] as? String,
             programIndex: (row["programIndex"] as? NSNumber)?.intValue,
             steps: steps,
-            activity: row["activity"] as? String
+            activity: row["activity"] as? String,
+            startText: row["startText"] as? String,
+            doneText: row["doneText"] as? String
         )
     }
 
@@ -237,7 +243,8 @@ enum ContextPayloadMapper {
             heartRateBand: WatchHeartRateBand.normalized(
                 min: (payload["hrMin"] as? NSNumber)?.doubleValue,
                 max: (payload["hrMax"] as? NSNumber)?.doubleValue
-            )
+            ),
+            checkInMinutes: (payload["checkInMinutes"] as? NSNumber)?.intValue
         )
     }
 

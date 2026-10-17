@@ -18,11 +18,13 @@ import {
 } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { useCnfStatusQuery } from '@/hooks/Foods/useCanadianNutrientFile';
+import { useLivsmedelsverketStatusQuery } from '@/hooks/Foods/useLivsmedelsverket';
 import { decodeYazioAppId } from '@/utils/settings';
 import { useExternalProviderTypesQuery } from '@/hooks/Settings/useExternalProviderSettings';
 import SyncRangeDialog from './SyncRangeDialog';
 import type { SyncMockOptions } from './SyncRangeDialog';
 import { CnfBulkImportDialog } from './CnfBulkImportDialog';
+import { LivsmedelsverketBulkImportDialog } from './LivsmedelsverketBulkImportDialog';
 import { Trans } from 'react-i18next';
 
 import {
@@ -124,6 +126,10 @@ const PROVIDER_PORTALS: Record<string, { label: string; url: string }> = {
     label: 'Health Canada CNF Open Data Portal',
     url: 'https://open.canada.ca/data/en/dataset/1b6139bd-ed7e-4043-bc28-ff00e10f3109',
   },
+  livsmedelsverket: {
+    label: 'Swedish Food Agency (Livsmedelsverket) Open Data',
+    url: 'https://www.livsmedelsverket.se/en/about-us/open-data/food-composition-data/',
+  },
 };
 
 export const ProviderCard = ({
@@ -138,6 +144,11 @@ export const ProviderCard = ({
   const isCnf = provider.provider_type === 'canadian-nutrient-file';
   const { data: cnfStatus } = useCnfStatusQuery({
     enabled: isCnf && isAdminMode,
+  });
+  const [isSlvDialogOpen, setIsSlvDialogOpen] = useState(false);
+  const isSlv = provider.provider_type === 'livsmedelsverket';
+  const { data: slvStatus } = useLivsmedelsverketStatusQuery({
+    enabled: isSlv && isAdminMode,
   });
   const { data: providerTypes } = useExternalProviderTypesQuery();
   const yazioDisplay = decodeYazioAppId(provider.app_id);
@@ -558,6 +569,43 @@ export const ProviderCard = ({
             </Button>
           )}
 
+          {isAdminMode && isSlv && (
+            <Button
+              variant={slvStatus?.isRunning ? 'secondary' : 'outline'}
+              size="sm"
+              onClick={() => setIsSlvDialogOpen(true)}
+              disabled={loading}
+              title={t(
+                'settings.providerCard.bulkImportReSync',
+                'Bulk Import / Re-Sync'
+              )}
+              className="flex items-center gap-1.5"
+            >
+              {slvStatus?.isRunning ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  <span>
+                    {t(
+                      'settings.providerCard.importing',
+                      'Importing ({{progress}}%)...',
+                      { progress: slvStatus.progress }
+                    )}
+                  </span>
+                </>
+              ) : (
+                <>
+                  <Download className="h-4 w-4" />
+                  <span>
+                    {t(
+                      'settings.providerCard.bulkImportSync',
+                      'Bulk Import / Sync'
+                    )}
+                  </span>
+                </>
+              )}
+            </Button>
+          )}
+
           {config?.hasToken ? (
             <Button
               variant="outline"
@@ -769,6 +817,70 @@ export const ProviderCard = ({
           </>
         )}
 
+        {isSlv && (
+          <>
+            <p className="text-xs text-muted-foreground mt-1.5 max-w-2xl leading-relaxed">
+              <Trans
+                i18nKey="settings.livsmedelsverket.providerCardLicence"
+                defaults="Contains information published by the Swedish Food Agency (Livsmedelsverket) licensed under <1>Creative Commons Attribution 4.0 (CC BY 4.0)</1>. Supported languages: <3>Swedish (sv)</3> and <5>English (en)</5>. <7>Swedish Food Composition Database</7>"
+                components={{
+                  1: (
+                    <a
+                      href="https://creativecommons.org/licenses/by/4.0/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline font-medium"
+                    />
+                  ),
+                  3: <strong />,
+                  5: <strong />,
+                  7: (
+                    <a
+                      href="https://www.livsmedelsverket.se/en/about-us/open-data/food-composition-data/"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline font-medium ml-1"
+                    />
+                  ),
+                }}
+              />
+            </p>
+
+            {slvStatus?.isRunning && (
+              <div className="mt-3 space-y-2 rounded-lg border bg-muted/40 p-3 max-w-2xl">
+                <div className="flex items-center justify-between text-xs font-medium">
+                  <span className="flex items-center gap-1.5">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                    {t(
+                      'settings.providerCard.importingCatalogFoods',
+                      'Importing catalog: {{processed}} / {{total}} foods',
+                      { processed: slvStatus.processed, total: slvStatus.total }
+                    )}
+                  </span>
+                  <span className="font-mono text-xs font-semibold">
+                    {slvStatus.progress}%
+                  </span>
+                </div>
+                <Progress value={slvStatus.progress} className="h-2" />
+                <div className="flex justify-between text-[11px] text-muted-foreground">
+                  <span>
+                    {t(
+                      'settings.providerCard.imported',
+                      '{{imported}} imported',
+                      { imported: slvStatus.imported }
+                    )}
+                  </span>
+                  <span>
+                    {t('settings.providerCard.updated', '{{updated}} updated', {
+                      updated: slvStatus.updated,
+                    })}
+                  </span>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
         {provider.provider_type === 'free-exercise-db' && (
           <p className="text-xs text-muted-foreground mt-1.5 max-w-2xl leading-relaxed">
             <Trans
@@ -943,6 +1055,13 @@ export const ProviderCard = ({
         <CnfBulkImportDialog
           open={isCnfDialogOpen}
           onOpenChange={setIsCnfDialogOpen}
+        />
+      )}
+
+      {isSlv && isAdminMode && (
+        <LivsmedelsverketBulkImportDialog
+          open={isSlvDialogOpen}
+          onOpenChange={setIsSlvDialogOpen}
         />
       )}
     </div>

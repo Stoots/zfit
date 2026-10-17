@@ -15,11 +15,14 @@ import {
   computeLaps,
   computeSplits,
   currentPaceSecondsPerUnit,
+  haversineMeters,
+  paceSecondsPerUnit,
   summarizeRecording,
   type RawFix,
   type RecordedPoint,
   type RecordingActivity,
 } from '../utils/gpsRecording';
+import { programSpokenCues } from '../utils/programCues';
 import { isStepActivity } from '../utils/stride';
 import { captureStepCounterBaseline } from './stepCounter';
 import {
@@ -28,35 +31,54 @@ import {
   type AutoPauseState,
 } from '../utils/autoPause';
 import {
+  advanceIntervalCursor,
   INITIAL_HEART_RATE_ALERT_STATE,
+  INITIAL_INTERVAL_CURSOR,
   INITIAL_PACE_ALERT_STATE,
   intervalPosition,
   isValidIntervalPlan,
   normalizeHeartRateBand,
   normalizePaceBand,
+  planHasDistanceSteps,
   stepHeartRateAlert,
   stepPaceAlert,
-  stepStartSeconds,
   type HeartRateAlertState,
   type HeartRateBand,
+  type IntervalCursor,
   type IntervalPlan,
   type PaceAlertState,
   type PaceBand,
 } from '@workspace/shared';
 import { fireImpactHaptic } from './haptics';
 import {
+  checkInCue,
   cueUnitMeters,
   eventCue,
   finishCue,
+  halfwayCue,
   intervalCue,
+  lastMinuteCue,
+  milestoneCue,
+  stepCountdownCue,
+  stepWarningCue,
   intervalsDoneCue,
   heartRateAlertCue,
+  intervalToGoCue,
+  STEP_TO_GO_MIN_METERS,
+  stepToGoMeters,
   lapCue,
   paceAlertCue,
   splitCue,
   type CueEvent,
   type CueUnit,
 } from '../utils/recordingCues';
+import {
+  CHECK_IN_CHOICES,
+  INITIAL_COACHING_STATE,
+  RACE_MILESTONES_METERS,
+  nextCoachingCues,
+  type CoachingState,
+} from '../utils/coachingCues';
 
 /**
  * Records a walk, run or ride from the phone's GPS.
@@ -121,10 +143,26 @@ export interface RecordingSession {
    */
   cuedPartialLapMark?: number;
   /**
-   * A timed interval plan. `cued` is the index of the last step started (-1
-   * before the first), so a restored session never repeats a cue.
+   * An interval plan. `cued` is the index of the last step started (-1
+   * before the first), so a restored session never repeats a cue. `cursor`
+   * is where the current step began (clock and distance), which a distance
+   * step needs; absent on sessions saved by an earlier build, whose plans
+   * were all timed.
    */
-  intervals?: { plan: IntervalPlan; cued: number };
+  intervals?: {
+    plan: IntervalPlan;
+    cued: number;
+    cursor?: IntervalCursor;
+    /** The distance step whose "to go" cue was said, so it is said once. */
+    toGoCued?: number;
+  };
+  /**
+   * Minutes between spoken check-ins (time, distance, pace); absent for none.
+   * Said only with voice cues on.
+   */
+  checkInMinutes?: number;
+  /** Which coaching cues were already said, so a restore never repeats one. */
+  coaching?: CoachingState;
   /** The program workout this recording is, so finishing it can tick it off. */
   program?: { id: string; index: number };
   /**
@@ -434,10 +472,23 @@ export function ingestFixes(fixes: readonly RawFix[]): Promise<void> {
       if (accepted) {
         points.push(accepted);
         added++;
+        // A distance step ends at the fix that crossed it, so the step after
+        // it starts from that fix's time rather than the end of the batch.
+        if (
+          session.intervals &&
+          planHasDistanceSteps(session.intervals.plan) &&
+          advanceIntervals(Math.min(accepted.t, Date.now()))
+        ) {
+          sessionChanged = true;
+        }
       }
     }
-    if (added > 0 && cueSplit()) sessionChanged = true;
+    const splitText = added > 0 ? cueSplit() : null;
+    if (splitText) sessionChanged = true;
     if (advanceIntervals(Date.now())) sessionChanged = true;
+    // Spoken with the split, so a milestone or check-in due at the same fix
+    // does not cut the split off.
+    if (advanceCoaching(Date.now(), splitText)) sessionChanged = true;
     if (added > 0) checkPaceBand(Date.now());
     if (sessionChanged) await persistSession();
     if (added === 0 && !pointsRewritten) {
@@ -473,6 +524,8 @@ function isWatchingForAutoPause(current: RecordingSession): boolean {
 export interface RecordingPreferences {
   autoPause: boolean;
   audioCues: boolean;
+  /** Minutes between spoken check-ins; 0 is off. */
+  checkInMinutes: number;
   /** The pace range last chosen, in seconds per km; null before one was. An alert is per run, so only the range is kept. */
   paceBand: PaceBand | null;
   /** The heart-rate range last chosen; null before one was. */
@@ -484,6 +537,7 @@ export interface RecordingPreferences {
 /** The countdowns offered, in seconds. */
 export const COUNTDOWN_CHOICES = [0, 3, 5, 10] as const;
 
+const CHECK_IN_PREF_KEY = '@SparkyFitness/gpsRecording/checkInMinutes';
 const COUNTDOWN_PREF_KEY = '@SparkyFitness/gpsRecording/countdown';
 const PACE_ALERT_PREF_KEY = '@SparkyFitness/gpsRecording/paceAlert';
 const HEART_RATE_ALERT_PREF_KEY = '@SparkyFitness/gpsRecording/heartRateAlert';
@@ -496,18 +550,30 @@ const PREFERENCE_KEYS = {
 /** Auto-pause is on unless turned off; voice cues are off unless turned on. */
 export async function getRecordingPreferences(): Promise<RecordingPreferences> {
   try {
-    const [autoPause, audioCues, countdown, paceAlertRaw, heartRateAlertRaw] =
-      await Promise.all([
-        AsyncStorage.getItem(PREFERENCE_KEYS.autoPause),
-        AsyncStorage.getItem(PREFERENCE_KEYS.audioCues),
-        AsyncStorage.getItem(COUNTDOWN_PREF_KEY),
-        AsyncStorage.getItem(PACE_ALERT_PREF_KEY),
-        AsyncStorage.getItem(HEART_RATE_ALERT_PREF_KEY),
-      ]);
+    const [
+      autoPause,
+      audioCues,
+      countdown,
+      paceAlertRaw,
+      heartRateAlertRaw,
+      checkIn,
+    ] = await Promise.all([
+      AsyncStorage.getItem(PREFERENCE_KEYS.autoPause),
+      AsyncStorage.getItem(PREFERENCE_KEYS.audioCues),
+      AsyncStorage.getItem(COUNTDOWN_PREF_KEY),
+      AsyncStorage.getItem(PACE_ALERT_PREF_KEY),
+      AsyncStorage.getItem(HEART_RATE_ALERT_PREF_KEY),
+      AsyncStorage.getItem(CHECK_IN_PREF_KEY),
+    ]);
     const seconds = Number(countdown);
     return {
       autoPause: autoPause !== 'off',
       audioCues: audioCues === 'on',
+      checkInMinutes: (CHECK_IN_CHOICES as readonly number[]).includes(
+        Number(checkIn)
+      )
+        ? Number(checkIn)
+        : 0,
       paceBand: parsePaceBandPreference(paceAlertRaw),
       heartRateBand: parseHeartRateBandPreference(heartRateAlertRaw),
       countdownSeconds: (COUNTDOWN_CHOICES as readonly number[]).includes(
@@ -520,6 +586,7 @@ export async function getRecordingPreferences(): Promise<RecordingPreferences> {
     return {
       autoPause: true,
       audioCues: false,
+      checkInMinutes: 0,
       paceBand: null,
       heartRateBand: null,
       countdownSeconds: 0,
@@ -574,6 +641,15 @@ export async function setPaceBandPreference(band: PaceBand): Promise<void> {
   preferenceListeners.forEach((listener) => listener());
 }
 
+export async function setCheckInPreference(minutes: number): Promise<void> {
+  try {
+    await AsyncStorage.setItem(CHECK_IN_PREF_KEY, String(minutes));
+  } catch {
+    // The choice just won't be remembered.
+  }
+  preferenceListeners.forEach((listener) => listener());
+}
+
 export async function setCountdownPreference(seconds: number): Promise<void> {
   try {
     await AsyncStorage.setItem(COUNTDOWN_PREF_KEY, String(seconds));
@@ -608,27 +684,29 @@ function cueEvent(current: RecordingSession | null, event: CueEvent): void {
   speakRecordingCue(eventCue(i18n.t.bind(i18n), event));
 }
 
-/** Announces a newly completed kilometer or mile, if there is one. */
-function cueSplit(): boolean {
+/**
+ * Marks a newly completed kilometer or mile as said and returns the words for
+ * it, or null when there is none. The caller speaks them.
+ */
+function cueSplit(): string | null {
   const unit = session?.audioCues;
-  if (!session || !unit) return false;
+  if (!session || !unit) return null;
   const unitMeters = cueUnitMeters(unit);
   const cued = session.cuedSplits ?? 0;
   const splits = computeSplits(points, unitMeters).filter((s) => !s.partial);
-  if (splits.length <= cued) return false;
+  if (splits.length <= cued) return null;
   // Several can complete in one batch after a gap; say only the latest.
   const latest = splits[splits.length - 1];
   const totalSeconds = splits.reduce((sum, s) => sum + s.durationSeconds, 0);
+  const previous = splits.length > 1 ? splits[splits.length - 2] : undefined;
   session = { ...session, cuedSplits: splits.length };
-  speakRecordingCue(
-    splitCue(i18n.t.bind(i18n), {
-      completed: splits.length,
-      totalSeconds,
-      splitSeconds: latest.durationSeconds,
-      unit,
-    })
-  );
-  return true;
+  return splitCue(i18n.t.bind(i18n), {
+    completed: splits.length,
+    totalSeconds,
+    splitSeconds: latest.durationSeconds,
+    previousSplitSeconds: previous?.durationSeconds,
+    unit,
+  });
 }
 
 /** Where the pace stands against the band; not saved, a restore starts fresh. */
@@ -656,7 +734,8 @@ export function noteLiveHeartRate(
     if (session.intervals) {
       const position = intervalPosition(
         session.intervals.plan,
-        elapsedSeconds(session, now)
+        elapsedSeconds(session, now),
+        { cursor: session.intervals.cursor, meters: recordedMeters() }
       );
       if (position && !position.done) {
         stepIndex = position.index;
@@ -721,7 +800,8 @@ function checkPaceBand(now: number): void {
   if (session.intervals) {
     const position = intervalPosition(
       session.intervals.plan,
-      elapsedSeconds(session, now)
+      elapsedSeconds(session, now),
+      { cursor: session.intervals.cursor, meters: recordedMeters() }
     );
     if (position && !position.done) {
       stepIndex = position.index;
@@ -745,30 +825,75 @@ function checkPaceBand(now: number): void {
   }
 }
 
+/** Running total for `recordedMeters`, extended as fixes are appended. */
+let meterCache: {
+  source: RecordedPoint[];
+  length: number;
+  total: number;
+} | null = null;
+
 /**
- * Starts any interval step whose time has come: speaks it, buzzes, and marks
- * a lap at the exact moment it began, so the saved activity is cut into the
- * work and recovery stretches. Steps passed over together (a long gap in the
- * app running) are marked but only the latest is spoken. Runs on the recording
- * clock, which stops while paused. Returns whether the session changed.
+ * Metres recorded so far: the length of the stored track, pauses excluded.
+ * Called every second, so it extends a cached total over the new fixes and
+ * only walks the whole track when the array was replaced.
+ */
+function recordedMeters(): number {
+  let cached = meterCache;
+  if (!cached || cached.source !== points || cached.length > points.length) {
+    cached = { source: points, length: 0, total: 0 };
+  }
+  for (let i = Math.max(cached.length, 1); i < points.length; i++) {
+    if (points[i].seg === points[i - 1].seg) {
+      cached.total += haversineMeters(points[i - 1], points[i]);
+    }
+  }
+  cached.length = points.length;
+  meterCache = cached;
+  return cached.total;
+}
+
+/**
+ * Starts any interval step whose time or distance has come: speaks it,
+ * buzzes, and marks a lap at the moment it began, so the saved activity is
+ * cut into the work and recovery stretches. Steps passed over together (a
+ * long gap in the app running) are marked but only the latest is spoken. Runs
+ * on the recording clock and the recorded distance, which both stop while
+ * paused. Returns whether the session changed.
  */
 function advanceIntervals(now: number): boolean {
   if (!session?.intervals || session.status !== 'recording') return false;
   const { plan, cued } = session.intervals;
-  const position = intervalPosition(plan, elapsedSeconds(session, now));
-  if (!position) return false;
+  const meters = recordedMeters();
+  const { cursor, started } = advanceIntervalCursor(
+    plan,
+    session.intervals.cursor,
+    elapsedSeconds(session, now),
+    meters
+  );
   // Once finished, the last step stays "current"; announce the end once.
-  const target = position.done ? plan.steps.length : position.index;
-  if (target <= cued) return false;
+  const target = cursor.index;
+  if (target <= cued) {
+    const toGo = cueStepToGo(cursor, meters);
+    if (cursor === session.intervals.cursor && !toGo) return false;
+    // A restored session from before cursors were kept catches up quietly.
+    session = {
+      ...session,
+      intervals: {
+        ...session.intervals,
+        cursor,
+        ...(toGo ? { toGoCued: cursor.index } : {}),
+      },
+    };
+    return true;
+  }
 
   const marks = [...(session.laps ?? [])];
   const clockStart = session.startedAt + session.pausedMs;
-  for (
-    let index = Math.max(cued + 1, 1);
-    index <= Math.min(target, plan.steps.length - 1);
-    index++
-  ) {
-    const at = clockStart + stepStartSeconds(plan, index) * 1000;
+  for (const step of started) {
+    if (step.index <= Math.max(cued, 0) || step.index >= plan.steps.length) {
+      continue;
+    }
+    const at = clockStart + step.startSeconds * 1000;
     // A manual lap nearby must not swallow the step boundary. The debounce
     // lives in markLap, for double taps.
     if (at <= now && !marks.includes(at)) {
@@ -778,20 +903,139 @@ function advanceIntervals(now: number): boolean {
   session = {
     ...session,
     laps: marks.sort((a, b) => a - b),
-    intervals: { plan, cued: target },
+    intervals: { ...session.intervals, plan, cued: target, cursor },
   };
   fireImpactHaptic();
   if (session.audioCues) {
-    speakRecordingCue(
-      position.done
-        ? intervalsDoneCue(i18n.t.bind(i18n))
-        : intervalCue(i18n.t.bind(i18n), {
-            step: position.step,
-            style: plan.style,
-          })
-    );
+    const position = intervalPosition(plan, elapsedSeconds(session, now), {
+      cursor,
+      meters,
+    });
+    if (position) {
+      const t = i18n.t.bind(i18n);
+      const stepText = position.done
+        ? intervalsDoneCue(t)
+        : intervalCue(t, { step: position.step, style: plan.style });
+      // The first step of a program workout is introduced with its place in the
+      // program, in the same breath: a second cue would cut the first off.
+      const intro = cued < 0 ? (programCues(session)?.start ?? null) : null;
+      speakRecordingCue(intro ? `${intro} ${stepText}` : stepText);
+    }
   }
   return true;
+}
+
+/**
+ * Says "100 meters to go" once per distance step, when voice cues are on and
+ * the step is long enough for it not to crowd the start. Returns whether it
+ * was said, so the caller stores that.
+ */
+function cueStepToGo(cursor: IntervalCursor, meters: number): boolean {
+  const intervals = session?.intervals;
+  if (!session?.audioCues || !intervals) return false;
+  if (intervals.toGoCued === cursor.index) return false;
+  const step = intervals.plan.steps[cursor.index];
+  if (!step?.meters || step.meters < STEP_TO_GO_MIN_METERS) return false;
+  const left = cursor.startMeters + step.meters - meters;
+  if (left > stepToGoMeters(step.unit) || left <= 0) return false;
+  speakRecordingCue(intervalToGoCue(i18n.t.bind(i18n), step.unit));
+  return true;
+}
+
+/**
+ * Speaks the next coaching cue that is due: "three, two, one" and a
+ * ten-second warning around a step end, halfway and the last minute of a plan
+ * workout, a 5K / 10K / half / marathon milestone, and the periodic check-in.
+ * At most one coaching cue is spoken a tick; the rest are marked said. A split
+ * announced at the same fix (`splitText`) is spoken first, in the same breath,
+ * because a second utterance would cut it off.
+ */
+function advanceCoaching(
+  now: number,
+  splitText: string | null = null
+): boolean {
+  if (!session) return false;
+  const speakSplit = () => {
+    if (splitText) speakRecordingCue(splitText);
+  };
+  const unit = session.audioCues;
+  if (!unit) return false;
+  if (session.status !== 'recording') {
+    // Paused by the same batch of fixes: the split was still completed.
+    speakSplit();
+    return false;
+  }
+  const checkInMinutes = session.checkInMinutes ?? 0;
+  const plan = session.intervals?.plan ?? null;
+  const outdoors = !session.indoor;
+  if (!plan && checkInMinutes <= 0 && !outdoors) {
+    speakSplit();
+    return false;
+  }
+  const elapsed = elapsedSeconds(session, now);
+  const state = { ...INITIAL_COACHING_STATE, ...session.coaching };
+  // Only worth working out while a milestone is still ahead.
+  const distance =
+    outdoors && state.milestones < RACE_MILESTONES_METERS.length
+      ? summarizeRecording(points).distanceMeters
+      : null;
+  const { cues, state: nextState } = nextCoachingCues({
+    elapsedSeconds: elapsed,
+    plan,
+    checkInMinutes,
+    distanceMeters: distance,
+    progress: session.intervals
+      ? { cursor: session.intervals.cursor, meters: recordedMeters() }
+      : undefined,
+    state,
+  });
+  if (cues.length === 0) {
+    speakSplit();
+    return false;
+  }
+  session = { ...session, coaching: nextState };
+  const t = i18n.t.bind(i18n);
+  const cue = cues[0];
+  let text: string | null = null;
+  if (cue.kind === 'stepCountdown') {
+    text = stepCountdownCue(t);
+  } else if (cue.kind === 'stepWarning' && plan) {
+    text = stepWarningCue(t, { next: cue.next, style: plan.style });
+  } else if (cue.kind === 'lastMinute') {
+    text = lastMinuteCue(t);
+  } else if (cue.kind === 'milestone') {
+    text = milestoneCue(t, cue.meters);
+  } else if (cue.kind === 'halfway') {
+    text = halfwayCue(t);
+  } else if (cue.kind === 'checkIn') {
+    const checkInDistance = outdoors
+      ? summarizeRecording(points).distanceMeters
+      : null;
+    text = checkInCue(t, {
+      totalSeconds: elapsed,
+      distanceMeters: checkInDistance,
+      secondsPerUnit:
+        checkInDistance === null
+          ? null
+          : paceSecondsPerUnit(checkInDistance, elapsed, cueUnitMeters(unit)),
+      unit,
+    });
+  }
+  // A countdown is for this second only: it must not wait behind a split.
+  const parts = cue.kind === 'stepCountdown' ? [text] : [splitText, text];
+  const spoken = parts.filter((part): part is string => !!part).join(' ');
+  if (spoken) speakRecordingCue(spoken);
+  return true;
+}
+
+/** What a program workout adds to the coach, or null for any other recording. */
+function programCues(current: RecordingSession) {
+  if (!current.program || !current.intervals) return null;
+  return programSpokenCues(
+    i18n.t.bind(i18n),
+    current.program,
+    current.intervals.plan
+  );
 }
 
 /**
@@ -801,8 +1045,11 @@ function advanceIntervals(now: number): boolean {
 export function tickIntervals(): Promise<void> {
   return enqueue(async () => {
     await hydrate();
-    if (!session?.intervals) return;
-    if (advanceIntervals(Date.now())) {
+    if (!session?.intervals && !session?.checkInMinutes) return;
+    const now = Date.now();
+    const stepped = advanceIntervals(now);
+    const coached = advanceCoaching(now);
+    if (stepped || coached) {
       await persistSession();
       publish();
     }
@@ -847,6 +1094,8 @@ export interface StartRecordingOptions {
   audioCues?: CueUnit;
   /** Timed steps to follow (run/walk, speed repeats). */
   intervals?: IntervalPlan;
+  /** Minutes between spoken check-ins (needs voice cues); 0 or absent for none. */
+  checkInMinutes?: number;
   /** A pace band to stay inside, with an alert when outside it. */
   paceBand?: PaceBand;
   /**
@@ -938,6 +1187,14 @@ export function startRecording(options: StartRecordingOptions): Promise<void> {
     const stepCounterAtStart = isStepActivity(options.activity)
       ? await captureStepCounterBaseline(indoor)
       : null;
+    // Distance steps follow GPS distance, which an indoor session has none
+    // of. The Record screen does not offer them indoors.
+    const intervals =
+      options.intervals &&
+      isValidIntervalPlan(options.intervals) &&
+      !(indoor && planHasDistanceSteps(options.intervals))
+        ? options.intervals
+        : undefined;
     session = {
       id: `rec-${now}`,
       activity: options.activity,
@@ -951,11 +1208,17 @@ export function startRecording(options: StartRecordingOptions): Promise<void> {
       autoPaused: false,
       audioCues: options.audioCues,
       cuedSplits: 0,
-      ...(options.intervals && isValidIntervalPlan(options.intervals)
-        ? { intervals: { plan: options.intervals, cued: -1 } }
+      ...((options.checkInMinutes ?? 0) > 0
+        ? { checkInMinutes: options.checkInMinutes }
         : {}),
-      ...(options.program && options.intervals
-        ? { program: options.program }
+      ...(intervals
+        ? {
+            intervals: {
+              plan: intervals,
+              cued: -1,
+              cursor: INITIAL_INTERVAL_CURSOR,
+            },
+          }
         : {}),
       ...(normalizePaceBand(options.paceBand)
         ? { paceBand: normalizePaceBand(options.paceBand)! }
@@ -963,6 +1226,7 @@ export function startRecording(options: StartRecordingOptions): Promise<void> {
       ...(normalizeHeartRateBand(options.heartRateBand)
         ? { heartRateBand: normalizeHeartRateBand(options.heartRateBand)! }
         : {}),
+      ...(options.program && intervals ? { program: options.program } : {}),
       savedEntryId: null,
       ...(indoor && { indoor: true }),
       ...(stepCounterAtStart != null && { stepCounterAtStart }),
@@ -1150,6 +1414,33 @@ export function setRecordingAudioCues(
   });
 }
 
+/** Changes the spoken check-in interval while a recording runs; 0 turns it off. */
+export function setRecordingCheckIn(minutes: number): Promise<void> {
+  return enqueue(async () => {
+    await hydrate();
+    if (!session || session.status === 'finished') return;
+    const valid = (CHECK_IN_CHOICES as readonly number[]).includes(minutes)
+      ? minutes
+      : 0;
+    if ((session.checkInMinutes ?? 0) === valid) return;
+    const { checkInMinutes: _previous, ...rest } = session;
+    void _previous;
+    // Count what has already passed as said, so the first check-in is the next
+    // whole interval and not one for the minutes already run.
+    const elapsed = elapsedSeconds(session, Date.now());
+    session = {
+      ...rest,
+      ...(valid > 0 ? { checkInMinutes: valid } : {}),
+      coaching: {
+        ...(session.coaching ?? INITIAL_COACHING_STATE),
+        checkIns: valid > 0 ? Math.floor(elapsed / (valid * 60)) : 0,
+      },
+    };
+    await persistSession();
+    publish();
+  });
+}
+
 /** Sets or clears the pace band while a recording runs. */
 export function setRecordingPaceBand(
   band: PaceBand | undefined
@@ -1281,16 +1572,22 @@ export function finishRecording(): Promise<void> {
     clearLatestFix();
     // An indoor session has no GPS distance yet. Stop the cue session without
     // announcing zero before the person enters what the machine showed.
+    const programDone =
+      session.audioCues && planCompleted(session)
+        ? (programCues(session)?.done ?? null)
+        : null;
     if (session.audioCues && session.indoor) {
-      endRecordingCues();
+      if (programDone) speakRecordingCue(programDone, endRecordingCues);
+      else endRecordingCues();
     } else if (session.audioCues) {
       const summary = summarizeRecording(points);
+      const finished = finishCue(i18n.t.bind(i18n), {
+        distanceMeters: summary.distanceMeters,
+        totalSeconds: elapsedSeconds(session),
+        unit: session.audioCues,
+      });
       speakRecordingCue(
-        finishCue(i18n.t.bind(i18n), {
-          distanceMeters: summary.distanceMeters,
-          totalSeconds: elapsedSeconds(session),
-          unit: session.audioCues,
-        }),
+        programDone ? `${finished} ${programDone}` : finished,
         endRecordingCues
       );
     }
@@ -1357,6 +1654,21 @@ export function discardRecording(): Promise<void> {
     await persistSession();
     publish();
   });
+}
+
+/**
+ * Whether the recording followed its plan to the end: every step has run its
+ * full length, counted in unpaused time. Starting the last step is not enough,
+ * since stopping a minute into it is a run cut short.
+ */
+export function planCompleted(current: RecordingSession): boolean {
+  if (!current.intervals) return false;
+  return (
+    intervalPosition(current.intervals.plan, elapsedSeconds(current), {
+      cursor: current.intervals.cursor,
+      meters: recordedMeters(),
+    })?.done === true
+  );
 }
 
 /** Seconds on the clock for a session, with pauses removed. */

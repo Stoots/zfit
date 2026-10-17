@@ -849,6 +849,19 @@ jest.mock('expo-crypto', () => {
   };
 });
 
+// Rows render AllergenBadges, which reads the user's tracked allergens through
+// React Query. Most suites render rows without a QueryClientProvider, so default
+// to "no tracked allergens"; allergen suites mock this module themselves.
+jest.mock('./src/hooks/useAllergenPreferences', () => ({
+  useAllergenPreferences: () => ({
+    preferences: [],
+    isLoading: false,
+    isError: false,
+    refetch: jest.fn(),
+  }),
+  useAllergenPreferenceMutations: jest.fn(),
+}));
+
 jest.mock('expo-image-manipulator', () => ({
   manipulateAsync: jest.fn(async (uri, _actions = [], options = {}) => ({
     uri: uri + '-manipulated.jpg',

@@ -4,10 +4,12 @@ import type {
   PresetSessionResponse,
 } from '@workspace/shared';
 import { apiFetch } from './apiClient';
-import type { WorkoutPlanTemplate } from '../../types/workoutPlans';
+import type {
+  WorkoutPlanTemplate,
+  SaveWorkoutPlanPayload,
+} from '../../types/workoutPlans';
 import { fetchTrainingPrograms } from './trainingProgramsApi';
 import { getWorkoutPlanCandidates } from '../../utils/workoutPlanSchedule';
-import type { SaveWorkoutPlanPayload } from '../../types/workoutPlans';
 
 const SERVICE_NAME = 'Workout Plans API';
 
@@ -84,9 +86,19 @@ export function sessionPlanPayload(
   const { assignments, ...fields } = payload;
   const sessions = new Map<string, WorkoutPlanSessionInput>();
   for (const assignment of assignments) {
-    const oldSession = existing?.sessions.find((session) =>
-      session.assignments.some((saved) => saved.id === Number(assignment.id))
-    );
+    const slotSessions =
+      existing?.sessions.filter((session, index) =>
+        payload.schedule_type === 'weekly'
+          ? session.day_of_week === assignment.day_of_week
+          : index + 1 === assignment.session_index
+      ) ?? [];
+    const oldSession =
+      existing?.sessions.find((session) =>
+        session.assignments.some((saved) => saved.id === Number(assignment.id))
+      ) ??
+      (!assignment.id && slotSessions.length === 1
+        ? slotSessions[0]
+        : undefined);
     const key =
       oldSession?.id ??
       String(
@@ -119,15 +131,22 @@ export function sessionPlanPayload(
       workout_preset_id: assignment.workout_preset_id
         ? Number(assignment.workout_preset_id)
         : undefined,
-      preset_snapshot: oldAssignment?.preset_snapshot ?? undefined,
+      preset_snapshot:
+        assignment.preset_snapshot ??
+        oldAssignment?.preset_snapshot ??
+        undefined,
       sort_order: session.assignments.length,
-      sets: assignment.sets.map((set) => ({ ...set })),
+      sets: oldAssignment?.sets ?? assignment.sets,
     });
   }
   // Empty saved sessions have stable identities and may be bound to Programs.
   for (const session of existing?.sessions ?? []) {
     if (!session.assignments.length && !sessions.has(session.id))
-      sessions.set(session.id, { ...session, assignments: [] });
+      sessions.set(session.id, {
+        ...session,
+        sort_order: sessions.size,
+        assignments: [],
+      });
   }
   return { ...fields, sessions: [...sessions.values()] };
 }

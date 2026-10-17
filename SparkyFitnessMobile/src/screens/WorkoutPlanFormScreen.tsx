@@ -130,7 +130,7 @@ const WorkoutPlanFormScreen: React.FC<WorkoutPlanFormScreenProps> = ({
         ...current,
         assignments: [
           ...current.assignments,
-          createPresetAssignment(preset, slot),
+          { ...createPresetAssignment(preset, slot), preset_snapshot: preset },
         ],
       }));
       setErrors((current) => ({ ...current, assignments: undefined }));

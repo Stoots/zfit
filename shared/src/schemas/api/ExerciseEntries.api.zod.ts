@@ -501,6 +501,7 @@ export const exerciseEntryResponseSchema = z
     weather_humidity_percentage: z.number().nullable().optional(),
     gear_name: z.string().nullable().optional(),
     gear_external_id: z.string().nullable().optional(),
+    shoe_id: z.string().nullable().optional(),
     water_estimated: z.number().nullable().optional(),
     moving_time_seconds: z.number().nullable().optional(),
     elapsed_time_seconds: z.number().nullable().optional(),
@@ -776,7 +777,8 @@ export const attachExerciseEntryDistanceSeriesRequestSchema = z
           points.every((point, i) => {
             const previous = points[i - 1];
             return (
-              !previous || (point[0] >= previous[0] && point[1] >= previous[1])
+              previous === undefined ||
+              (point[0] >= previous[0] && point[1] >= previous[1])
             );
           }),
         {

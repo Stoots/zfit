@@ -286,6 +286,13 @@ BEGIN
     p_admin_user_id, 'Canadian Nutrient File', 'canadian-nutrient-file', TRUE, TRUE, now(), now()
   ) ON CONFLICT (user_id, provider_name) DO UPDATE SET is_public = TRUE;
 
+  -- Swedish Food Agency (Livsmedelsverket)
+  INSERT INTO public.external_data_providers (
+    user_id, provider_name, provider_type, is_active, is_public, created_at, updated_at
+  ) VALUES (
+    p_admin_user_id, 'Swedish Food Agency (Livsmedelsverket)', 'livsmedelsverket', TRUE, TRUE, now(), now()
+  ) ON CONFLICT (user_id, provider_name) DO UPDATE SET is_public = TRUE;
+
   -- NIH Dietary Supplement Label Database
   INSERT INTO public.external_data_providers (
     user_id, provider_name, provider_type, is_active, is_public, created_at, updated_at
@@ -1781,6 +1788,22 @@ CREATE TABLE public.custom_measurements (
 
 
 --
+-- Name: custom_run_programs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.custom_run_programs (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    name character varying(60) NOT NULL,
+    activity character varying(10) DEFAULT 'run'::character varying NOT NULL,
+    workouts jsonb DEFAULT '[]'::jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT custom_run_programs_activity_check CHECK (((activity)::text = ANY ((ARRAY['run'::character varying, 'walk'::character varying])::text[])))
+);
+
+
+--
 -- Name: cycle_daily_entries; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2065,6 +2088,7 @@ CREATE TABLE public.exercise_entries (
     watch_telemetry_observed_at timestamp with time zone,
     watch_duration_minutes numeric,
     record_timezone text,
+    shoe_id uuid,
     CONSTRAINT exercise_entries_modality_check CHECK ((modality = ANY (ARRAY['weight_reps'::text, 'reps_only'::text, 'bodyweight_reps'::text, 'weight_duration'::text, 'weight_distance'::text, 'duration'::text, 'duration_distance'::text])))
 );
 
@@ -3706,7 +3730,10 @@ CREATE TABLE public.run_programs (
     last_done_date date,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    name character varying(60),
+    activity character varying(10),
     CONSTRAINT chk_run_programs_end_after_start CHECK (((end_date IS NULL) OR (start_date IS NULL) OR (end_date >= start_date))),
+    CONSTRAINT run_programs_activity_check CHECK (((activity IS NULL) OR ((activity)::text = ANY ((ARRAY['run'::character varying, 'walk'::character varying])::text[])))),
     CONSTRAINT run_programs_next_index_check CHECK ((next_index >= 0)),
     CONSTRAINT run_programs_run_days_check CHECK ((run_days <@ ARRAY[(0)::smallint, (1)::smallint, (2)::smallint, (3)::smallint, (4)::smallint, (5)::smallint, (6)::smallint]))
 );
@@ -3734,6 +3761,33 @@ CREATE TABLE public.session (
 --
 
 COMMENT ON TABLE public.session IS 'Better Auth session table';
+
+
+--
+-- Name: shoes; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.shoes (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    name character varying(120) NOT NULL,
+    brand character varying(120),
+    model character varying(120),
+    nickname character varying(120),
+    purchase_date date,
+    purchase_price numeric(10,2),
+    starting_distance_km numeric(9,2) DEFAULT 0 NOT NULL,
+    retirement_distance_km numeric(9,2) DEFAULT 800 NOT NULL,
+    status character varying(20) DEFAULT 'active'::character varying NOT NULL,
+    is_default boolean DEFAULT false NOT NULL,
+    retired_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    created_by_user_id uuid,
+    updated_by_user_id uuid,
+    CONSTRAINT shoes_distances_check CHECK (((starting_distance_km >= (0)::numeric) AND (retirement_distance_km > (0)::numeric))),
+    CONSTRAINT shoes_status_check CHECK (((status)::text = ANY ((ARRAY['active'::character varying, 'retired'::character varying])::text[])))
+);
 
 
 --
@@ -5420,6 +5474,14 @@ ALTER TABLE ONLY public.check_in_photos
 
 
 --
+-- Name: custom_run_programs custom_run_programs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.custom_run_programs
+    ADD CONSTRAINT custom_run_programs_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: cycle_daily_entries cycle_daily_entries_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5993,6 +6055,14 @@ ALTER TABLE ONLY public.session
 
 ALTER TABLE ONLY public.session
     ADD CONSTRAINT session_token_key UNIQUE (token);
+
+
+--
+-- Name: shoes shoes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shoes
+    ADD CONSTRAINT shoes_pkey PRIMARY KEY (id);
 
 
 --
@@ -6676,6 +6746,13 @@ CREATE INDEX idx_custom_measurements_user_id ON public.custom_measurements USING
 
 
 --
+-- Name: idx_custom_run_programs_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_custom_run_programs_user ON public.custom_run_programs USING btree (user_id);
+
+
+--
 -- Name: idx_cycle_daily_entries_user_date; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -6743,6 +6820,13 @@ CREATE INDEX idx_day_classification_user ON public.day_classification_cache USIN
 --
 
 CREATE INDEX idx_exercise_entries_exercise_preset_entry_id ON public.exercise_entries USING btree (exercise_preset_entry_id);
+
+
+--
+-- Name: idx_exercise_entries_shoe_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_exercise_entries_shoe_id ON public.exercise_entries USING btree (shoe_id) WHERE (shoe_id IS NOT NULL);
 
 
 --
@@ -7163,6 +7247,20 @@ CREATE INDEX idx_session_token ON public.session USING btree (token);
 --
 
 CREATE INDEX idx_session_user_id ON public.session USING btree (user_id);
+
+
+--
+-- Name: idx_shoes_user_default; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_shoes_user_default ON public.shoes USING btree (user_id) WHERE is_default;
+
+
+--
+-- Name: idx_shoes_user_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_shoes_user_status ON public.shoes USING btree (user_id, status);
 
 
 --
@@ -8043,6 +8141,14 @@ ALTER TABLE ONLY public.custom_measurements
 
 
 --
+-- Name: custom_run_programs custom_run_programs_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.custom_run_programs
+    ADD CONSTRAINT custom_run_programs_user_id_fkey FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
+
+
+--
 -- Name: cycle_daily_entries cycle_daily_entries_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -8112,6 +8218,14 @@ ALTER TABLE ONLY public.exercise_entries
 
 ALTER TABLE ONLY public.exercise_entries
     ADD CONSTRAINT exercise_entries_exercise_preset_entry_id_fkey FOREIGN KEY (exercise_preset_entry_id) REFERENCES public.exercise_preset_entries(id) ON DELETE CASCADE;
+
+
+--
+-- Name: exercise_entries exercise_entries_shoe_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.exercise_entries
+    ADD CONSTRAINT exercise_entries_shoe_id_fkey FOREIGN KEY (shoe_id) REFERENCES public.shoes(id) ON DELETE SET NULL;
 
 
 --
@@ -9003,6 +9117,30 @@ ALTER TABLE ONLY public.session
 
 
 --
+-- Name: shoes shoes_created_by_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shoes
+    ADD CONSTRAINT shoes_created_by_user_id_fkey FOREIGN KEY (created_by_user_id) REFERENCES public."user"(id);
+
+
+--
+-- Name: shoes shoes_updated_by_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shoes
+    ADD CONSTRAINT shoes_updated_by_user_id_fkey FOREIGN KEY (updated_by_user_id) REFERENCES public."user"(id);
+
+
+--
+-- Name: shoes shoes_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.shoes
+    ADD CONSTRAINT shoes_user_id_fkey FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
+
+
+--
 -- Name: sleep_entries sleep_entries_created_by_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -9703,6 +9841,12 @@ ALTER TABLE public.custom_categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.custom_measurements ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: custom_run_programs; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.custom_run_programs ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: cycle_daily_entries; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -10307,6 +10451,13 @@ CREATE POLICY modify_policy ON public.profiles USING ((public.authenticated_user
 
 
 --
+-- Name: shoes modify_policy; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY modify_policy ON public.shoes USING (public.has_diary_access(user_id)) WITH CHECK (public.has_diary_access(user_id));
+
+
+--
 -- Name: sleep_entries modify_policy; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -10558,6 +10709,13 @@ ALTER TABLE public.openfoodfacts_sync_queue ENABLE ROW LEVEL SECURITY;
 --
 
 CREATE POLICY owner_policy ON public.api_key USING ((reference_id = public.authenticated_user_id())) WITH CHECK ((reference_id = public.authenticated_user_id()));
+
+
+--
+-- Name: custom_run_programs owner_policy; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY owner_policy ON public.custom_run_programs USING ((user_id = public.authenticated_user_id())) WITH CHECK ((user_id = public.authenticated_user_id()));
 
 
 --
@@ -11104,6 +11262,13 @@ CREATE POLICY select_policy ON public.profiles FOR SELECT USING (public.has_prof
 
 
 --
+-- Name: shoes select_policy; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY select_policy ON public.shoes FOR SELECT USING (public.has_diary_read_access(user_id));
+
+
+--
 -- Name: sleep_entries select_policy; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -11309,6 +11474,12 @@ CREATE POLICY select_policy ON public.workout_preset_exercises FOR SELECT USING 
 
 CREATE POLICY select_policy ON public.workout_presets FOR SELECT USING (public.has_library_access_with_public(user_id, is_public, ARRAY['can_view_exercise_library'::text, 'can_manage_diary'::text]));
 
+
+--
+-- Name: shoes; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.shoes ENABLE ROW LEVEL SECURITY;
 
 --
 -- Name: sleep_entries; Type: ROW SECURITY; Schema: public; Owner: -
@@ -12079,6 +12250,13 @@ GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.custom_measurements TO sparky_
 
 
 --
+-- Name: TABLE custom_run_programs; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.custom_run_programs TO sparky_app;
+
+
+--
 -- Name: TABLE cycle_daily_entries; Type: ACL; Schema: public; Owner: -
 --
 
@@ -12531,6 +12709,13 @@ GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.run_programs TO sparky_app;
 --
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.session TO sparky_app;
+
+
+--
+-- Name: TABLE shoes; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.shoes TO sparky_app;
 
 
 --

@@ -1,4 +1,4 @@
-import { screen, fireEvent, waitFor } from '@testing-library/react';
+import { screen, fireEvent, waitFor, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import WaterContainerManager from '@/pages/Settings/WaterContainerManager';
 import type { WaterContainer } from '@/types/settings';
@@ -211,6 +211,70 @@ describe('WaterContainerManager', () => {
           hydration_factor: 0.8,
         })
       );
+    });
+  });
+
+  it('keeps a 0 hydration factor when adding a container', async () => {
+    renderWithClient(<WaterContainerManager />);
+
+    fireEvent.change(screen.getByLabelText('Container Name'), {
+      target: { value: 'Beer' },
+    });
+    fireEvent.change(screen.getByLabelText('Volume'), {
+      target: { value: '568' },
+    });
+    fireEvent.change(screen.getByLabelText('Servings per Container'), {
+      target: { value: '1' },
+    });
+    fireEvent.change(screen.getByLabelText('Hydration Factor'), {
+      target: { value: '0' },
+    });
+    fireEvent.click(screen.getByText('Add Container'));
+
+    await waitFor(() => {
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'Beer', hydration_factor: 0 })
+      );
+    });
+  });
+
+  it('still defaults the hydration factor to 1 when it is left alone', async () => {
+    renderWithClient(<WaterContainerManager />);
+
+    fireEvent.change(screen.getByLabelText('Container Name'), {
+      target: { value: 'Glass' },
+    });
+    fireEvent.change(screen.getByLabelText('Volume'), {
+      target: { value: '250' },
+    });
+    fireEvent.change(screen.getByLabelText('Servings per Container'), {
+      target: { value: '1' },
+    });
+    fireEvent.click(screen.getByText('Add Container'));
+
+    await waitFor(() => {
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ name: 'Glass', hydration_factor: 1 })
+      );
+    });
+  });
+
+  it('keeps a 0 hydration factor when editing a container', async () => {
+    renderWithClient(<WaterContainerManager />);
+
+    fireEvent.click(screen.getAllByText('Edit')[0]!);
+
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.change(within(dialog).getByLabelText('Hydration Factor'), {
+      target: { value: '0' },
+    });
+    fireEvent.click(within(dialog).getByText('Save Changes'));
+
+    await waitFor(() => {
+      expect(mockUpdate).toHaveBeenCalledWith({
+        id: 1,
+        containerData: expect.objectContaining({ hydration_factor: 0 }),
+      });
     });
   });
 

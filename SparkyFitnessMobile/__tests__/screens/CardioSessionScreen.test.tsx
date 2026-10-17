@@ -43,6 +43,11 @@ jest.mock('uniwind', () => ({
     Array.isArray(keys) ? keys.map(() => '#111827') : '#111827',
   useUniwind: () => ({ theme: 'light' }),
 }));
+// The shoe picker reads the shoe list and the entry; it has its own tests.
+jest.mock('../../src/components/ShoePickerCard', () => ({
+  __esModule: true,
+  default: () => null,
+}));
 // The chart draws with Skia; its data handling is covered by the hook tests.
 jest.mock('../../src/components/exerciseStats/HeartRateChart', () => {
   const { View } = require('react-native');

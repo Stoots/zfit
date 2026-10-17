@@ -21,6 +21,7 @@ import {
   type TextInputProps,
 } from 'react-native';
 import { fetch as expoFetch } from 'expo/fetch';
+import { getLocales } from 'expo-localization';
 import {
   ExpoSpeechRecognitionModule,
   useSpeechRecognitionEvent,
@@ -70,6 +71,7 @@ import { getAuthHeaders } from '../services/api/authService';
 import { normalizeUrl } from '../services/api/apiClient';
 import { clearAllChatHistory } from '../services/api/chatApi';
 import { addLog } from '../services/LogService';
+import { resolveSpeechLocale } from '../utils/speechLocale';
 import { useNativeIOSHeadersActive } from '../services/nativeTabBarPreference';
 import {
   useActiveAiServiceSetting,
@@ -566,7 +568,10 @@ function SystemVoiceDictationButton({
       finalTranscriptRef.current = '';
       activeRef.current = true;
       ExpoSpeechRecognitionModule.start({
-        lang: i18n.language,
+        lang: resolveSpeechLocale(
+          i18n.language,
+          getLocales().map((locale) => locale.languageTag)
+        ),
         interimResults: true,
         maxAlternatives: 1,
         continuous: false,

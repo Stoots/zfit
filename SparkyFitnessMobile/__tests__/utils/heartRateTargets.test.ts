@@ -133,6 +133,26 @@ describe('applyHeartRateTargets', () => {
     expect(isValidIntervalPlan(result)).toBe(true);
   });
 
+  it('puts the warm-up range on the warm-up and cool-down', () => {
+    const warm = { minBpm: 100, maxBpm: 125 };
+    const withCooldown = {
+      ...plan,
+      steps: [...plan.steps, { kind: 'cooldown' as const, seconds: 300 }],
+    };
+    const result = applyHeartRateTargets(withCooldown, {
+      work: fast,
+      easy,
+      warm,
+    });
+    expect(result.steps.map((step) => step.heartRate)).toEqual([
+      warm,
+      fast,
+      easy,
+      warm,
+    ]);
+    expect(isValidIntervalPlan(result)).toBe(true);
+  });
+
   it('ignores an unusable range and rejects a plan carrying one', () => {
     expect(
       applyHeartRateTargets(plan, { work: { minBpm: 150, maxBpm: 152 } })
