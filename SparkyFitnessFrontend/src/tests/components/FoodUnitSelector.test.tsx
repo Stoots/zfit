@@ -1,5 +1,11 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from '@testing-library/react';
 import '@testing-library/jest-dom';
 import FoodUnitSelector from '@/components/FoodUnitSelector';
 import type { Food, FoodVariant } from '@/types/food';
@@ -159,7 +165,7 @@ describe('FoodUnitSelector', () => {
     food: Food,
     props?: Partial<React.ComponentProps<typeof FoodUnitSelector>>
   ) => {
-    render(
+    const view = render(
       <FoodUnitSelector
         food={food}
         open={true}
@@ -175,6 +181,7 @@ describe('FoodUnitSelector', () => {
         screen.getByRole('button', { name: /^tsp$/i })
       ).toBeInTheDocument();
     });
+    return view;
   };
 
   beforeEach(() => {
@@ -195,9 +202,116 @@ describe('FoodUnitSelector', () => {
     expect(addButtons).toHaveLength(2);
     expect(addButtons[0]).toBeEnabled();
     expect(addButtons[1]).toBeEnabled();
-    fireEvent.click(addButtons[0]!);
+    await act(async () => fireEvent.click(addButtons[0]!));
     expect(onSelect).toHaveBeenCalledTimes(1);
   });
+
+  it.each([false, true])(
+    'retains the draft after rejection and saves once on retry (converted unit: %s)',
+    async (converted) => {
+      let rejectSave: (reason: Error) => void = () => {};
+      let finishRetry: () => void = () => {};
+      const savedEntries: unknown[][] = [];
+      const onSelect = jest
+        .fn()
+        .mockImplementationOnce(
+          () =>
+            new Promise<void>((_resolve, reject) => {
+              rejectSave = reject;
+            })
+        )
+        .mockImplementationOnce(
+          (...entry: unknown[]) =>
+            new Promise<void>((resolve) => {
+              finishRetry = () => {
+                savedEntries.push(entry);
+                resolve();
+              };
+            })
+        );
+      const onOpenChange = jest.fn();
+      const variant = createVariant({
+        id: 'v1',
+        serving_size: 1,
+        serving_unit: 'g',
+      });
+      mockFetchQuery.mockResolvedValue([]);
+      mockMutateAsync.mockResolvedValue({
+        ...variant,
+        id: 'converted',
+        serving_unit: 'tsp',
+      });
+      const food = createFood(variant);
+      const { rerender } = await renderSelector(food, {
+        onSelect,
+        onOpenChange,
+        showTimeInput: true,
+        initialTime: '12:00',
+      });
+      if (converted) {
+        fireEvent.click(screen.getByRole('button', { name: /^tsp$/i }));
+        fireEvent.change(screen.getByPlaceholderText(/e\.g\. 1/i), {
+          target: { value: '4' },
+        });
+      }
+      fireEvent.change(screen.getByLabelText('Quantity'), {
+        target: { value: '2.5' },
+      });
+      fireEvent.change(screen.getByLabelText(/Time \(optional\)/i), {
+        target: { value: '12:34' },
+      });
+      fireEvent.change(screen.getByLabelText(/note for this entry/i), {
+        target: { value: 'Post gym lunch' },
+      });
+      fireEvent.click(
+        screen.getAllByRole('button', { name: /Add to Meal/i })[0]!
+      );
+      await waitFor(() => expect(onSelect).toHaveBeenCalledTimes(1));
+      expect(onOpenChange).not.toHaveBeenCalled();
+      screen
+        .getAllByRole('button', { name: /Saving/i })
+        .forEach((button) => expect(button).toBeDisabled());
+      fireEvent.submit(screen.getByLabelText('Quantity').closest('form')!);
+      expect(onSelect).toHaveBeenCalledTimes(1);
+      // Diary recomputes its initial clock prop when mutation state changes.
+      rerender(
+        <FoodUnitSelector
+          food={food}
+          open={true}
+          onSelect={onSelect}
+          onOpenChange={onOpenChange}
+          showTimeInput={true}
+          initialTime="12:01"
+        />
+      );
+      await act(async () => rejectSave(new Error('Service unavailable')));
+      expect(screen.getByRole('alert')).toHaveTextContent(/try again/i);
+      expect(screen.getByLabelText('Quantity')).toHaveValue(2.5);
+      expect(screen.getByLabelText(/Time \(optional\)/i)).toHaveValue('12:34');
+      expect(screen.getByLabelText(/note for this entry/i)).toHaveValue(
+        'Post gym lunch'
+      );
+      expect(onOpenChange).not.toHaveBeenCalled();
+      fireEvent.click(
+        screen.getAllByRole('button', { name: /Add to Meal/i })[1]!
+      );
+      await waitFor(() => expect(onSelect).toHaveBeenCalledTimes(2));
+      fireEvent.submit(screen.getByLabelText('Quantity').closest('form')!);
+      await act(async () => finishRetry());
+      expect(savedEntries).toHaveLength(1);
+      expect(savedEntries[0]?.slice(1)).toEqual([
+        2.5,
+        converted ? 'tsp' : 'g',
+        expect.objectContaining({ id: converted ? 'converted' : 'v1' }),
+        '12:34',
+        null,
+        'Post gym lunch',
+      ]);
+      expect(onOpenChange).toHaveBeenCalledTimes(1);
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+      expect(mockMutateAsync).toHaveBeenCalledTimes(converted ? 1 : 0);
+    }
+  );
 
   it('clears the entry note when reopened for another food', async () => {
     // Diary never clears `selectedFood`, so this dialog stays mounted between

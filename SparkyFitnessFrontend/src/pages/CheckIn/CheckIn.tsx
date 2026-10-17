@@ -225,10 +225,6 @@ const CheckIn = () => {
           value="measurements"
           className="focus-visible:outline-none space-y-6"
         >
-          <CheckInWeightTrend
-            selectedDate={selectedDate}
-            photoDates={photoDates}
-          />
           <CheckInForm
             bodyFatPercentage={bodyFatPercentage}
             boneMassKg={boneMassKg}
@@ -265,6 +261,10 @@ const CheckIn = () => {
             useMostRecentForCalculation={useMostRecentForCalculation}
             waist={waist}
             weight={weight}
+          />
+          <CheckInWeightTrend
+            selectedDate={selectedDate}
+            photoDates={photoDates}
           />
           <RecentActivity
             convertMeasurement={convertMeasurement}
