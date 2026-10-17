@@ -72,6 +72,8 @@ Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded her
 
 #### Bug fixes
 
+- Bring populated Cardio Test editors into view with a dated heading and return focus to history after Save or Cancel for all four web protocols (#60).
+
 - Keep web food-entry quantity, unit, time and notes after a failed save; allow retry and block duplicate submissions while saving (#58).
 
 - Make food picker nutrient labels, values and serving captions readable in both themes, retaining nutrient colors as marks (#59).
@@ -90,6 +92,8 @@ Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded her
 - Show prescribed set notes on workout start and provide editable exercise notes that persist with the workout.
 
 #### Features
+
+- Add a phone-friendly protocol selector to web Cardio Tests, showing one protocol’s entry, history and trend while preserving Program assessment deep links (#61).
 
 - Record and graph ramp Test Attempts on web, including heart-rate recovery and Program assessment linking (#6).
 - Add owner-only, read-only Training analysis to web chat with explicit Program, Cardio Test and synced Apple Health disclosure controls (#8).
