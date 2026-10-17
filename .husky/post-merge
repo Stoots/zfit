@@ -1,0 +1,5 @@
+#!/bin/sh
+# Stale node_modules after a pull or upstream sync broke server boot (missing `sharp`).
+if git diff --name-only ORIG_HEAD HEAD | grep -qx pnpm-lock.yaml; then
+  pnpm install --frozen-lockfile
+fi
