@@ -36,5 +36,7 @@ Keep private cutover identifiers out of the issue tracker.
 
 ## Landing verification
 
+- `pnpm player:e2e` exercises Program workout draft recovery and saved diary sets against disposable PostgreSQL and a production web build at a 390×844 touch viewport. See `FORK.md` for prerequisites and artifacts.
+
 - PR #15 delivery reported frontend, mobile and server validation; full frontend/mobile suites; and persisted Cooper/RLS checks against disposable PostgreSQL. See the PR and `agent-docs/cooper-manual-acceptance.md` for the remaining phone check.
 - PR #20 delivery reported frontend, mobile and server validation; 190 frontend suites (1,753 tests), 499 mobile suites (7,690 tests), serial migration-check suites, upgrade-path tests and guarded consolidation acceptance. The landing review corrected spec gaps that those green suites initially missed.

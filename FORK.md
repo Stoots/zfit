@@ -5,7 +5,7 @@
 - `FORK.md` (this file), `FORK-CHANGELOG.md`, and `.gitattributes` (`FORK-CHANGELOG.md merge=union`, so concurrent changelog entries merge without conflicts)
 - `agent-docs/` (fork additions: `HANDOVER.md`, `deployment-smoke.md`, `fork-review-rules.md`)
 - `docs/adr/`, `docs/agents/`
-- `scripts/deployment-smoke*`, `scripts/fork-check-commits*`, `scripts/fork-check-pr-body*`, `.github/scripts/assert-acceptance-report*`, `.github/workflows/deployment-smoke-checks.yml`, `.github/workflows/fork-*.yml`
+- `scripts/deployment-smoke*`, `scripts/fork-check-commits*`, `scripts/fork-player-e2e*`, `scripts/fork-check-pr-body*`, `.github/scripts/assert-acceptance-report*`, `.github/workflows/deployment-smoke-checks.yml`, `.github/workflows/fork-*.yml`
 
 The native app (`SparkyFitnessMobile/`) stays at upstream behaviour: the owner's iPhone runs the upstream App Store app plus the fork's web app from the Home Screen, so fork features ship to web. `fork-check-commits` warns on native-app changes.
 
@@ -68,3 +68,15 @@ Kept enabled: `ci-tests.yml`, `pr-validation-tests.yml`, `docs-test.yml`, `helm-
 ## Fork changelog
 
 User-facing fork changes are recorded in `FORK-CHANGELOG.md` (upstream `CHANGELOG.md` is release-please managed). The `merge=union` driver only applies to local merges: GitHub still marks a second PR that touches the changelog as conflicting, so run `git merge origin/main` on that branch, push, and let CI rerun.
+
+## Workout player browser test
+
+Run `pnpm player:e2e` from the root after `pnpm install --frozen-lockfile`.
+Requires Docker and `/usr/bin/chromium` (override with `CHROME_PATH`). Port 8080
+must be free; server and disposable PostgreSQL ports are chosen automatically
+(override the database port with `PLAYER_E2E_DB_PORT`). The script builds the web
+app and tests a Program workout at 390×844 with touch input: log a set, leave,
+reload, restart, verify the draft, finish, and verify the saved diary set.
+It uses synthetic data and isolated inline server settings, ignores repo `.env`,
+disables scheduled jobs, and removes its processes and database on exit.
+Logs and failure screenshots stay under `$TMPDIR` (default `tmp-codex/`).
