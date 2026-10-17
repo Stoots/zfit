@@ -14,9 +14,10 @@ jest.mock('react-i18next', () => ({
   }),
 }));
 
+let mockWeightUnit = 'kg';
 jest.mock('@/contexts/PreferencesContext', () => ({
   usePreferences: () => ({
-    weightUnit: 'kg',
+    weightUnit: mockWeightUnit,
     measurementUnit: 'cm',
   }),
 }));
@@ -70,6 +71,44 @@ const defaultProps = {
 };
 
 describe('CheckInForm', () => {
+  beforeEach(() => {
+    mockWeightUnit = 'kg';
+  });
+
+  it('converts the previous weight hint and entered pounds to metric state', () => {
+    mockWeightUnit = 'lbs';
+    const setWeight = jest.fn();
+    render(
+      <CheckInForm
+        {...defaultProps}
+        placeholders={{ ...emptyPlaceholders, weight: 80 }}
+        setWeight={setWeight}
+      />
+    );
+    const weight = screen.getByLabelText('Weight');
+    expect(weight).toHaveAttribute('placeholder', '176.4');
+    fireEvent.change(weight, { target: { value: '176.4' } });
+    fireEvent.blur(weight);
+    expect(setWeight).toHaveBeenCalledWith(expect.any(String));
+    expect(Number(setWeight.mock.calls[0][0])).toBeCloseTo(80.016, 2);
+  });
+
+  it('uses the existing form submit and disables Save while saving', () => {
+    const handleSubmit = jest.fn((event: React.SubmitEvent) => {
+      event.preventDefault();
+      return Promise.resolve();
+    });
+    const { rerender } = render(
+      <CheckInForm {...defaultProps} handleSubmit={handleSubmit} />
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Save Check-In' }));
+    expect(handleSubmit).toHaveBeenCalledTimes(1);
+    rerender(
+      <CheckInForm {...defaultProps} loading handleSubmit={handleSubmit} />
+    );
+    expect(screen.getByRole('button', { name: 'Saving...' })).toBeDisabled();
+  });
+
   it('renders the height input with the current height value', () => {
     render(<CheckInForm {...defaultProps} />);
 
