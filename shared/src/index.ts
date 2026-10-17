@@ -267,3 +267,5 @@ export * from "./utils/trainingLoad.ts";
 export * from "./utils/runProgramLoad.ts";
 export * from "./nutrients/nutrientAlgorithms.ts";
 export * from "./nutrients/nutrientCalculation.ts";
+
+export { canLinkDiaryWorkout } from "./utils/diaryWorkoutCompletion.ts";

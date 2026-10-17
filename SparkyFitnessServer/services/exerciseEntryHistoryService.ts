@@ -145,6 +145,7 @@ function _buildExerciseEntryWithSnapshot(
 
   return {
     id: entryData.id as string,
+    is_weekly_prefill: entryData.is_weekly_prefill === true,
     exercise_id: entryData.exercise_id as string,
     duration_minutes: (entryData.duration_minutes as number) ?? 0,
     calories_burned: (entryData.calories_burned as number) ?? 0,
