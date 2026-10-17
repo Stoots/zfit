@@ -109,7 +109,7 @@ const FoodResultCard = ({
 
   return (
     <Card
-      className={`hover:bg-gray-50 dark:hover:bg-gray-700 ${onCardClick ? 'cursor-pointer' : ''}`}
+      className={`hover:bg-muted ${onCardClick ? 'cursor-pointer' : ''}`}
       onClick={onCardClick}
     >
       <CardContent className="p-4">
@@ -253,7 +253,7 @@ const FoodResultCard = ({
                   getEnergyUnitString={nutrientConfig.getEnergyUnitString}
                   customNutrients={nutrientConfig.customNutrients}
                 />
-                <p className="text-xs text-gray-500 mt-1">
+                <p className="text-xs text-muted-foreground mt-1">
                   Per {formatServingLabel(foodItem.default_variant)}
                 </p>
                 <AllergenBadges

@@ -3,10 +3,6 @@ import '@testing-library/jest-dom';
 import FoodResultCard from '@/components/FoodSearch/FoodResultCard';
 import type { Food } from '@/types/food';
 
-jest.mock('@/components/FoodSearch/NutrientGrid', () => ({
-  NutrientGrid: () => <div data-testid="nutrient-grid" />,
-}));
-
 jest.mock('@/hooks/useAllergenPreferences', () => ({
   useAllergenPreferences: () => ({ data: [] }),
 }));
@@ -201,3 +197,31 @@ describe('FoodResultCard', () => {
     expect(screen.getByText(/Family/i)).toBeInTheDocument();
   });
 });
+
+// All four picker sources render this shared card and its real nutrient grid.
+it.each(['recent', 'favorite', 'local-search', 'online'])(
+  'keeps nutrients and serving text readable for %s results',
+  (source) => {
+    const { container } = render(
+      <FoodResultCard
+        item={createFood()}
+        isOnline={source === 'online'}
+        isFavorite={source === 'favorite'}
+        nutrientConfig={{
+          ...nutrientConfig,
+          visibleNutrients: ['calories', 'protein', 'carbs', 'fat'],
+        }}
+      />
+    );
+    expect(screen.getByText('120')).toHaveClass('text-foreground');
+    expect(screen.getByText('10.0g')).toHaveClass('text-foreground');
+    expect(screen.getByText('protein').closest('.grid')).toHaveClass(
+      'text-muted-foreground'
+    );
+    expect(screen.getByText('Per 1 cup')).toHaveClass('text-muted-foreground');
+    expect(container.querySelector('.bg-card')).toHaveClass('hover:bg-muted');
+    expect(
+      container.querySelectorAll('[aria-hidden="true"].rounded-full')
+    ).toHaveLength(4);
+  }
+);
