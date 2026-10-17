@@ -2,8 +2,8 @@
 
 `Stoots/zfit` is a personal fork of [`CodeWithCJ/SparkyFitness`](https://github.com/CodeWithCJ/SparkyFitness). To keep upstream syncs clean, edit upstream-owned files (`CHANGELOG.md`, `.github/`, existing docs, `AGENTS.md`) minimally. Fork-only material lives here:
 
-- `FORK.md` (this file)
-- `agent-docs/` (fork additions: `HANDOVER.md`, `deployment-smoke.md`)
+- `FORK.md` (this file) and `.gitattributes` (`FORK.md merge=union`, so concurrent changelog entries merge without conflicts)
+- `agent-docs/` (fork additions: `HANDOVER.md`, `deployment-smoke.md`, `fork-review-rules.md`)
 - `docs/adr/`, `docs/agents/`
 - `scripts/deployment-smoke*`, `scripts/fork-check-commits*`, `scripts/fork-check-pr-body*`, `.github/scripts/assert-acceptance-report*`, `.github/workflows/deployment-smoke-checks.yml`, `.github/workflows/fork-*.yml`
 
@@ -15,7 +15,7 @@ The native app (`SparkyFitnessMobile/`) stays at upstream behaviour: the owner's
 - Work queue: GitHub issues on `Stoots/zfit` (see `docs/agents/issue-tracker.md`); the current order is in `agent-docs/HANDOVER.md`. Specs: #1 and #9 (#9 supersedes #1 for session identity).
 - Deployment verification: `agent-docs/deployment-smoke.md`.
 - Every PR runs `.github/workflows/fork-checks.yml` (commit and PR-text rules: no assistant or bot attribution, no `db_schema_backup.sql` edits).
-- Before delivery: review changes against `main` on both repo standards and the originating issue/spec (`agent-docs/pr-review-checklist.md`), then verify each commit's affected package typecheck. Green tests alone did not catch the PR #20 spec gaps.
+- Before delivery: review changes against `main` on both repo standards and the originating issue/spec (`agent-docs/pr-review-checklist.md`, plus `agent-docs/fork-review-rules.md` for AI-provider data paths), then verify each commit's affected package typecheck. Green tests alone did not catch the PR #20 spec gaps.
 - Local verification: run multi-file database suites with Vitest `--no-file-parallelism`; place mobile Jest caches under `~/.cache` via `--cacheDirectory`. The `jest-expo` runtime lacks `Promise.withResolvers`.
 
 ## Delivery checks
