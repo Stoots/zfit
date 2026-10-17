@@ -72,6 +72,8 @@ Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded her
 
 #### Bug fixes
 
+- Keep web food-entry quantity, unit, time and notes after a failed save; allow retry and block duplicate submissions while saving (#58).
+
 - Make food picker nutrient labels, values and serving captions readable in both themes, retaining nutrient colors as marks (#59).
 
 - Put daily weight entry and Save before the trend chart on web Check-In, keeping the selected date, preferred units and complete measurement form (#63).
