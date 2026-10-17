@@ -122,6 +122,20 @@ function getInitialDraft(
       return null;
     }
 
+    const stored = loadWorkoutPlaybackDraftFromStorage(
+      existingDraft.entry_date
+    );
+    // Starting the same Planned Session again must resume the lifter's edits.
+    if (
+      existingDraft.training_program &&
+      stored?.training_program?.program_id ===
+        existingDraft.training_program.program_id &&
+      stored.training_program.session_id ===
+        existingDraft.training_program.session_id
+    ) {
+      return stored;
+    }
+
     return existingDraft;
   }
 
@@ -192,6 +206,7 @@ const WorkoutPlaybackPage = () => {
   );
   const draftRef = useRef<WorkoutPlaybackDraft | null>(draft);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [draftStorageFailed, setDraftStorageFailed] = useState(false);
   const [requiresSeparateSave, setRequiresSeparateSave] = useState(false);
   const [elapsedTickMs, setElapsedTickMs] = useState(() => Date.now());
   const [setNotesVisibility, setSetNotesVisibility] = useState<
@@ -492,7 +507,7 @@ const WorkoutPlaybackPage = () => {
     routeState?.draft,
     routeState?.returnTo,
   ]);
-  // Debounce draft saves to avoid excessive localStorage writes on timer ticks
+  // Persist edits before navigation or backgrounding can cancel a delayed save.
   useEffect(() => {
     if (!draft) {
       if (persistedDraftDateRef.current) {
@@ -502,19 +517,15 @@ const WorkoutPlaybackPage = () => {
       return;
     }
 
-    const timer = setTimeout(() => {
-      if (
-        persistedDraftDateRef.current &&
-        persistedDraftDateRef.current !== draft.entry_date
-      ) {
-        clearWorkoutPlaybackDraftFromStorage(persistedDraftDateRef.current);
-      }
+    if (
+      persistedDraftDateRef.current &&
+      persistedDraftDateRef.current !== draft.entry_date
+    ) {
+      clearWorkoutPlaybackDraftFromStorage(persistedDraftDateRef.current);
+    }
 
-      saveWorkoutPlaybackDraftToStorage(draft);
-      persistedDraftDateRef.current = draft.entry_date;
-    }, 500);
-
-    return () => clearTimeout(timer);
+    setDraftStorageFailed(!saveWorkoutPlaybackDraftToStorage(draft));
+    persistedDraftDateRef.current = draft.entry_date;
   }, [draft]);
 
   useEffect(() => {
@@ -1213,7 +1224,15 @@ const WorkoutPlaybackPage = () => {
         stats={stats}
         restRemaining={restRemaining}
         isRestActive={!!isRestActive}
-        saveError={saveError}
+        saveError={
+          saveError ??
+          (draftStorageFailed
+            ? t(
+                'exercise.workoutPlaybackDialog.draftStorageError',
+                'Could not save your local workout progress. Keep this page open and finish the workout to save it to your diary.'
+              )
+            : null)
+        }
         requiresSeparateSave={requiresSeparateSave}
         isSaving={isSaving}
         timezone={timezone}
