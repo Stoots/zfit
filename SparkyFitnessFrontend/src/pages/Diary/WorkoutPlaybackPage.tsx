@@ -666,11 +666,11 @@ const WorkoutPlaybackPage = () => {
   const updateDraft = useCallback(
     (updater: (currentDraft: WorkoutPlaybackDraft) => WorkoutPlaybackDraft) => {
       setDraft((currentDraft) => {
-        if (!currentDraft) return currentDraft;
+        if (!currentDraft || recoveryDraft) return currentDraft;
         return updater(currentDraft);
       });
     },
-    []
+    [recoveryDraft]
   );
 
   const handleCompleteSet = useCallback(
@@ -764,8 +764,7 @@ const WorkoutPlaybackPage = () => {
 
   const handleStartTimeChange = useCallback(
     (timeStr: string) => {
-      setDraft((currentDraft) => {
-        if (!currentDraft) return null;
+      updateDraft((currentDraft) => {
         if (!timeStr) {
           return {
             ...currentDraft,
@@ -787,7 +786,7 @@ const WorkoutPlaybackPage = () => {
         }
       });
     },
-    [timezone]
+    [timezone, updateDraft]
   );
 
   const toggleSetNotesVisibility = useCallback(
@@ -1261,7 +1260,7 @@ const WorkoutPlaybackPage = () => {
           (recoveryDraft
             ? t(
                 'exercise.workoutPlaybackDialog.incompatibleDraft',
-                'Another workout draft is saved for this date. Save its logged sets as a separate workout or Discard that saved draft before finishing this workout.'
+                'Another workout draft is saved for this date. Edits and set logging are disabled: resolve the saved workout first by saving its logged sets as a separate workout or discarding that saved draft.'
               )
             : null) ??
           (draftStorageFailed
@@ -1273,6 +1272,7 @@ const WorkoutPlaybackPage = () => {
         }
         requiresSeparateSave={requiresSeparateSave || !!recoveryDraft}
         isSaving={isSaving}
+        editsDisabled={!!recoveryDraft}
         timezone={timezone}
         onCloseKeepDraft={handleCloseKeepDraft}
         onDiscard={handleDiscard}
@@ -1284,106 +1284,111 @@ const WorkoutPlaybackPage = () => {
         onLocationChange={handleLocationChange}
         onStartTimeChange={handleStartTimeChange}
       >
-        {draft.workout_format && draft.workout_format !== 'standard' && (
-          <WorkoutPlaybackIntervalHud
-            workoutFormat={draft.workout_format}
-            timeCapSeconds={draft.time_cap_seconds}
-            startedAtIso={draft.started_at}
-            roundsCompleted={draft.interval_rounds_completed ?? 0}
-            repsCompleted={draft.interval_reps_completed ?? 0}
-            status={draft.interval_status ?? 'rx'}
-            exercises={draft.exercises}
-            onAddRound={handleAddRound}
-            onDecrementRound={handleDecrementRound}
-            onSetReps={handleSetIntervalReps}
-            onSetStatus={handleSetIntervalStatus}
-            onCompletePhaseWork={handleCompleteIntervalPhase}
-          />
-        )}
-
-        {guidedWorkoutEnabled &&
-          (!draft.workout_format || draft.workout_format === 'standard') && (
-            <WorkoutPlaybackGuidedCard
-              draft={draft}
-              getDraft={getDraft}
-              updateDraft={updateDraft}
-              onCompleteSet={handleCompleteSet}
-              onToggleRestPause={handlePauseResumeRest}
+        <fieldset disabled={!!recoveryDraft} className="min-w-0 space-y-5">
+          {draft.workout_format && draft.workout_format !== 'standard' && (
+            <WorkoutPlaybackIntervalHud
+              workoutFormat={draft.workout_format}
+              timeCapSeconds={draft.time_cap_seconds}
+              startedAtIso={draft.started_at}
+              roundsCompleted={draft.interval_rounds_completed ?? 0}
+              repsCompleted={draft.interval_reps_completed ?? 0}
+              status={draft.interval_status ?? 'rx'}
+              exercises={draft.exercises}
+              onAddRound={handleAddRound}
+              onDecrementRound={handleDecrementRound}
+              onSetReps={handleSetIntervalReps}
+              onSetStatus={handleSetIntervalStatus}
+              onCompletePhaseWork={handleCompleteIntervalPhase}
             />
           )}
 
-        {!guidedWorkoutEnabled &&
-          (!draft.workout_format || draft.workout_format === 'standard') &&
-          activeExercise &&
-          activeSet && (
-            <section className="space-y-5 rounded-3xl border bg-card p-5 sm:p-6">
-              <h2 className="break-words text-2xl font-semibold">
-                {activeExercise.exercise_name}
-              </h2>
-              <WorkoutPlaybackTarget
-                exercise={activeExercise}
-                setIndex={activePointer.setIndex}
+          {guidedWorkoutEnabled &&
+            (!draft.workout_format || draft.workout_format === 'standard') && (
+              <WorkoutPlaybackGuidedCard
+                draft={draft}
+                getDraft={getDraft}
+                updateDraft={updateDraft}
+                onCompleteSet={handleCompleteSet}
+                onToggleRestPause={handlePauseResumeRest}
               />
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">
-                  {t('guidedWorkout.card.setOfTotal', {
-                    defaultValue: 'Set {{current}} of {{total}}',
-                    current: activeSet.set_number,
-                    total: activeExercise.sets.length,
-                  })}
-                </p>
-                <Progress
-                  value={
-                    (activeExercise.sets.filter((set) => set.completed).length /
-                      activeExercise.sets.length) *
-                    100
-                  }
-                  aria-label={t(
-                    'exercise.workoutPlaybackPage.progress',
-                    'Sets'
-                  )}
-                  className="h-1"
+            )}
+
+          {!guidedWorkoutEnabled &&
+            (!draft.workout_format || draft.workout_format === 'standard') &&
+            activeExercise &&
+            activeSet && (
+              <section className="space-y-5 rounded-3xl border bg-card p-5 sm:p-6">
+                <h2 className="break-words text-2xl font-semibold">
+                  {activeExercise.exercise_name}
+                </h2>
+                <WorkoutPlaybackTarget
+                  exercise={activeExercise}
+                  setIndex={activePointer.setIndex}
                 />
-              </div>
-              <Button
-                type="button"
-                size="lg"
-                className="h-14 w-full text-lg"
-                disabled={activeSet.completed}
-                onClick={() => handleCompleteSet(activePointer)}
-              >
-                {activeSet.completed
-                  ? t('exercise.workoutPlaybackPage.completed', 'Completed')
-                  : t('exercise.workoutPlaybackPage.logSet', 'Log set')}
-                {activeSet.completed ? (
-                  <Check aria-hidden="true" />
-                ) : (
-                  <ArrowRight aria-hidden="true" />
-                )}
-              </Button>
-            </section>
-          )}
+                <div className="space-y-2">
+                  <p className="text-sm text-muted-foreground">
+                    {t('guidedWorkout.card.setOfTotal', {
+                      defaultValue: 'Set {{current}} of {{total}}',
+                      current: activeSet.set_number,
+                      total: activeExercise.sets.length,
+                    })}
+                  </p>
+                  <Progress
+                    value={
+                      (activeExercise.sets.filter((set) => set.completed)
+                        .length /
+                        activeExercise.sets.length) *
+                      100
+                    }
+                    aria-label={t(
+                      'exercise.workoutPlaybackPage.progress',
+                      'Sets'
+                    )}
+                    className="h-1"
+                  />
+                </div>
+                <Button
+                  type="button"
+                  size="lg"
+                  className="h-14 w-full text-lg"
+                  disabled={activeSet.completed}
+                  onClick={() => handleCompleteSet(activePointer)}
+                >
+                  {activeSet.completed
+                    ? t('exercise.workoutPlaybackPage.completed', 'Completed')
+                    : t('exercise.workoutPlaybackPage.logSet', 'Log set')}
+                  {activeSet.completed ? (
+                    <Check aria-hidden="true" />
+                  ) : (
+                    <ArrowRight aria-hidden="true" />
+                  )}
+                </Button>
+              </section>
+            )}
+        </fieldset>
       </WorkoutPlaybackSummary>
 
-      <WorkoutPlaybackExercisesList
-        exercises={draft.exercises}
-        setNotesVisibility={setNotesVisibility}
-        onToggleSetNotesVisibility={toggleSetNotesVisibility}
-        onSelectSet={handleSelectSet}
-        onCompleteSet={handleCompleteSet}
-        onUncompleteSet={handleUncompleteSet}
-        onSetFieldChange={handleSetFieldChange}
-        onExerciseNotesChange={handleExerciseNotesChange}
-        onOpenRestEditor={handleOpenRestEditor}
-        onRemoveSet={handleRemoveSet}
-        onAddSet={handleAddSet}
-        onAddDropSets={handleAddDropSets}
-        onReplaceExercise={
-          draft.training_program ? undefined : setReplaceExerciseIndex
-        }
-        onAdaptiveDeclined={handleAdaptiveDeclined}
-        weightUnit={weightUnit}
-      />
+      <fieldset disabled={!!recoveryDraft} className="min-w-0">
+        <WorkoutPlaybackExercisesList
+          exercises={draft.exercises}
+          setNotesVisibility={setNotesVisibility}
+          onToggleSetNotesVisibility={toggleSetNotesVisibility}
+          onSelectSet={handleSelectSet}
+          onCompleteSet={handleCompleteSet}
+          onUncompleteSet={handleUncompleteSet}
+          onSetFieldChange={handleSetFieldChange}
+          onExerciseNotesChange={handleExerciseNotesChange}
+          onOpenRestEditor={handleOpenRestEditor}
+          onRemoveSet={handleRemoveSet}
+          onAddSet={handleAddSet}
+          onAddDropSets={handleAddDropSets}
+          onReplaceExercise={
+            draft.training_program ? undefined : setReplaceExerciseIndex
+          }
+          onAdaptiveDeclined={handleAdaptiveDeclined}
+          weightUnit={weightUnit}
+        />
+      </fieldset>
 
       {replaceExerciseIndex !== null && !draft.training_program && (
         <Suspense fallback={null}>

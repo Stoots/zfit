@@ -1393,7 +1393,7 @@
       "finishError": "Failed to save workout. Your local progress is still preserved, and you can retry.",
       "draftStorageError": "Could not save your local workout progress. Keep this page open and finish the workout to save it to your diary.",
       "completionConflict": "This Planned Session was already completed with a different workout. Save your performed sets as a separate workout or Discard this draft.",
-      "incompatibleDraft": "Another workout draft is saved for this date. Save its logged sets as a separate workout or Discard that saved draft before finishing this workout.",
+      "incompatibleDraft": "Another workout draft is saved for this date. Edits and set logging are disabled: resolve the saved workout first by saving its logged sets as a separate workout or discarding that saved draft.",
       "programDraftRejected": "This draft cannot complete the Planned Session. Save your performed sets as a separate workout or Discard this draft.",
       "saveSeparate": "Save as a separate workout",
       "finishing": "Saving...",

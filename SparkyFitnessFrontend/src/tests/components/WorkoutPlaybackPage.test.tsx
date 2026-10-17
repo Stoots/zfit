@@ -124,6 +124,45 @@ describe('WorkoutPlaybackPage', () => {
     expect(document.getElementById('set-weight-0-0')).toHaveValue(80);
   });
 
+  it('blocks active edits and set logging across remount while recovery is pending', () => {
+    const stored = createWorkoutPlaybackDraftFromPreset(
+      { ...presetFixture, workout_session_id: 'old-workout-session' },
+      '2026-04-27'
+    );
+    stored.exercises[0]!.sets[0]!.weight = 92.5;
+    stored.exercises[0]!.sets[0]!.completed = true;
+    saveWorkoutPlaybackDraftToStorage(stored);
+    mockLocationState = createWorkoutPlaybackRouteState(
+      { ...presetFixture, workout_session_id: 'new-workout-session' },
+      '2026-04-27'
+    );
+    const view = render(<WorkoutPlaybackPage />);
+    const weight = document.getElementById('set-weight-0-0')!;
+    fireEvent.change(screen.getByLabelText('Gym / Location'), {
+      target: { value: 'Unsaved location' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Log set' }));
+    expect(screen.getByRole('button', { name: 'Log set' })).toBeDisabled();
+    expect(weight).toBeDisabled();
+    expect(weight).toHaveValue(80);
+    expect(screen.getByLabelText('Gym / Location')).toBeDisabled();
+    expect(screen.getByLabelText('Gym / Location')).toHaveValue('');
+    expect(screen.getByText('0/2')).toBeInTheDocument();
+    expect(screen.getByLabelText('Notes')).toBeDisabled();
+    expect(screen.getByLabelText('Start Time')).toBeDisabled();
+    expect(loadWorkoutPlaybackDraftFromStorage('2026-04-27')).toEqual(stored);
+    view.unmount();
+    render(<WorkoutPlaybackPage />);
+    expect(screen.getByRole('button', { name: 'Log set' })).toBeDisabled();
+    expect(document.getElementById('set-weight-0-0')).toHaveValue(80);
+    expect(
+      screen.getByText(/resolve the saved workout first/i)
+    ).toBeInTheDocument();
+    expect(loadWorkoutPlaybackDraftFromStorage('2026-04-27')).toEqual(stored);
+    expect(mockCreatePresetSession).not.toHaveBeenCalled();
+    expect(mockCompleteProgramSession).not.toHaveBeenCalled();
+  });
+
   it.each(['save', 'discard'])(
     'preserves an incompatible draft until explicit %s recovery',
     async (action) => {
@@ -199,6 +238,11 @@ describe('WorkoutPlaybackPage', () => {
       ).toBe('new-workout-session');
       expect(document.getElementById('set-weight-0-0')).toHaveValue(80);
       expect(mockCompleteProgramSession).not.toHaveBeenCalled();
+      expect(document.getElementById('set-weight-0-0')).toBeEnabled();
+      fireEvent.click(screen.getByRole('button', { name: 'Log set' }));
+      expect(
+        loadWorkoutPlaybackDraftFromStorage('2026-04-27')?.exercises[0]?.sets[0]
+      ).toMatchObject({ completed: true, weight: 80 });
     }
   );
 

@@ -43,6 +43,7 @@ interface WorkoutPlaybackSummaryProps {
   saveError: string | null;
   requiresSeparateSave: boolean;
   isSaving: boolean;
+  editsDisabled: boolean;
   timezone: string;
   onCloseKeepDraft: () => void;
   onDiscard: () => void;
@@ -66,6 +67,7 @@ const WorkoutPlaybackSummary = ({
   saveError,
   requiresSeparateSave,
   isSaving,
+  editsDisabled,
   timezone,
   onCloseKeepDraft,
   onDiscard,
@@ -127,6 +129,7 @@ const WorkoutPlaybackSummary = ({
                   ? t('common.pause', 'Pause')
                   : t('common.resume', 'Resume')
               }
+              disabled={editsDisabled}
               onClick={onPauseResumeRest}
             >
               {draft.rest_timer.state === 'running' ? (
@@ -135,7 +138,12 @@ const WorkoutPlaybackSummary = ({
                 <Play className="h-4 w-4" />
               )}
             </Button>
-            <Button type="button" variant="outline" onClick={onSkipRest}>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={editsDisabled}
+              onClick={onSkipRest}
+            >
               {t('common.skip', 'Skip')}
               <SkipForward className="h-4 w-4" />
             </Button>
@@ -173,98 +181,100 @@ const WorkoutPlaybackSummary = ({
                 'Session details'
               )}
             </summary>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-              {/* Start Time */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="startTime" className="text-sm">
-                    Start Time
-                  </Label>
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      onClick={() => onStartTimeChange('')}
-                      disabled={!startTime}
-                      className="inline-flex min-h-11 items-center gap-1 rounded-full border border-input bg-background px-3 py-1 text-sm font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors disabled:opacity-40 disabled:pointer-events-none"
-                      title="Clear time"
-                    >
-                      <X className="h-4 w-4" />
-                      Clear
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const { hour, minute } = userHourMinute(timezone);
-                        onStartTimeChange(
-                          `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
-                        );
-                      }}
-                      className="inline-flex min-h-11 items-center gap-1 rounded-full border border-input bg-background px-3 py-1 text-sm font-medium text-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
-                      title="Set to current local time"
-                    >
-                      <Clock className="h-4 w-4" />
-                      Now
-                    </button>
+            <fieldset disabled={editsDisabled} className="min-w-0">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                {/* Start Time */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="startTime" className="text-sm">
+                      Start Time
+                    </Label>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => onStartTimeChange('')}
+                        disabled={!startTime}
+                        className="inline-flex min-h-11 items-center gap-1 rounded-full border border-input bg-background px-3 py-1 text-sm font-medium text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors disabled:opacity-40 disabled:pointer-events-none"
+                        title="Clear time"
+                      >
+                        <X className="h-4 w-4" />
+                        Clear
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const { hour, minute } = userHourMinute(timezone);
+                          onStartTimeChange(
+                            `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`
+                          );
+                        }}
+                        className="inline-flex min-h-11 items-center gap-1 rounded-full border border-input bg-background px-3 py-1 text-sm font-medium text-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+                        title="Set to current local time"
+                      >
+                        <Clock className="h-4 w-4" />
+                        Now
+                      </button>
+                    </div>
                   </div>
+                  <Input
+                    id="startTime"
+                    type="time"
+                    value={startTime}
+                    onChange={(e) => onStartTimeChange(e.target.value)}
+                    className="text-base"
+                  />
                 </div>
-                <Input
-                  id="startTime"
-                  type="time"
-                  value={startTime}
-                  onChange={(e) => onStartTimeChange(e.target.value)}
-                  className="text-base"
-                />
+
+                {/* Gym / Location */}
+                <div className="space-y-1.5">
+                  <Label htmlFor="location" className="text-sm">
+                    {t(
+                      'exercise.workoutPlaybackDialog.location',
+                      'Gym / Location'
+                    )}
+                  </Label>
+                  <Input
+                    id="location"
+                    type="text"
+                    placeholder={t(
+                      'exercise.workoutPlaybackDialog.locationPlaceholder',
+                      'e.g., Downtown Equinox, Garage Gym'
+                    )}
+                    value={draft.location ?? ''}
+                    onChange={(e) => onLocationChange(e.target.value)}
+                    maxLength={WORKOUT_LOCATION_MAX_LENGTH}
+                    list="workout-location-suggestions"
+                    autoComplete="off"
+                    className="text-base"
+                  />
+                  <datalist id="workout-location-suggestions">
+                    {locationSuggestions.map((location) => (
+                      <option key={location} value={location} />
+                    ))}
+                  </datalist>
+                </div>
               </div>
 
-              {/* Gym / Location */}
-              <div className="space-y-1.5">
-                <Label htmlFor="location" className="text-sm">
-                  {t(
-                    'exercise.workoutPlaybackDialog.location',
-                    'Gym / Location'
-                  )}
-                </Label>
-                <Input
-                  id="location"
-                  type="text"
+              <div className="space-y-2 py-3">
+                <label
+                  htmlFor="workout-session-notes"
+                  className="text-sm font-medium"
+                >
+                  {t('exercise.logExerciseEntryDialog.sessionNotes', 'Notes')}
+                </label>
+                <Textarea
+                  id="workout-session-notes"
+                  value={draft.notes ?? ''}
+                  rows={2}
+                  className="resize-none text-sm"
                   placeholder={t(
-                    'exercise.workoutPlaybackDialog.locationPlaceholder',
-                    'e.g., Downtown Equinox, Garage Gym'
+                    'exercise.logExerciseEntryDialog.notesPlaceholder',
+                    'Any notes about this session...'
                   )}
-                  value={draft.location ?? ''}
-                  onChange={(e) => onLocationChange(e.target.value)}
-                  maxLength={WORKOUT_LOCATION_MAX_LENGTH}
-                  list="workout-location-suggestions"
-                  autoComplete="off"
-                  className="text-base"
+                  onChange={(event) => onSessionNotesChange(event.target.value)}
                 />
-                <datalist id="workout-location-suggestions">
-                  {locationSuggestions.map((location) => (
-                    <option key={location} value={location} />
-                  ))}
-                </datalist>
               </div>
-            </div>
-
-            <div className="space-y-2 py-3">
-              <label
-                htmlFor="workout-session-notes"
-                className="text-sm font-medium"
-              >
-                {t('exercise.logExerciseEntryDialog.sessionNotes', 'Notes')}
-              </label>
-              <Textarea
-                id="workout-session-notes"
-                value={draft.notes ?? ''}
-                rows={2}
-                className="resize-none text-sm"
-                placeholder={t(
-                  'exercise.logExerciseEntryDialog.notesPlaceholder',
-                  'Any notes about this session...'
-                )}
-                onChange={(event) => onSessionNotesChange(event.target.value)}
-              />
-            </div>
+            </fieldset>
           </details>
           {saveError && (
             <div className="flex gap-2 rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">
