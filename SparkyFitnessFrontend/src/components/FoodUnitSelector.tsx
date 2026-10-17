@@ -841,7 +841,7 @@ const FoodUnitSelector = ({
                     <div>
                       <Label htmlFor="conversionFactor">
                         1 {pendingUnit.trim()} ={' '}
-                        {conversionBaseVariant?.serving_unit}
+                        <span>{conversionBaseVariant?.serving_unit}</span>
                       </Label>
                       <Input
                         id="conversionFactor"
@@ -929,7 +929,7 @@ const FoodUnitSelector = ({
                       >
                         <span>
                           1 {pendingUnit} = ?{' '}
-                          {conversionBaseVariant?.serving_unit}
+                          <span>{conversionBaseVariant?.serving_unit}</span>
                         </span>
                         {aiEstimateData !== null && (
                           <span

@@ -1170,6 +1170,7 @@ const handleWorkout: RecordHandler = async (
           ? (workoutAny.totalDistance?.quantity ?? 0)
           : (workoutAny.totalDistance ?? 0);
       let totalSteps: number | undefined;
+      let totalFlights: number | undefined;
       let basalEnergyBurned: number | undefined;
 
       // Pin units explicitly on each getStatistic call. getAllStatistics returns
@@ -1214,6 +1215,30 @@ const handleWorkout: RecordHandler = async (
           }
         } catch {
           // Not readable on this device; resting stays unreported.
+        }
+
+        // Floors climbed during the workout, which is what Apple Fitness shows
+        // as "Flights Climbed" for a stair stepper. The workout sample's own
+        // `totalFlightsClimbed` property is not filled in for workouts built
+        // from statistics (a stair machine over GymKit, for one), so read it
+        // the way steps are read below. Its own try: flights is a separate
+        // read permission, and a refusal must not cost the distance and step
+        // reads that follow.
+        try {
+          const flightStats = await w.getStatistic(
+            'HKQuantityTypeIdentifierFlightsClimbed',
+            'count'
+          );
+          const flights = flightStats?.sumQuantity?.quantity;
+          if (
+            typeof flights === 'number' &&
+            Number.isFinite(flights) &&
+            flights > 0
+          ) {
+            totalFlights = Math.round(flights);
+          }
+        } catch {
+          // Not readable on this device; floors fall back to the sample property.
         }
 
         const distanceTypes = [
@@ -1284,6 +1309,24 @@ const handleWorkout: RecordHandler = async (
         };
       }
 
+      // Tell a walk or run recorded on the watch alone (source bundle
+      // `<phone-bundle>.watchkitapp`) from other apps' workouts, and whether
+      // it was indoors, so the transformer can title it.
+      const workoutExtras = w as unknown as {
+        sourceRevision?: { source?: { bundleIdentifier?: string } };
+        metadata?: Record<string, unknown>;
+      };
+      const workoutBundleId =
+        workoutExtras.sourceRevision?.source?.bundleIdentifier;
+      if (workoutBundleId) record.sourceBundleId = workoutBundleId;
+      const indoorFlag = workoutExtras.metadata?.HKIndoorWorkout;
+      if (indoorFlag !== undefined) {
+        record.metadata = {
+          ...(record.metadata as Record<string, unknown> | undefined),
+          HKIndoorWorkout: indoorFlag,
+        };
+      }
+
       // Elevation is not a totals field on the workout; it arrives as metadata.
       const elevation = w as unknown as {
         metadataElevationAscended?: { quantity?: number };
@@ -1302,7 +1345,13 @@ const handleWorkout: RecordHandler = async (
       const telemetry: Record<string, number | null | undefined> = {};
       const gain = elevation.metadataElevationAscended?.quantity;
       const loss = elevation.metadataElevationDescended?.quantity;
-      const floors = quantityOf(elevation.totalFlightsClimbed);
+      // The sample property when it carries a value, else the statistic read
+      // above; a property of 0 is "not recorded", not "no floors".
+      const propertyFloors = quantityOf(elevation.totalFlightsClimbed);
+      const floors =
+        typeof propertyFloors === 'number' && propertyFloors > 0
+          ? propertyFloors
+          : totalFlights;
       const strokes = quantityOf(elevation.totalSwimmingStrokeCount);
       if (typeof gain === 'number') telemetry.elevation_gain_meters = gain;
       if (typeof loss === 'number') telemetry.elevation_loss_meters = loss;

@@ -410,7 +410,7 @@ async function prepareExerciseEntryForCreate(
     calories_burned?: number;
   } = exercise
     ? {
-        exercise_name: exercise.name,
+        exercise_name: entryData.exercise_name || exercise.name,
         calories_per_hour: exercise.calories_per_hour,
         calories_burned: calculatedCaloriesBurned ?? 0,
       }
@@ -2650,7 +2650,8 @@ async function updateGroupedWorkoutSession(
                 preparedEntry.calories_burned
               ),
               entry_date: targetEntryDate,
-              entry_time: ex.entry_time ?? null,
+              // Preserve when omitted; explicit null clears the time of day.
+              entry_time: ex.entry_time,
             },
             actingUserId,
             existingById.get(ex.id)?.source ?? existingSession.source

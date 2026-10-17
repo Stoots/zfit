@@ -1011,6 +1011,113 @@ describe('readHealthRecords', () => {
       expect((result[0] as { totalSteps: number }).totalSteps).toBe(6543);
     });
 
+    test('reads floors climbed from the workout statistics (a stair stepper over GymKit)', async () => {
+      await initHealthConnect();
+
+      const mockGetStatistic = jest
+        .fn()
+        .mockImplementation((identifier: string) =>
+          identifier === 'HKQuantityTypeIdentifierFlightsClimbed'
+            ? Promise.resolve({ sumQuantity: { quantity: 56 } })
+            : Promise.resolve(undefined)
+        );
+      mockQueryWorkoutSamples.mockResolvedValue([
+        {
+          startDate: '2026-10-08T10:49:00Z',
+          endDate: '2026-10-08T11:06:00Z',
+          workoutActivityType: 44,
+          duration: 1018,
+          totalEnergyBurned: 219,
+          getStatistic: mockGetStatistic,
+        },
+      ]);
+
+      const result = await readHealthRecords(
+        'Workout',
+        new Date('2026-10-08T00:00:00Z'),
+        new Date('2026-10-08T23:59:59Z')
+      );
+
+      expect(mockGetStatistic).toHaveBeenCalledWith(
+        'HKQuantityTypeIdentifierFlightsClimbed',
+        'count'
+      );
+      expect(
+        (result[0] as { telemetry?: { floors_climbed?: number } }).telemetry
+          ?.floors_climbed
+      ).toBe(56);
+    });
+
+    test('prefers the workout sample floors when it has them', async () => {
+      await initHealthConnect();
+
+      const mockGetStatistic = jest
+        .fn()
+        .mockImplementation((identifier: string) =>
+          identifier === 'HKQuantityTypeIdentifierFlightsClimbed'
+            ? Promise.resolve({ sumQuantity: { quantity: 99 } })
+            : Promise.resolve(undefined)
+        );
+      mockQueryWorkoutSamples.mockResolvedValue([
+        {
+          startDate: '2026-10-08T10:49:00Z',
+          endDate: '2026-10-08T11:06:00Z',
+          workoutActivityType: 44,
+          duration: 1018,
+          totalEnergyBurned: 219,
+          totalFlightsClimbed: { quantity: 12 },
+          getStatistic: mockGetStatistic,
+        },
+      ]);
+
+      const result = await readHealthRecords(
+        'Workout',
+        new Date('2026-10-08T00:00:00Z'),
+        new Date('2026-10-08T23:59:59Z')
+      );
+
+      expect(
+        (result[0] as { telemetry?: { floors_climbed?: number } }).telemetry
+          ?.floors_climbed
+      ).toBe(12);
+    });
+
+    test('reports no floors when none were recorded, and survives the read being refused', async () => {
+      await initHealthConnect();
+
+      const refused = jest
+        .fn()
+        .mockImplementation((identifier: string) =>
+          identifier === 'HKQuantityTypeIdentifierFlightsClimbed'
+            ? Promise.reject(new Error('not authorized'))
+            : Promise.resolve({ sumQuantity: { quantity: 321 } })
+        );
+      mockQueryWorkoutSamples.mockResolvedValue([
+        {
+          startDate: '2026-10-08T10:49:00Z',
+          endDate: '2026-10-08T11:06:00Z',
+          workoutActivityType: 37,
+          duration: 1018,
+          totalEnergyBurned: 219,
+          totalFlightsClimbed: { quantity: 0 },
+          getStatistic: refused,
+        },
+      ]);
+
+      const result = await readHealthRecords(
+        'Workout',
+        new Date('2026-10-08T00:00:00Z'),
+        new Date('2026-10-08T23:59:59Z')
+      );
+
+      const telemetry = (
+        result[0] as { telemetry?: { floors_climbed?: number } }
+      ).telemetry;
+      expect(telemetry?.floors_climbed).toBeUndefined();
+      // The other statistic reads still happened.
+      expect((result[0] as { totalSteps: number }).totalSteps).toBe(321);
+    });
+
     test('does not invent workout steps when HealthKit has no associated step statistic', async () => {
       await initHealthConnect();
 

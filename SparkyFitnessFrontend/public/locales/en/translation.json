@@ -214,7 +214,20 @@
     "errorClearingHistory": "Failed to clear chat history.",
     "errorLoadingHistory": "Failed to load chat history.",
     "errorLoadingPreferences": "Failed to load chat preferences.",
-    "successClearingHistory": "Chat history cleared successfully."
+    "successClearingHistory": "Chat history cleared successfully.",
+    "voice": {
+      "start": "Dictate message",
+      "stop": "Stop dictation",
+      "cancel": "Cancel dictation",
+      "listening": "Listening…",
+      "starting": "Starting…",
+      "processing": "Transcribing…",
+      "unsupported": "This voice mode is not supported in this browser. Choose AI transcription in Voice settings or try another browser. AI is never enabled automatically.",
+      "permission": "Allow microphone access in your browser settings to dictate a message.",
+      "tooLarge": "The recording exceeded 10 MB. Try a shorter message.",
+      "noSpeech": "No speech was recognized. Your draft has not changed.",
+      "failed": "Voice input failed. Your draft has not changed. Check your connection and Voice settings, then try again."
+    }
   },
   "workoutLaps": {
     "title": "Workout Split Intervals & Laps",
@@ -2182,7 +2195,10 @@
         "testConnection": "Test Connection",
         "testing": "Testing…",
         "visionNone": "None",
-        "visionService": "Global vision AI service"
+        "visionService": "Global vision AI service",
+        "supportsAudioInput": "Show this configuration in the Voice list",
+        "supportsAudioInputDescription": "Turn this on only if the selected model accepts audio files. When this configuration is selected for Voice, recorded audio is sent to that model for transcription.",
+        "audioInputProviderUnsupported": "Voice transcription is not supported for this provider type yet."
       },
       "userSettings": {
         "title": "AI Services",
@@ -2284,7 +2300,12 @@
         "testConnection": "Test Connection",
         "testing": "Testing…",
         "activeVisionProvider": "Active vision AI provider",
-        "sameAsDefault": "Same as default"
+        "sameAsDefault": "Same as default",
+        "supportsAudioInput": "Show this configuration in the Voice list",
+        "supportsAudioInputDescription": "Turn this on only if the selected model accepts audio files. When this configuration is selected for Voice, recorded audio is sent to that model for transcription.",
+        "audioInputProviderUnsupported": "Voice transcription is not supported for this provider type yet.",
+        "activeVoiceProvider": "Voice configuration",
+        "systemVoiceFree": "System recognition (free)"
       },
       "test": {
         "successTitle": "Success",
@@ -2991,7 +3012,8 @@
       "selectGoalPreset": "Select a goal preset to apply",
       "errorLoading": "Failed to load nutrition goals. Please try again later.",
       "saveForDate": "Save for this Date",
-      "loadingDailyGoals": "Loading daily goals..."
+      "loadingDailyGoals": "Loading daily goals...",
+      "targetSteps": "Daily Steps Goal"
     },
     "mealDistribution": {
       "selectTemplate": "Select a Distribution Template",
@@ -3002,7 +3024,11 @@
       "title": "Meal Calorie Distribution",
       "protein": "Protein:",
       "carbs": "Carbs:",
-      "fat": "Fat:"
+      "fat": "Fat:",
+      "evenDistribution": "Even Distribution",
+      "intermittentFasting": "Intermittent Fasting",
+      "proteinFocusedMorning": "Protein-Focused Morning",
+      "noSnacks": "No Snacks"
     },
     "errorSavingPreset": "Failed to save preset.",
     "presetCreatedSuccess": "Goal preset created successfully!",
@@ -4498,7 +4524,11 @@
     "height": "Height",
     "bodyFatPercentage": "Body Fat %",
     "nutrientBalance": "{{nutrient}} Balance",
-    "symptomsTab": "Symptoms"
+    "symptomsTab": "Symptoms",
+    "weightTrend": "Trend",
+    "weightTrendSummary": "Trend {{weight}}",
+    "weightTrendRate": "{{rate}} per week",
+    "weightGoalForecast": "Goal projected {{date}}"
   },
   "sleepHealth": {
     "hrvStatus": "HRV Status",
@@ -5277,7 +5307,159 @@
     "planReady": "Your personalized plan is ready to go.",
     "skipFailed": "Could not skip onboarding. Please try again.",
     "submissionFailed": "Could not save your plan. Please try again.",
-    "setupShort": "Setup"
+    "setupShort": "Setup",
+    "skip": "Skip",
+    "continue": "Continue",
+    "sexQuestion": "What is your sex?",
+    "sexDescription": "Used to calculate your base metabolic rate.",
+    "male": "Male",
+    "female": "Female",
+    "goalQuestion": "What is your primary goal?",
+    "loseWeight": "Lose weight",
+    "maintainWeight": "Maintain weight",
+    "gainWeight": "Gain weight",
+    "currentWeightQuestion": "What is your current weight?",
+    "heightQuestion": "What is your height?",
+    "enterInUnit": "Enter in {{unit}}.",
+    "birthDateQuestion": "When were you born?",
+    "birthDateDescription": "Age is a key factor in your metabolism.",
+    "selectDateFormat": "Select format",
+    "pickDate": "Pick a date",
+    "bodyFatQuestion": "Estimate your body fat",
+    "bodyFatDescription": "A visual estimate is sufficient.",
+    "bodyFatLow": "Low (<15%)",
+    "bodyFatMedium": "Medium (15-25%)",
+    "bodyFatHigh": "High (25-35%)",
+    "bodyFatVeryHigh": "Very High (>35%)",
+    "targetWeightQuestion": "What is your target weight?",
+    "targetWeightDescription": "Your ultimate goal.",
+    "mealsQuestion": "How many meals do you eat in a typical day?",
+    "mealsPerDay": "{{number}} meals per day",
+    "preparingPlan": "Preparing your personalized plan...",
+    "preparingPlanDescription": "Crunching the numbers based on your unique profile.",
+    "foodSources": {
+      "title": "Connect food databases",
+      "description": "Optional, but adding USDA and FatSecret to your searches gives dramatically better results than the default Open Food Facts. You can always add or change these later in Settings.",
+      "getUsdaKey": "Get a free API key",
+      "usdaKey": "USDA API Key",
+      "getFatsecretCredentials": "Get API credentials",
+      "fatsecretClientId": "FatSecret Client ID",
+      "fatsecretClientSecret": "FatSecret Client Secret",
+      "fatsecretHelp": "Use the REST API OAuth 2.0 credentials from the dashboard, not the OAuth 1.0 Consumer Key/Secret. FatSecret also requires you to whitelist your public IP in its developer dashboard. This can take up to 24 hours to take effect.",
+      "missingField": "Missing FatSecret field",
+      "missingFieldDescription": "Enter both the FatSecret Client ID and Client Secret, or leave both blank to skip.",
+      "notSignedIn": "Not signed in",
+      "notSignedInDescription": "Please sign in again to save food sources."
+    },
+    "plan": {
+      "title": "Your Personal Plan",
+      "goalDescription": "Ready to reach your goal of {{goal}}.",
+      "medicalDisclaimerTitle": "Medical Disclaimer:",
+      "medicalDisclaimer": "This plan is for informational purposes only and should not replace professional medical advice. Please consult with your doctor or a certified nutritionist before making significant changes to your diet or exercise routine.",
+      "dailyCalorieBudget": "Daily Calorie Budget",
+      "perDay": "{{unit}} / day",
+      "baseBmr": "Base BMR:",
+      "calorieBuyback": "Calorie Buyback:",
+      "on": "ON",
+      "off": "OFF",
+      "nutrientGoals": "Nutrient Goals"
+    },
+    "diet": {
+      "title": "Diet Approach",
+      "description": "Choose a preset diet or customize your macro split",
+      "macroSplit": "{{carbs}}% Carbs / {{protein}}% Protein / {{fat}}% Fat",
+      "customMacroSplit": "Custom Macro Split",
+      "total": "Total:",
+      "carbohydrates": "Carbohydrates",
+      "protein": "Protein",
+      "fat": "Fat",
+      "adjustHint": "Adjust or type in a value. Unlocked macros will auto-adjust to maintain 100% total.",
+      "templates": {
+        "balanced": {
+          "name": "Balanced",
+          "description": "Well-rounded nutrition for general health"
+        },
+        "mediterranean": {
+          "name": "Mediterranean",
+          "description": "Heart-healthy with healthy fats"
+        },
+        "dash": {
+          "name": "DASH",
+          "description": "Dietary Approaches to Stop Hypertension"
+        },
+        "atkins": {
+          "name": "Atkins",
+          "description": "Very low carb, high fat"
+        },
+        "low_fat": {
+          "name": "Low Fat",
+          "description": "High carb, minimal fat"
+        },
+        "low_carb": {
+          "name": "Low Carb / Keto",
+          "description": "Ketogenic-style diet"
+        },
+        "custom": {
+          "name": "Custom",
+          "description": "Set your own percentages"
+        }
+      }
+    },
+    "calculation": {
+      "title": "Calculation Settings",
+      "fatBreakdownMethod": "Fat Breakdown Method",
+      "mineralCalculation": "Mineral Calculation",
+      "vitaminCalculation": "Vitamin Calculation",
+      "sugarRecommendation": "Sugar Recommendation",
+      "description": "These settings control how your nutrient goals are calculated. You can change them later in Settings.",
+      "fatAlgorithms": {
+        "AHA_GUIDELINES": "AHA Guidelines (Heart Health)",
+        "KETO_ADAPTED": "Keto-Adapted",
+        "MEDITERRANEAN": "Mediterranean Diet"
+      },
+      "mineralAlgorithms": {
+        "RDA_STANDARD": "RDA Standard (Age/Sex-Based)",
+        "ATHLETIC_PERFORMANCE": "Athletic Performance",
+        "HEART_HEALTH": "Heart Health (Low Sodium)"
+      },
+      "vitaminAlgorithms": {
+        "RDA_STANDARD": "RDA Standard",
+        "IMMUNE_SUPPORT": "Immune Support",
+        "ANTIOXIDANT_FOCUS": "Antioxidant Focus"
+      },
+      "sugarAlgorithms": {
+        "WHO_GUIDELINES": "WHO Guidelines (10% max)",
+        "LOW_CARB_KETO": "Low-Carb/Keto (5% max)",
+        "BALANCED": "Balanced (15% max)"
+      }
+    },
+    "nutrients": {
+      "dailyMacroTargets": "Daily Macro Targets",
+      "carbohydrates": "Carbohydrates",
+      "protein": "Protein",
+      "fats": "Fats",
+      "fiber": "Fiber",
+      "fatBreakdown": "Fat Breakdown",
+      "saturatedFat": "Saturated Fat",
+      "transFat": "Trans Fat",
+      "polyunsaturated": "Polyunsaturated",
+      "monounsaturated": "Monounsaturated",
+      "mineralsOther": "Minerals & Other",
+      "cholesterol": "Cholesterol",
+      "sodium": "Sodium",
+      "potassium": "Potassium",
+      "calcium": "Calcium",
+      "iron": "Iron",
+      "sugarsVitamins": "Sugars & Vitamins",
+      "sugar": "Sugar",
+      "vitaminA": "Vitamin A",
+      "vitaminC": "Vitamin C",
+      "customNutrients": "Custom Nutrients",
+      "hydrationExercise": "Hydration & Exercise",
+      "waterGoal": "Water Goal",
+      "exerciseDuration": "Exercise Duration",
+      "exerciseCalories": "Exercise Calories"
+    }
   },
   "cycle": {
     "hub": "Cycle & Pregnancy Hub",
@@ -7221,5 +7403,21 @@
     "preparingPreview": "Preparing preview…",
     "previewSelected": "Preview selected changes",
     "appliedDescription": "The saved plan has refreshed. Source draft edits and other unsaved plan changes were not saved."
+  },
+  "voiceSettings": {
+    "title": "Voice input",
+    "open": "Voice settings",
+    "recognition": "Recognition",
+    "system": "System (default)",
+    "ai": "AI transcription",
+    "model": "Voice model",
+    "chooseModel": "Choose a model",
+    "chatModel": "Used for chat",
+    "syncHint": "These settings apply to web and mobile. Turning voice input off hides the microphone without changing your model selection.",
+    "systemHint": "Uses your device or browser speech recognizer without a Sparky AI transcription charge. Availability and online processing depend on your device or browser.",
+    "aiHint": "Audio is sent to the selected AI provider through your server. Provider charges may apply. Choose a model to enable AI transcription.",
+    "noModels": "No compatible voice models are enabled. Configure an audio-capable model in AI Service Settings in the web app, then refresh.",
+    "unavailable": "The selected voice model is unavailable. Choose another model or switch to System.",
+    "manualSend": "Dictation fills your draft. Review or edit it, then send it yourself."
   }
 }

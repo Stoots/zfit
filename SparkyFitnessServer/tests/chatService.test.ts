@@ -106,6 +106,31 @@ describe('chatService', () => {
         setting: savedSetting,
       });
     });
+    it('clears the selected Voice pointer when audio eligibility is removed', async () => {
+      const serviceData = {
+        service_type: 'google',
+        supports_audio_input: false,
+      };
+      const savedSetting = { id: 'setting-1', ...serviceData };
+      vi.mocked(chatRepository.upsertAiServiceSetting).mockResolvedValue(
+        savedSetting
+      );
+      vi.mocked(preferenceRepository.getUserPreferences).mockResolvedValue({
+        active_voice_ai_service_id: 'setting-1',
+      });
+
+      await chatService.handleAiServiceSettings(
+        'save_ai_service_settings',
+        serviceData,
+        mockUserId
+      );
+
+      expect(preferenceRepository.updateUserPreferences).toHaveBeenCalledWith(
+        mockUserId,
+        { active_voice_ai_service_id: null }
+      );
+    });
+
     it('should throw error for unsupported action', async () => {
       await expect(
         chatService.handleAiServiceSettings('unknown_action', {}, mockUserId)
@@ -652,7 +677,7 @@ describe('chatService', () => {
       expect(log).toHaveBeenCalledWith(
         'info',
         expect.stringMatching(
-          /Loaded 33\/54 active tools for chatbot \(profile=core/
+          /Loaded 34\/55 active tools for chatbot \(profile=core/
         )
       );
       // The core profile is the mitigation, so no context-window warning.
@@ -734,7 +759,7 @@ describe('chatService', () => {
       expect(log).toHaveBeenCalledWith(
         'info',
         expect.stringMatching(
-          /Loaded 54\/54 active tools for chatbot \(profile=full/
+          /Loaded 55\/55 active tools for chatbot \(profile=full/
         )
       );
       // Ollama + full profile is the risky combo, so warn about the 4096 default.
@@ -767,7 +792,7 @@ describe('chatService', () => {
       expect(log).toHaveBeenCalledWith(
         'info',
         expect.stringMatching(
-          /Loaded 54\/54 active tools for chatbot \(profile=full/
+          /Loaded 55\/55 active tools for chatbot \(profile=full/
         )
       );
     });
@@ -795,7 +820,7 @@ describe('chatService', () => {
       expect(log).toHaveBeenCalledWith(
         'info',
         expect.stringMatching(
-          /Loaded 54\/54 active tools for chatbot \(profile=full/
+          /Loaded 55\/55 active tools for chatbot \(profile=full/
         )
       );
       // The context-window warning is Ollama-only; cloud providers never see it.

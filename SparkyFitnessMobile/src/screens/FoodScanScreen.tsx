@@ -42,6 +42,7 @@ import {
   scanLabelOnDevice,
 } from '../services/onDeviceLabelScan';
 import { prepareLabelPhoto } from '../utils/labelPhoto';
+import { downscaleFoodPhoto } from '../utils/pickImage';
 import {
   rememberLabelScan,
   type LabelScanSource,
@@ -643,13 +644,14 @@ const FoodScanScreen: React.FC<FoodScanScreenProps> = ({
         });
         return;
       }
+      const prepared = await downscaleFoodPhoto(photo).catch(() => photo);
       // Mark seen even if user retakes — the intro shouldn't reappear later.
       await markFoodPhotoIntroSeen();
       navigation.replace('FoodPhotoFlow', {
         screen: 'Improve',
         params: {
           date,
-          photo: { uri: photo.uri },
+          photo: { uri: prepared.uri },
           mealTypeId: mealTypeId ?? undefined,
         },
       });
@@ -686,12 +688,13 @@ const FoodScanScreen: React.FC<FoodScanScreenProps> = ({
         });
         return;
       }
+      const prepared = await downscaleFoodPhoto(asset).catch(() => asset);
       await markFoodPhotoIntroSeen();
       navigation.replace('FoodPhotoFlow', {
         screen: 'Improve',
         params: {
           date,
-          photo: { uri: asset.uri },
+          photo: { uri: prepared.uri },
           mealTypeId: mealTypeId ?? undefined,
         },
       });

@@ -1579,9 +1579,17 @@ CREATE TABLE public.ai_service_settings (
     api_key_tag text,
     is_public boolean DEFAULT false CONSTRAINT ai_service_settings_is_global_not_null NOT NULL,
     chat_tool_profile text DEFAULT 'full'::text NOT NULL,
+    supports_audio_input boolean DEFAULT false NOT NULL,
     CONSTRAINT ai_service_settings_chat_tool_profile_check CHECK ((chat_tool_profile = ANY (ARRAY['full'::text, 'core'::text]))),
     CONSTRAINT check_public_settings_user_id_null CHECK ((((is_public = true) AND (user_id IS NULL)) OR ((is_public = false) AND (user_id IS NOT NULL))))
 );
+
+
+--
+-- Name: COLUMN ai_service_settings.supports_audio_input; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.ai_service_settings.supports_audio_input IS 'User/admin assertion that this configured model accepts audio input for voice transcription.';
 
 
 --
@@ -2105,6 +2113,21 @@ CREATE TABLE public.exercise_entry_activity_details (
     updated_by_user_id uuid,
     exercise_preset_entry_id uuid,
     CONSTRAINT chk_exercise_entry_id_or_preset_id CHECK ((((exercise_entry_id IS NOT NULL) AND (exercise_preset_entry_id IS NULL)) OR ((exercise_entry_id IS NULL) AND (exercise_preset_entry_id IS NOT NULL))))
+);
+
+
+--
+-- Name: exercise_entry_distance_series; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.exercise_entry_distance_series (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    exercise_entry_id uuid NOT NULL,
+    entry_date date NOT NULL,
+    points jsonb DEFAULT '[]'::jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now(),
+    updated_at timestamp with time zone DEFAULT now()
 );
 
 
@@ -2792,7 +2815,8 @@ CREATE TABLE public.goal_presets (
     custom_nutrients jsonb DEFAULT '{}'::jsonb,
     custom_meal_percentages jsonb DEFAULT '{}'::jsonb,
     caffeine_mg numeric,
-    alcohol_g numeric
+    alcohol_g numeric,
+    target_steps integer
 );
 
 
@@ -3663,6 +3687,32 @@ CREATE TABLE public.rate_limit (
 
 
 --
+-- Name: run_programs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.run_programs (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    program_id character varying(50) NOT NULL,
+    enabled boolean DEFAULT true NOT NULL,
+    next_index integer DEFAULT 0 NOT NULL,
+    workouts jsonb DEFAULT '[]'::jsonb NOT NULL,
+    adjustment_log jsonb DEFAULT '[]'::jsonb NOT NULL,
+    effort_log jsonb DEFAULT '[]'::jsonb NOT NULL,
+    completion_log jsonb DEFAULT '[]'::jsonb NOT NULL,
+    run_days smallint[] DEFAULT '{}'::smallint[] NOT NULL,
+    start_date date,
+    end_date date,
+    last_done_date date,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT chk_run_programs_end_after_start CHECK (((end_date IS NULL) OR (start_date IS NULL) OR (end_date >= start_date))),
+    CONSTRAINT run_programs_next_index_check CHECK ((next_index >= 0)),
+    CONSTRAINT run_programs_run_days_check CHECK ((run_days <@ ARRAY[(0)::smallint, (1)::smallint, (2)::smallint, (3)::smallint, (4)::smallint, (5)::smallint, (6)::smallint]))
+);
+
+
+--
 -- Name: session; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -4180,7 +4230,8 @@ CREATE TABLE public.user_goals (
     custom_nutrients jsonb DEFAULT '{}'::jsonb,
     custom_meal_percentages jsonb DEFAULT '{}'::jsonb,
     caffeine_mg numeric,
-    alcohol_g numeric
+    alcohol_g numeric,
+    target_steps integer
 );
 
 
@@ -4408,6 +4459,8 @@ CREATE TABLE public.user_preferences (
     caffeine_half_life_hours numeric(3,1) DEFAULT 5.0 NOT NULL,
     target_bedtime time without time zone DEFAULT '22:30:00'::time without time zone NOT NULL,
     adaptive_workout_suggestions boolean DEFAULT true NOT NULL,
+    active_voice_ai_service_id uuid,
+    voice_input_enabled boolean DEFAULT true NOT NULL,
     CONSTRAINT check_energy_unit CHECK (((energy_unit)::text = ANY ((ARRAY['kcal'::character varying, 'kJ'::character varying])::text[]))),
     CONSTRAINT logging_level_check CHECK ((logging_level = ANY (ARRAY['DEBUG'::text, 'INFO'::text, 'WARN'::text, 'ERROR'::text, 'SILENT'::text]))),
     CONSTRAINT user_preferences_caffeine_half_life_range CHECK (((caffeine_half_life_hours >= 2.0) AND (caffeine_half_life_hours <= 8.0))),
@@ -4525,6 +4578,13 @@ COMMENT ON COLUMN public.user_preferences.target_bedtime IS 'The user''s intende
 --
 
 COMMENT ON COLUMN public.user_preferences.adaptive_workout_suggestions IS 'When true, workout suggestions adapt to session feedback (difficulty, pain). When false, progression behaves exactly as before feedback existed.';
+
+
+--
+-- Name: COLUMN user_preferences.voice_input_enabled; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.user_preferences.voice_input_enabled IS 'Shows voice input in web and mobile chat. Disabling preserves the selected Voice configuration.';
 
 
 --
@@ -5456,6 +5516,14 @@ ALTER TABLE ONLY public.exercise_entry_activity_details
 
 
 --
+-- Name: exercise_entry_distance_series exercise_entry_distance_series_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.exercise_entry_distance_series
+    ADD CONSTRAINT exercise_entry_distance_series_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: exercise_entry_gps_points exercise_entry_gps_points_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5904,6 +5972,14 @@ ALTER TABLE ONLY public.rate_limit
 
 
 --
+-- Name: run_programs run_programs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.run_programs
+    ADD CONSTRAINT run_programs_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: session session_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6112,6 +6188,14 @@ ALTER TABLE ONLY public.daily_health_metrics
 
 
 --
+-- Name: exercise_entry_distance_series uq_exercise_entry_distance_series; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.exercise_entry_distance_series
+    ADD CONSTRAINT uq_exercise_entry_distance_series UNIQUE (exercise_entry_id);
+
+
+--
 -- Name: exercise_entry_gps_points uq_exercise_entry_gps_points; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6141,6 +6225,14 @@ ALTER TABLE ONLY public.exercise_entry_laps
 
 ALTER TABLE ONLY public.health_metric_samples
     ADD CONSTRAINT uq_health_metric_samples UNIQUE (user_id, metric, entry_date, source_provider);
+
+
+--
+-- Name: run_programs uq_run_programs_user; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.run_programs
+    ADD CONSTRAINT uq_run_programs_user UNIQUE (user_id);
 
 
 --
@@ -6665,6 +6757,13 @@ CREATE INDEX idx_exercise_entry_activity_details_entry_id ON public.exercise_ent
 --
 
 CREATE INDEX idx_exercise_entry_activity_details_provider_type ON public.exercise_entry_activity_details USING btree (provider_name, detail_type);
+
+
+--
+-- Name: idx_exercise_entry_distance_series_user_date; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_exercise_entry_distance_series_user_date ON public.exercise_entry_distance_series USING btree (user_id, entry_date DESC);
 
 
 --
@@ -8072,6 +8171,22 @@ ALTER TABLE ONLY public.exercise_entry_activity_details
 
 
 --
+-- Name: exercise_entry_distance_series exercise_entry_distance_series_exercise_entry_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.exercise_entry_distance_series
+    ADD CONSTRAINT exercise_entry_distance_series_exercise_entry_id_fkey FOREIGN KEY (exercise_entry_id) REFERENCES public.exercise_entries(id) ON DELETE CASCADE;
+
+
+--
+-- Name: exercise_entry_distance_series exercise_entry_distance_series_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.exercise_entry_distance_series
+    ADD CONSTRAINT exercise_entry_distance_series_user_id_fkey FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
+
+
+--
 -- Name: exercise_entry_gps_points exercise_entry_gps_points_exercise_entry_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -8864,6 +8979,14 @@ ALTER TABLE ONLY public.profiles
 
 
 --
+-- Name: run_programs run_programs_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.run_programs
+    ADD CONSTRAINT run_programs_user_id_fkey FOREIGN KEY (user_id) REFERENCES public."user"(id) ON DELETE CASCADE;
+
+
+--
 -- Name: session session_impersonated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -9197,6 +9320,14 @@ ALTER TABLE ONLY public.user_preferences
 
 ALTER TABLE ONLY public.user_preferences
     ADD CONSTRAINT user_preferences_active_vision_ai_service_id_fkey FOREIGN KEY (active_vision_ai_service_id) REFERENCES public.ai_service_settings(id) ON DELETE SET NULL;
+
+
+--
+-- Name: user_preferences user_preferences_active_voice_ai_service_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.user_preferences
+    ADD CONSTRAINT user_preferences_active_voice_ai_service_id_fkey FOREIGN KEY (active_voice_ai_service_id) REFERENCES public.ai_service_settings(id) ON DELETE SET NULL;
 
 
 --
@@ -9661,6 +9792,12 @@ ALTER TABLE public.exercise_entries ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.exercise_entry_activity_details ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: exercise_entry_distance_series; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.exercise_entry_distance_series ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: exercise_entry_gps_points; Type: ROW SECURITY; Schema: public; Owner: -
 --
 
@@ -9934,6 +10071,13 @@ CREATE POLICY modify_policy ON public.exercise_entry_activity_details USING ((((
   WHERE ((ee.id = exercise_entry_activity_details.exercise_entry_id) AND public.has_diary_access(ee.user_id))))) OR ((exercise_preset_entry_id IS NOT NULL) AND (EXISTS ( SELECT 1
    FROM public.exercise_preset_entries epe
   WHERE ((epe.id = exercise_entry_activity_details.exercise_preset_entry_id) AND public.has_diary_access(epe.user_id)))))));
+
+
+--
+-- Name: exercise_entry_distance_series modify_policy; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY modify_policy ON public.exercise_entry_distance_series USING (public.has_diary_access(user_id)) WITH CHECK (public.has_diary_access(user_id));
 
 
 --
@@ -10513,6 +10657,13 @@ CREATE POLICY owner_policy ON public.pregnancy_photos USING ((user_id = public.a
 
 
 --
+-- Name: run_programs owner_policy; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY owner_policy ON public.run_programs USING ((user_id = public.authenticated_user_id())) WITH CHECK ((user_id = public.authenticated_user_id()));
+
+
+--
 -- Name: sparky_chat_history owner_policy; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -10632,6 +10783,12 @@ ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.rate_limit ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: run_programs; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.run_programs ENABLE ROW LEVEL SECURITY;
+
+--
 -- Name: exercise_entries select_exercise_preset_entry_linked_policy; Type: POLICY; Schema: public; Owner: -
 --
 
@@ -10705,6 +10862,13 @@ CREATE POLICY select_policy ON public.exercise_entry_activity_details FOR SELECT
   WHERE ((ee.id = exercise_entry_activity_details.exercise_entry_id) AND public.has_diary_read_access(ee.user_id))))) OR ((exercise_preset_entry_id IS NOT NULL) AND (EXISTS ( SELECT 1
    FROM public.exercise_preset_entries epe
   WHERE ((epe.id = exercise_entry_activity_details.exercise_preset_entry_id) AND public.has_diary_read_access(epe.user_id)))))));
+
+
+--
+-- Name: exercise_entry_distance_series select_policy; Type: POLICY; Schema: public; Owner: -
+--
+
+CREATE POLICY select_policy ON public.exercise_entry_distance_series FOR SELECT USING (public.has_diary_read_access(user_id));
 
 
 --
@@ -11978,6 +12142,13 @@ GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.exercise_entry_activity_detail
 
 
 --
+-- Name: TABLE exercise_entry_distance_series; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.exercise_entry_distance_series TO sparky_app;
+
+
+--
 -- Name: TABLE exercise_entry_gps_points; Type: ACL; Schema: public; Owner: -
 --
 
@@ -12346,6 +12517,13 @@ GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.profiles TO sparky_app;
 --
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.rate_limit TO sparky_app;
+
+
+--
+-- Name: TABLE run_programs; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.run_programs TO sparky_app;
 
 
 --

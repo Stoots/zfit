@@ -63,7 +63,7 @@ Features are organized by domain, and the same domain folder name appears in `sr
 - `src/layouts/` - `MainLayout.tsx` and `AddComp.tsx`.
 - `src/lib/` - `auth-client.ts` (Better Auth React client), `utils.ts` (`cn`), scanner engines, sleep helpers.
 - `src/services/` - pure calculation helpers (BMR, body composition, nutrient calculation), not HTTP clients.
-- `src/utils/` - logging, user preferences, date helpers, misc.
+- `src/utils/` - logging, user preferences, date helpers, misc. `browserVoiceInput.ts` owns browser speech/recording lifecycle; `hooks/AI/useVoiceInput.ts` appends transcripts to drafts without sending.
 - `src/tests/` - Jest suites mirroring `components`/`contexts`/`hooks`/`services`/`utils`, plus `test-utils.tsx`.
 - `public/locales/<lng>/translation.json` - i18next resources, loaded over HTTP at runtime.
 
@@ -102,7 +102,7 @@ When searching, ignore `node_modules/`, `dist/`, and every locale except `public
 - Auth/session issue: `src/lib/auth-client.ts`, `src/hooks/useAuth.tsx`, `src/pages/Auth/`, and the server's `auth.ts` if it crosses packages.
 - Family-access/acting-user issue: `src/contexts/ActiveUserContext.tsx` and the hooks consuming it.
 - Web Training analysis: `pages/Chat/TrainingAnalysisControls.tsx` selects a per-question disclosure scope. `SparkyChatInterface.tsx` sends it through the existing streaming transport; the server enforces read-only access. `tests/components/TrainingChat.test.tsx` covers selection, sending and answer rendering.
-- Chat (Sparky) issue: `src/pages/Chat/`, `src/components/ai/`, `src/api/Chatbot/`.
+- Chat (Sparky) issue: `src/pages/Chat/`, `src/components/ai/`, `src/api/Chatbot/`. Voice controls live in `VoiceInputControl.tsx`; `VoiceInputSettings.tsx` shares server-backed enable/System/AI choices with mobile. `active_voice_ai_service_id: null` means System, never automatic inheritance from Chat. A compatible Chat model is only a suggestion. Cancelling, leaving the page, hiding the tab, or changing voice preferences releases the microphone and aborts uploads.
 - Visual redesign or shared UI: read `DESIGN.md` and the matching `.impeccable/surfaces/` brief; reuse the metric building blocks and semantic colors before adding local styles.
 - Theme/preferences issue: `src/contexts/ThemeContext.tsx`, `src/contexts/PreferencesContext.tsx`, `src/api/Settings/preferences.ts`, `src/utils/userPreferences.ts`.
 - Missing/wrong UI text: the i18n key in `public/locales/en/translation.json` and the `t('...')` call site.

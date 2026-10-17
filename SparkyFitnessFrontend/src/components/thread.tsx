@@ -11,7 +11,6 @@ import { FoodPhotoEstimateToolUI } from '@/components/ai/FoodPhotoEstimateToolUI
 import { ToolFallback } from '@/components/tool-fallback';
 import { TooltipIconButton } from '@/components/tooltip-icon-button';
 import { Button } from '@/components/ui/button';
-import { useTranslation } from 'react-i18next';
 import { useChatQuestionSource } from '@/hooks/AI/useChatQuestionSource';
 import { chatErrorMessage } from '@/utils/chatError';
 import { cn } from '@/lib/utils';
@@ -26,6 +25,7 @@ import {
   MessagePrimitive,
   ThreadPrimitive,
   useAuiState,
+  useAui,
 } from '@assistant-ui/react';
 import type { AssistantRuntime } from '@assistant-ui/react';
 import { getThreadMessageTokenUsage } from '@assistant-ui/react-ai-sdk';
@@ -44,7 +44,11 @@ import {
   RefreshCwIcon,
   SquareIcon,
 } from 'lucide-react';
-import type { FC } from 'react';
+import { useRef, type FC } from 'react';
+import { useTranslation } from 'react-i18next';
+import { useUserAIPreferences } from '@/hooks/AI/useAIServiceSettings';
+import { useVoiceInput } from '@/hooks/AI/useVoiceInput';
+import { VoiceInputControl } from '@/components/ai/VoiceInputControl';
 
 interface ThreadProps {
   runtime?: AssistantRuntime;
@@ -178,8 +182,32 @@ const ThreadSuggestionItem: FC<{ prompt: string }> = ({ prompt }) => {
 
 const Composer: FC = () => {
   useChatQuestionSource();
+  const { i18n } = useTranslation();
+  const aui = useAui();
+  const running = useAuiState((state) => state.thread.isRunning);
+  const { data: preferences } = useUserAIPreferences();
+  const voiceEnabled =
+    !!preferences && preferences.voice_input_enabled !== false;
+  const waveformRef = useRef<HTMLDivElement>(null);
+  const voice = useVoiceInput({
+    enabled: voiceEnabled && !running,
+    serviceId: preferences?.active_voice_ai_service_id ?? null,
+    language: i18n.language,
+    getText: () => aui.composer().getState().text,
+    setText: (text) => aui.composer().setText(text),
+    onLevel: (level) =>
+      waveformRef.current?.style.setProperty('--voice-level', String(level)),
+  });
   return (
-    <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
+    <ComposerPrimitive.Root
+      className="aui-composer-root relative flex w-full flex-col"
+      onSubmitCapture={(event) => {
+        if (voice.busy) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }}
+    >
       <ComposerPrimitive.AttachmentDropzone asChild>
         <div
           data-slot="aui_composer-shell"
@@ -187,28 +215,45 @@ const Composer: FC = () => {
         >
           <ComposerAttachments />
           <ComposerPrimitive.Input
+            disabled={voice.busy}
             placeholder="Send a message..."
             className="aui-composer-input placeholder:text-muted-foreground/80 max-h-32 min-h-10 w-full resize-none bg-transparent px-1.75 py-1 text-sm outline-none"
             rows={1}
             autoFocus
             aria-label="Message input"
           />
-          <ComposerAction />
+          <div className="aui-composer-action-wrapper relative flex items-start justify-between gap-2">
+            <div
+              className={cn(
+                'flex items-center gap-1',
+                voice.busy && 'pointer-events-none opacity-50'
+              )}
+              inert={voice.busy}
+            >
+              <ComposerAddAttachment />
+              <ChatToolCategoriesSelector />
+            </div>
+            <div className="flex flex-col items-end gap-2">
+              {voiceEnabled && !running ? (
+                <VoiceInputControl {...voice} waveformRef={waveformRef}>
+                  <ComposerAction disabled={voice.busy} />
+                </VoiceInputControl>
+              ) : (
+                <ComposerAction disabled={voice.busy} />
+              )}
+            </div>
+          </div>
         </div>
       </ComposerPrimitive.AttachmentDropzone>
     </ComposerPrimitive.Root>
   );
 };
 
-const ComposerAction: FC = () => {
+const ComposerAction: FC<{ disabled: boolean }> = ({ disabled }) => {
   return (
-    <div className="aui-composer-action-wrapper relative flex items-center justify-between">
-      <div className="flex items-center gap-1">
-        <ComposerAddAttachment />
-        <ChatToolCategoriesSelector />
-      </div>
+    <>
       <AuiIf condition={(s) => !s.thread.isRunning}>
-        <ComposerPrimitive.Send asChild>
+        <ComposerPrimitive.Send asChild disabled={disabled}>
           <TooltipIconButton
             tooltip="Send message"
             side="bottom"
@@ -235,7 +280,7 @@ const ComposerAction: FC = () => {
           </Button>
         </ComposerPrimitive.Cancel>
       </AuiIf>
-    </div>
+    </>
   );
 };
 

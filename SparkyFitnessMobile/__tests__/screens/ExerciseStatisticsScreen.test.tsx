@@ -6,9 +6,30 @@ import ExerciseStatisticsScreen from '../../src/screens/ExerciseStatisticsScreen
 import { useExerciseDashboard } from '../../src/hooks/useExerciseDashboard';
 import { usePreferences } from '../../src/hooks/usePreferences';
 import { useCardioSessions } from '../../src/hooks/useCardioSessions';
+import {
+  useAppPreferencesStore,
+  __resetAppPreferencesStoreForTests,
+} from '../../src/stores/appPreferencesStore';
 import { initializeI18n } from '../../src/localization/i18n';
 import type { RootStackScreenProps } from '../../src/types/navigation';
 
+jest.mock('../../src/components/DateRangeSheet', () => {
+  const React = require('react');
+  const { View } = require('react-native');
+  return {
+    __esModule: true,
+    default: React.forwardRef(function MockDateRangeSheet(
+      props: { onConfirm: (from: string, to: string) => void },
+      ref: unknown
+    ) {
+      React.useImperativeHandle(ref, () => ({
+        present: () => props.onConfirm('2026-09-01', '2026-09-20'),
+        dismiss: () => undefined,
+      }));
+      return <View testID="date-range-sheet" />;
+    }),
+  };
+});
 jest.mock('../../src/hooks/useExerciseDashboard', () => ({
   useExerciseDashboard: jest.fn(),
 }));
@@ -256,17 +277,17 @@ describe('ExerciseStatisticsScreen', () => {
 
   it('drives the query from the range control', () => {
     const screen = render(<ExerciseStatisticsScreen {...props} />);
-    expect(mockUseExerciseDashboard).toHaveBeenLastCalledWith('30d');
+    expect(mockUseExerciseDashboard).toHaveBeenLastCalledWith('30d', null);
     fireEvent.press(screen.getByText('7d'));
-    expect(mockUseExerciseDashboard).toHaveBeenLastCalledWith('7d');
+    expect(mockUseExerciseDashboard).toHaveBeenLastCalledWith('7d', null);
   });
 
   it('lists cardio sessions by month and opens one', () => {
     const screen = render(<ExerciseStatisticsScreen {...props} />);
-    expect(mockUseCardioSessions).toHaveBeenLastCalledWith('30d', false);
+    expect(mockUseCardioSessions).toHaveBeenLastCalledWith('30d', false, null);
 
     fireEvent.press(screen.getByText('Cardio'));
-    expect(mockUseCardioSessions).toHaveBeenLastCalledWith('30d', true);
+    expect(mockUseCardioSessions).toHaveBeenLastCalledWith('30d', true, null);
     expect(screen.queryByText('Sets per Muscle')).toBeNull();
     expect(screen.getByText('September 2026')).toBeTruthy();
     expect(screen.getByText('August 2026')).toBeTruthy();
@@ -332,5 +353,41 @@ describe('ExerciseStatisticsScreen', () => {
     );
     const screen = render(<ExerciseStatisticsScreen {...props} />);
     expect(screen.getByText('Failed to load exercise statistics')).toBeTruthy();
+  });
+
+  describe('customization', () => {
+    beforeEach(() => {
+      __resetAppPreferencesStoreForTests();
+    });
+
+    it('opens on the default range from Customize Reports', () => {
+      useAppPreferencesStore.setState({ reportDefaultRange: '90d' });
+      render(<ExerciseStatisticsScreen {...props} />);
+      expect(mockUseExerciseDashboard).toHaveBeenLastCalledWith('90d', null);
+    });
+
+    it('leaves out the sections turned off there', () => {
+      useAppPreferencesStore.setState({
+        hiddenReportSections: [
+          'exercise.setsPerMuscle',
+          'exercise.heatMap',
+          'exercise.analysis',
+        ],
+      });
+      const screen = render(<ExerciseStatisticsScreen {...props} />);
+      expect(screen.queryByText('Sets per Muscle')).toBeNull();
+      expect(screen.queryByText('Muscle Heat Map')).toBeNull();
+      expect(screen.queryByText('More Analysis')).toBeNull();
+      expect(screen.getByText('Workouts')).toBeTruthy();
+    });
+
+    it('loads the days picked with the Custom option', () => {
+      const screen = render(<ExerciseStatisticsScreen {...props} />);
+      fireEvent.press(screen.getByText('Custom'));
+      expect(mockUseExerciseDashboard).toHaveBeenLastCalledWith('custom', {
+        startDate: '2026-09-01',
+        endDate: '2026-09-20',
+      });
+    });
   });
 });

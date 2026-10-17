@@ -657,7 +657,11 @@ describe('FoodScanScreen', () => {
       expect(mockMarkSeen).toHaveBeenCalled();
       expect(mockNavigation.replace).toHaveBeenCalledWith('FoodPhotoFlow', {
         screen: 'Improve',
-        params: { date: undefined, photo: { uri: 'file:///picked.jpg' } },
+        params: {
+          date: undefined,
+          photo: { uri: 'file:///picked.jpg-manipulated.jpg' },
+          mealTypeId: undefined,
+        },
       });
     });
 

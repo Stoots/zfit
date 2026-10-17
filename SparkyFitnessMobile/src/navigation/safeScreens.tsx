@@ -17,7 +17,12 @@ import FoodPhotoIntroScreen from '../screens/FoodPhotoIntroScreen';
 import FoodsLibraryScreen from '../screens/FoodsLibraryScreen';
 import MealsLibraryScreen from '../screens/MealsLibraryScreen';
 import MealPlansScreen from '../screens/MealPlansScreen';
+import RunProgramsScreen from '../screens/RunProgramsScreen';
+import PersonalRecordsScreen from '../screens/PersonalRecordsScreen';
+import WatchRunLiveScreen from '../screens/WatchRunLiveScreen';
 import MealPlanFormScreen from '../screens/MealPlanFormScreen';
+import WorkoutPlansScreen from '../screens/WorkoutPlansScreen';
+import WorkoutPlanFormScreen from '../screens/WorkoutPlanFormScreen';
 import WaterContainersScreen from '../screens/WaterContainersScreen';
 import WaterContainerEditScreen from '../screens/WaterContainerEditScreen';
 import ExercisesLibraryScreen from '../screens/ExercisesLibraryScreen';
@@ -34,11 +39,14 @@ import ActiveWorkoutScreen from '../screens/ActiveWorkoutScreen';
 import WorkoutCompleteScreen from '../screens/WorkoutCompleteScreen';
 import ActivityDetailScreen from '../screens/ActivityDetailScreen';
 import FastingDetailScreen from '../screens/FastingDetailScreen';
+import FastingSettingsScreen from '../screens/FastingSettingsScreen';
 import MindfulnessDetailScreen from '../screens/MindfulnessDetailScreen';
 import SleepDetailScreen from '../screens/SleepDetailScreen';
 import ExerciseSearchScreen from '../screens/ExerciseSearchScreen';
 import PresetSearchScreen from '../screens/PresetSearchScreen';
 import CalorieSettingsScreen from '../screens/CalorieSettingsScreen';
+import GoalsScreen from '../screens/GoalsScreen';
+import WeeklyGoalPlanEditScreen from '../screens/WeeklyGoalPlanEditScreen';
 import MealTypeSettingsScreen from '../screens/MealTypeSettingsScreen';
 import AiSettingsScreen from '../screens/AiSettingsScreen';
 import FoodSettingsScreen from '../screens/FoodSettingsScreen';
@@ -55,10 +63,12 @@ import NotificationSettingsScreen from '../screens/NotificationSettingsScreen';
 import AboutScreen from '../screens/AboutScreen';
 import WhatsNewScreen from '../screens/WhatsNewScreen';
 import MeasurementsAddScreen from '../screens/MeasurementsAddScreen';
+import MindfulnessLogScreen from '../screens/MindfulnessLogScreen';
 import ProgressPhotosScreen from '../screens/ProgressPhotosScreen';
 import ProgressPhotoCompareScreen from '../screens/ProgressPhotoCompareScreen';
 import ProgressPhotoTimelapseScreen from '../screens/ProgressPhotoTimelapseScreen';
 import ChatScreen from '../screens/ChatScreen';
+import ChatSettingsScreen from '../screens/ChatSettingsScreen';
 import OnboardingScreen from '../screens/OnboardingScreen';
 import CycleSettingsScreen from '../screens/CycleSettingsScreen';
 import CycleOnboardingScreen from '../screens/CycleOnboardingScreen';
@@ -69,6 +79,9 @@ import MedicationsListScreen from '../screens/MedicationsListScreen';
 import MedicationDetailScreen from '../screens/MedicationDetailScreen';
 import MedicationFormScreen from '../screens/MedicationFormScreen';
 import MedicationScheduleFormScreen from '../screens/MedicationScheduleFormScreen';
+import Glp1TrackerScreen from '../screens/Glp1TrackerScreen';
+import Glp1PenFormScreen from '../screens/Glp1PenFormScreen';
+import Glp1TitrationFormScreen from '../screens/Glp1TitrationFormScreen';
 import SymptomLogScreen from '../screens/SymptomLogScreen';
 import MoodLogScreen from '../screens/MoodLogScreen';
 import SymptomHistoryScreen from '../screens/SymptomHistoryScreen';
@@ -77,8 +90,18 @@ import SymptomDefinitionEditorScreen from '../screens/SymptomDefinitionEditorScr
 import DailyNutritionDetailsScreen from '../screens/DailyNutritionDetailsScreen';
 import NutrientTrendsScreen from '../screens/NutrientTrendsScreen';
 import ExerciseStatisticsScreen from '../screens/ExerciseStatisticsScreen';
+import ReportsScreen from '../screens/ReportsScreen';
+import NutritionReportScreen from '../screens/NutritionReportScreen';
+import SleepAnalyticsScreen from '../screens/SleepAnalyticsScreen';
+import MoodReportScreen from '../screens/MoodReportScreen';
+import HydrationReportScreen from '../screens/HydrationReportScreen';
+import SubstancesReportScreen from '../screens/SubstancesReportScreen';
+import MeasurementsReportScreen from '../screens/MeasurementsReportScreen';
+import ReportsSettingsScreen from '../screens/ReportsSettingsScreen';
 import CardioSessionScreen from '../screens/CardioSessionScreen';
 import CooperRunTestsScreen from '../screens/CooperRunTestsScreen';
+import RecordActivityScreen from '../screens/RecordActivityScreen';
+import RunSummaryScreen from '../screens/RunSummaryScreen';
 import FamilyMembersScreen from '../screens/FamilyMembersScreen';
 import FamilyDiaryScreen from '../screens/FamilyDiaryScreen';
 import FamilyMealDetailScreen from '../screens/FamilyMealDetailScreen';
@@ -89,96 +112,517 @@ import { withErrorBoundary } from '../components/ScreenErrorBoundary';
 export const SafeOnboarding = withErrorBoundary(OnboardingScreen, 'Onboarding');
 
 // Stack screens — with Go Back
-export const SafeFoodsLibrary = withErrorBoundary(FoodsLibraryScreen, 'FoodsLibrary', { canGoBack: true });
-export const SafeMealsLibrary = withErrorBoundary(MealsLibraryScreen, 'MealsLibrary', { canGoBack: true });
-export const SafeMealPlans = withErrorBoundary(MealPlansScreen, 'MealPlans', { canGoBack: true });
-export const SafeMealPlanForm = withErrorBoundary(MealPlanFormScreen, 'MealPlanForm', { canGoBack: true });
-export const SafeWaterContainers = withErrorBoundary(WaterContainersScreen, 'WaterContainers', { canGoBack: true });
-export const SafeWaterContainerEdit = withErrorBoundary(WaterContainerEditScreen, 'WaterContainerEdit', { canGoBack: true });
-export const SafeExercisesLibrary = withErrorBoundary(ExercisesLibraryScreen, 'ExercisesLibrary', { canGoBack: true });
-export const SafeWorkoutPresetsLibrary = withErrorBoundary(WorkoutPresetsLibraryScreen, 'WorkoutPresetsLibrary', { canGoBack: true });
-export const SafeFoodDetail = withErrorBoundary(FoodDetailScreen, 'FoodDetail', { canGoBack: true });
-export const SafeMealDetail = withErrorBoundary(MealDetailScreen, 'MealDetail', { canGoBack: true });
-export const SafeExerciseDetail = withErrorBoundary(ExerciseDetailScreen, 'ExerciseDetail', { canGoBack: true });
-export const SafeWorkoutPresetDetail = withErrorBoundary(WorkoutPresetDetailScreen, 'WorkoutPresetDetail', { canGoBack: true });
-export const SafeFoodSearch = withErrorBoundary(FoodSearchScreen, 'FoodSearch', { canGoBack: true });
-export const SafeFoodEntryAdd = withErrorBoundary(FoodEntryAddScreen, 'FoodEntryAdd', { canGoBack: true });
+export const SafeFoodsLibrary = withErrorBoundary(
+  FoodsLibraryScreen,
+  'FoodsLibrary',
+  { canGoBack: true }
+);
+export const SafeMealsLibrary = withErrorBoundary(
+  MealsLibraryScreen,
+  'MealsLibrary',
+  { canGoBack: true }
+);
+export const SafeMealPlans = withErrorBoundary(MealPlansScreen, 'MealPlans', {
+  canGoBack: true,
+});
+export const SafeWatchRunLive = withErrorBoundary(
+  WatchRunLiveScreen,
+  'WatchRunLive',
+  { canGoBack: true }
+);
+export const SafePersonalRecords = withErrorBoundary(
+  PersonalRecordsScreen,
+  'PersonalRecords',
+  { canGoBack: true }
+);
+export const SafeRunPrograms = withErrorBoundary(
+  RunProgramsScreen,
+  'RunPrograms',
+  { canGoBack: true }
+);
+export const SafeMealPlanForm = withErrorBoundary(
+  MealPlanFormScreen,
+  'MealPlanForm',
+  { canGoBack: true }
+);
+export const SafeWorkoutPlans = withErrorBoundary(
+  WorkoutPlansScreen,
+  'WorkoutPlans',
+  { canGoBack: true }
+);
+export const SafeWorkoutPlanForm = withErrorBoundary(
+  WorkoutPlanFormScreen,
+  'WorkoutPlanForm',
+  { canGoBack: true }
+);
+export const SafeWaterContainers = withErrorBoundary(
+  WaterContainersScreen,
+  'WaterContainers',
+  { canGoBack: true }
+);
+export const SafeWaterContainerEdit = withErrorBoundary(
+  WaterContainerEditScreen,
+  'WaterContainerEdit',
+  { canGoBack: true }
+);
+export const SafeExercisesLibrary = withErrorBoundary(
+  ExercisesLibraryScreen,
+  'ExercisesLibrary',
+  { canGoBack: true }
+);
+export const SafeWorkoutPresetsLibrary = withErrorBoundary(
+  WorkoutPresetsLibraryScreen,
+  'WorkoutPresetsLibrary',
+  { canGoBack: true }
+);
+export const SafeFoodDetail = withErrorBoundary(
+  FoodDetailScreen,
+  'FoodDetail',
+  { canGoBack: true }
+);
+export const SafeMealDetail = withErrorBoundary(
+  MealDetailScreen,
+  'MealDetail',
+  { canGoBack: true }
+);
+export const SafeExerciseDetail = withErrorBoundary(
+  ExerciseDetailScreen,
+  'ExerciseDetail',
+  { canGoBack: true }
+);
+export const SafeWorkoutPresetDetail = withErrorBoundary(
+  WorkoutPresetDetailScreen,
+  'WorkoutPresetDetail',
+  { canGoBack: true }
+);
+export const SafeFoodSearch = withErrorBoundary(
+  FoodSearchScreen,
+  'FoodSearch',
+  { canGoBack: true }
+);
+export const SafeFoodEntryAdd = withErrorBoundary(
+  FoodEntryAddScreen,
+  'FoodEntryAdd',
+  { canGoBack: true }
+);
 // Kept on one line: nativeHeaderContract.test.ts statically maps
 // withErrorBoundary(Component, 'Name') registrations by regex.
 // A multi-add batch may still have requests in flight whose outcomes the
 // user must see recorded — scoped here rather than in the shared boundary
 // so no other screen's crash recovery can be dead-ended by it.
-export const SafeFoodEntryMultiAdd = withErrorBoundary(FoodEntryMultiAddScreen, 'FoodEntryMultiAdd', {
+export const SafeFoodEntryMultiAdd = withErrorBoundary(
+  FoodEntryMultiAddScreen,
+  'FoodEntryMultiAdd',
+  {
+    canGoBack: true,
+    goBackGuard: () => !useFoodSearchSelectionStore.getState().isSubmitting,
+  }
+);
+export const SafeFoodForm = withErrorBoundary(FoodFormScreen, 'FoodForm', {
   canGoBack: true,
-  goBackGuard: () => !useFoodSearchSelectionStore.getState().isSubmitting,
 });
-export const SafeFoodForm = withErrorBoundary(FoodFormScreen, 'FoodForm', { canGoBack: true });
-export const SafeEditBarcode = withErrorBoundary(EditBarcodeScreen, 'EditBarcode', { canGoBack: true });
-export const SafeExerciseForm = withErrorBoundary(ExerciseFormScreen, 'ExerciseForm', { canGoBack: true });
-export const SafeWorkoutPresetForm = withErrorBoundary(WorkoutPresetFormScreen, 'WorkoutPresetForm', { canGoBack: true });
-export const SafeFoodScan = withErrorBoundary(FoodScanScreen, 'FoodScan', { canGoBack: true });
-export const SafeFoodPhotoIntro = withErrorBoundary(FoodPhotoIntroScreen, 'FoodPhotoIntro', { canGoBack: true });
-export const SafeMealAdd = withErrorBoundary(MealAddScreen, 'MealAdd', { canGoBack: true });
-export const SafeFoodEntryView = withErrorBoundary(FoodEntryViewScreen, 'FoodEntryView', { canGoBack: true });
-export const SafeEditLoggedMeal = withErrorBoundary(EditLoggedMealScreen, 'EditLoggedMeal', { canGoBack: true });
-export const SafeMealTypeDetail = withErrorBoundary(MealTypeDetailScreen, 'MealTypeDetail', { canGoBack: true });
-export const SafeExerciseSearch = withErrorBoundary(ExerciseSearchScreen, 'ExerciseSearch', { canGoBack: true });
-export const SafePresetSearch = withErrorBoundary(PresetSearchScreen, 'PresetSearch', { canGoBack: true });
-export const SafeWorkoutAdd = withErrorBoundary(WorkoutAddScreen, 'WorkoutAdd', { canGoBack: true });
-export const SafeActivityAdd = withErrorBoundary(ActivityAddScreen, 'ActivityAdd', { canGoBack: true });
-export const SafeWorkoutDetail = withErrorBoundary(WorkoutDetailScreen, 'WorkoutDetail', { canGoBack: true });
-export const SafeActiveWorkout = withErrorBoundary(ActiveWorkoutScreen, 'ActiveWorkout', { canGoBack: true });
-export const SafeWorkoutComplete = withErrorBoundary(WorkoutCompleteScreen, 'WorkoutComplete', { canGoBack: true });
-export const SafeActivityDetail = withErrorBoundary(ActivityDetailScreen, 'ActivityDetail', { canGoBack: true });
-export const SafeFastingDetail = withErrorBoundary(FastingDetailScreen, 'FastingDetail', { canGoBack: true });
-export const SafeMindfulnessDetail = withErrorBoundary(MindfulnessDetailScreen, 'MindfulnessDetail', { canGoBack: true });
-export const SafeSleepDetail = withErrorBoundary(SleepDetailScreen, 'SleepDetail', { canGoBack: true });
-export const SafeLogs = withErrorBoundary(LogScreen, 'Logs', { canGoBack: true });
-export const SafeSync = withErrorBoundary(SyncScreen, 'Sync', { canGoBack: true });
-export const SafeImportHistory = withErrorBoundary(ImportHistoryScreen, 'ImportHistory', { canGoBack: true });
-export const SafeMeasurementsAdd = withErrorBoundary(MeasurementsAddScreen, 'MeasurementsAdd', { canGoBack: true });
-export const SafeProgressPhotos = withErrorBoundary(ProgressPhotosScreen, 'ProgressPhotos', { canGoBack: true });
-export const SafeProgressPhotoCompare = withErrorBoundary(ProgressPhotoCompareScreen, 'ProgressPhotoCompare', { canGoBack: true });
-export const SafeProgressPhotoTimelapse = withErrorBoundary(ProgressPhotoTimelapseScreen, 'ProgressPhotoTimelapse', { canGoBack: true });
-export const SafeChat = withErrorBoundary(ChatScreen, 'Chat', { canGoBack: true });
-export const SafeCalorieSettings = withErrorBoundary(CalorieSettingsScreen, 'CalorieSettings', { canGoBack: true });
-export const SafeMealTypeSettings = withErrorBoundary(MealTypeSettingsScreen, 'MealTypeSettings', { canGoBack: true });
-export const SafeAiSettings = withErrorBoundary(AiSettingsScreen, 'AiSettings', { canGoBack: true });
-export const SafeFoodSettings = withErrorBoundary(FoodSettingsScreen, 'FoodSettings', { canGoBack: true });
-export const SafeDashboardSettings = withErrorBoundary(DashboardSettingsScreen, 'DashboardSettings', { canGoBack: true });
-export const SafeHealthTrendsSettings = withErrorBoundary(HealthTrendsSettingsScreen, 'HealthTrendsSettings', { canGoBack: true });
-export const SafeWatchSettings = withErrorBoundary(WatchSettingsScreen, 'WatchSettings', { canGoBack: true });
-export const SafeDiarySettings = withErrorBoundary(DiarySettingsScreen, 'DiarySettings', { canGoBack: true });
-export const SafeWorkoutSettings = withErrorBoundary(WorkoutSettingsScreen, 'WorkoutSettings', { canGoBack: true });
-export const SafeWarmupSettings = withErrorBoundary(WarmupSettingsScreen, 'WarmupSettings', { canGoBack: true });
-export const SafeServerSettings = withErrorBoundary(ServerSettingsScreen, 'ServerSettings', { canGoBack: true });
-export const SafePasskeySettings = withErrorBoundary(PasskeySettingsScreen, 'PasskeySettings', { canGoBack: true });
-export const SafeAppSettings = withErrorBoundary(AppSettingsScreen, 'AppSettings', { canGoBack: true });
-export const SafeNotificationSettings = withErrorBoundary(NotificationSettingsScreen, 'NotificationSettings', { canGoBack: true });
-export const SafeAbout = withErrorBoundary(AboutScreen, 'About', { canGoBack: true });
-export const SafeWhatsNew = withErrorBoundary(WhatsNewScreen, 'WhatsNew', { canGoBack: true });
-export const SafeDailyNutritionDetails = withErrorBoundary(DailyNutritionDetailsScreen, 'DailyNutritionDetails', { canGoBack: true });
-export const SafeNutrientTrends = withErrorBoundary(NutrientTrendsScreen, 'NutrientTrends', { canGoBack: true });
-export const SafeExerciseStatistics = withErrorBoundary(ExerciseStatisticsScreen, 'ExerciseStatistics', { canGoBack: true });
-export const SafeCooperRunTests = withErrorBoundary(CooperRunTestsScreen, 'CooperRunTests', { canGoBack: true });
-export const SafeCardioSession = withErrorBoundary(CardioSessionScreen, 'CardioSession', { canGoBack: true });
-export const SafeFamilyMembers = withErrorBoundary(FamilyMembersScreen, 'FamilyMembers', { canGoBack: true });
-export const SafeFamilyDiary = withErrorBoundary(FamilyDiaryScreen, 'FamilyDiary', { canGoBack: true });
-export const SafeFamilyMealDetail = withErrorBoundary(FamilyMealDetailScreen, 'FamilyMealDetail', { canGoBack: true });
-export const SafeFamilyCopyReview = withErrorBoundary(FamilyCopyReviewScreen, 'FamilyCopyReview', { canGoBack: true });
+export const SafeEditBarcode = withErrorBoundary(
+  EditBarcodeScreen,
+  'EditBarcode',
+  { canGoBack: true }
+);
+export const SafeExerciseForm = withErrorBoundary(
+  ExerciseFormScreen,
+  'ExerciseForm',
+  { canGoBack: true }
+);
+export const SafeWorkoutPresetForm = withErrorBoundary(
+  WorkoutPresetFormScreen,
+  'WorkoutPresetForm',
+  { canGoBack: true }
+);
+export const SafeFoodScan = withErrorBoundary(FoodScanScreen, 'FoodScan', {
+  canGoBack: true,
+});
+export const SafeFoodPhotoIntro = withErrorBoundary(
+  FoodPhotoIntroScreen,
+  'FoodPhotoIntro',
+  { canGoBack: true }
+);
+export const SafeMealAdd = withErrorBoundary(MealAddScreen, 'MealAdd', {
+  canGoBack: true,
+});
+export const SafeFoodEntryView = withErrorBoundary(
+  FoodEntryViewScreen,
+  'FoodEntryView',
+  { canGoBack: true }
+);
+export const SafeEditLoggedMeal = withErrorBoundary(
+  EditLoggedMealScreen,
+  'EditLoggedMeal',
+  { canGoBack: true }
+);
+export const SafeMealTypeDetail = withErrorBoundary(
+  MealTypeDetailScreen,
+  'MealTypeDetail',
+  { canGoBack: true }
+);
+export const SafeExerciseSearch = withErrorBoundary(
+  ExerciseSearchScreen,
+  'ExerciseSearch',
+  { canGoBack: true }
+);
+export const SafePresetSearch = withErrorBoundary(
+  PresetSearchScreen,
+  'PresetSearch',
+  { canGoBack: true }
+);
+export const SafeWorkoutAdd = withErrorBoundary(
+  WorkoutAddScreen,
+  'WorkoutAdd',
+  { canGoBack: true }
+);
+export const SafeActivityAdd = withErrorBoundary(
+  ActivityAddScreen,
+  'ActivityAdd',
+  { canGoBack: true }
+);
+export const SafeWorkoutDetail = withErrorBoundary(
+  WorkoutDetailScreen,
+  'WorkoutDetail',
+  { canGoBack: true }
+);
+export const SafeActiveWorkout = withErrorBoundary(
+  ActiveWorkoutScreen,
+  'ActiveWorkout',
+  { canGoBack: true }
+);
+export const SafeWorkoutComplete = withErrorBoundary(
+  WorkoutCompleteScreen,
+  'WorkoutComplete',
+  { canGoBack: true }
+);
+export const SafeActivityDetail = withErrorBoundary(
+  ActivityDetailScreen,
+  'ActivityDetail',
+  { canGoBack: true }
+);
+export const SafeFastingDetail = withErrorBoundary(
+  FastingDetailScreen,
+  'FastingDetail',
+  { canGoBack: true }
+);
+export const SafeFastingSettings = withErrorBoundary(
+  FastingSettingsScreen,
+  'FastingSettings',
+  { canGoBack: true }
+);
+export const SafeMindfulnessDetail = withErrorBoundary(
+  MindfulnessDetailScreen,
+  'MindfulnessDetail',
+  { canGoBack: true }
+);
+export const SafeSleepDetail = withErrorBoundary(
+  SleepDetailScreen,
+  'SleepDetail',
+  { canGoBack: true }
+);
+export const SafeLogs = withErrorBoundary(LogScreen, 'Logs', {
+  canGoBack: true,
+});
+export const SafeSync = withErrorBoundary(SyncScreen, 'Sync', {
+  canGoBack: true,
+});
+export const SafeImportHistory = withErrorBoundary(
+  ImportHistoryScreen,
+  'ImportHistory',
+  { canGoBack: true }
+);
+export const SafeMeasurementsAdd = withErrorBoundary(
+  MeasurementsAddScreen,
+  'MeasurementsAdd',
+  { canGoBack: true }
+);
+export const SafeMindfulnessLog = withErrorBoundary(
+  MindfulnessLogScreen,
+  'MindfulnessLog',
+  { canGoBack: true }
+);
+export const SafeProgressPhotos = withErrorBoundary(
+  ProgressPhotosScreen,
+  'ProgressPhotos',
+  { canGoBack: true }
+);
+export const SafeProgressPhotoCompare = withErrorBoundary(
+  ProgressPhotoCompareScreen,
+  'ProgressPhotoCompare',
+  { canGoBack: true }
+);
+export const SafeProgressPhotoTimelapse = withErrorBoundary(
+  ProgressPhotoTimelapseScreen,
+  'ProgressPhotoTimelapse',
+  { canGoBack: true }
+);
+export const SafeChat = withErrorBoundary(ChatScreen, 'Chat', {
+  canGoBack: true,
+});
+export const SafeChatSettings = withErrorBoundary(
+  ChatSettingsScreen,
+  'ChatSettings',
+  { canGoBack: true }
+);
+export const SafeGoals = withErrorBoundary(GoalsScreen, 'Goals', {
+  canGoBack: true,
+});
+export const SafeWeeklyGoalPlanEdit = withErrorBoundary(
+  WeeklyGoalPlanEditScreen,
+  'WeeklyGoalPlanEdit',
+  { canGoBack: true }
+);
+export const SafeCalorieSettings = withErrorBoundary(
+  CalorieSettingsScreen,
+  'CalorieSettings',
+  { canGoBack: true }
+);
+export const SafeMealTypeSettings = withErrorBoundary(
+  MealTypeSettingsScreen,
+  'MealTypeSettings',
+  { canGoBack: true }
+);
+export const SafeAiSettings = withErrorBoundary(
+  AiSettingsScreen,
+  'AiSettings',
+  { canGoBack: true }
+);
+export const SafeFoodSettings = withErrorBoundary(
+  FoodSettingsScreen,
+  'FoodSettings',
+  { canGoBack: true }
+);
+export const SafeDashboardSettings = withErrorBoundary(
+  DashboardSettingsScreen,
+  'DashboardSettings',
+  { canGoBack: true }
+);
+export const SafeHealthTrendsSettings = withErrorBoundary(
+  HealthTrendsSettingsScreen,
+  'HealthTrendsSettings',
+  { canGoBack: true }
+);
+export const SafeWatchSettings = withErrorBoundary(
+  WatchSettingsScreen,
+  'WatchSettings',
+  { canGoBack: true }
+);
+export const SafeDiarySettings = withErrorBoundary(
+  DiarySettingsScreen,
+  'DiarySettings',
+  { canGoBack: true }
+);
+export const SafeWorkoutSettings = withErrorBoundary(
+  WorkoutSettingsScreen,
+  'WorkoutSettings',
+  { canGoBack: true }
+);
+export const SafeWarmupSettings = withErrorBoundary(
+  WarmupSettingsScreen,
+  'WarmupSettings',
+  { canGoBack: true }
+);
+export const SafeServerSettings = withErrorBoundary(
+  ServerSettingsScreen,
+  'ServerSettings',
+  { canGoBack: true }
+);
+export const SafePasskeySettings = withErrorBoundary(
+  PasskeySettingsScreen,
+  'PasskeySettings',
+  { canGoBack: true }
+);
+export const SafeAppSettings = withErrorBoundary(
+  AppSettingsScreen,
+  'AppSettings',
+  { canGoBack: true }
+);
+export const SafeNotificationSettings = withErrorBoundary(
+  NotificationSettingsScreen,
+  'NotificationSettings',
+  { canGoBack: true }
+);
+export const SafeAbout = withErrorBoundary(AboutScreen, 'About', {
+  canGoBack: true,
+});
+export const SafeWhatsNew = withErrorBoundary(WhatsNewScreen, 'WhatsNew', {
+  canGoBack: true,
+});
+export const SafeDailyNutritionDetails = withErrorBoundary(
+  DailyNutritionDetailsScreen,
+  'DailyNutritionDetails',
+  { canGoBack: true }
+);
+export const SafeNutrientTrends = withErrorBoundary(
+  NutrientTrendsScreen,
+  'NutrientTrends',
+  { canGoBack: true }
+);
+export const SafeExerciseStatistics = withErrorBoundary(
+  ExerciseStatisticsScreen,
+  'ExerciseStatistics',
+  { canGoBack: true }
+);
+export const SafeCooperRunTests = withErrorBoundary(
+  CooperRunTestsScreen,
+  'CooperRunTests',
+  { canGoBack: true }
+);
+export const SafeRecordActivity = withErrorBoundary(
+  RecordActivityScreen,
+  'RecordActivity',
+  { canGoBack: true }
+);
+export const SafeReports = withErrorBoundary(ReportsScreen, 'Reports', {
+  canGoBack: true,
+});
+export const SafeNutritionReport = withErrorBoundary(
+  NutritionReportScreen,
+  'NutritionReport',
+  { canGoBack: true }
+);
+export const SafeSleepAnalytics = withErrorBoundary(
+  SleepAnalyticsScreen,
+  'SleepAnalytics',
+  { canGoBack: true }
+);
+export const SafeReportsSettings = withErrorBoundary(
+  ReportsSettingsScreen,
+  'ReportsSettings',
+  { canGoBack: true }
+);
+export const SafeHydrationReport = withErrorBoundary(
+  HydrationReportScreen,
+  'HydrationReport',
+  { canGoBack: true }
+);
+export const SafeSubstancesReport = withErrorBoundary(
+  SubstancesReportScreen,
+  'SubstancesReport',
+  { canGoBack: true }
+);
+export const SafeMeasurementsReport = withErrorBoundary(
+  MeasurementsReportScreen,
+  'MeasurementsReport',
+  { canGoBack: true }
+);
+export const SafeMoodReport = withErrorBoundary(
+  MoodReportScreen,
+  'MoodReport',
+  { canGoBack: true }
+);
+export const SafeRunSummary = withErrorBoundary(
+  RunSummaryScreen,
+  'RunSummary',
+  { canGoBack: true }
+);
+export const SafeCardioSession = withErrorBoundary(
+  CardioSessionScreen,
+  'CardioSession',
+  { canGoBack: true }
+);
+export const SafeFamilyMembers = withErrorBoundary(
+  FamilyMembersScreen,
+  'FamilyMembers',
+  { canGoBack: true }
+);
+export const SafeFamilyDiary = withErrorBoundary(
+  FamilyDiaryScreen,
+  'FamilyDiary',
+  { canGoBack: true }
+);
+export const SafeFamilyMealDetail = withErrorBoundary(
+  FamilyMealDetailScreen,
+  'FamilyMealDetail',
+  { canGoBack: true }
+);
+export const SafeFamilyCopyReview = withErrorBoundary(
+  FamilyCopyReviewScreen,
+  'FamilyCopyReview',
+  { canGoBack: true }
+);
 
-export const SafeCycleSettings = withErrorBoundary(CycleSettingsScreen, 'CycleSettings', { canGoBack: true });
-export const SafeCycleOnboarding = withErrorBoundary(CycleOnboardingScreen, 'CycleOnboarding', { canGoBack: true });
-export const SafeCycleHub = withErrorBoundary(CycleHubScreen, 'CycleHub', { canGoBack: true });
-export const SafeCycleLogModal = withErrorBoundary(CycleLogModalScreen, 'CycleLogModal', { canGoBack: true });
-export const SafePregnancySetup = withErrorBoundary(PregnancySetupScreen, 'PregnancySetup', { canGoBack: true });
-export const SafeMedicationsList = withErrorBoundary(MedicationsListScreen, 'MedicationsList', { canGoBack: true });
-export const SafeMedicationDetail = withErrorBoundary(MedicationDetailScreen, 'MedicationDetail', { canGoBack: true });
-export const SafeMedicationForm = withErrorBoundary(MedicationFormScreen, 'MedicationForm', { canGoBack: true });
-export const SafeMedicationScheduleForm = withErrorBoundary(MedicationScheduleFormScreen, 'MedicationScheduleForm', { canGoBack: true });
+export const SafeCycleSettings = withErrorBoundary(
+  CycleSettingsScreen,
+  'CycleSettings',
+  { canGoBack: true }
+);
+export const SafeCycleOnboarding = withErrorBoundary(
+  CycleOnboardingScreen,
+  'CycleOnboarding',
+  { canGoBack: true }
+);
+export const SafeCycleHub = withErrorBoundary(CycleHubScreen, 'CycleHub', {
+  canGoBack: true,
+});
+export const SafeCycleLogModal = withErrorBoundary(
+  CycleLogModalScreen,
+  'CycleLogModal',
+  { canGoBack: true }
+);
+export const SafePregnancySetup = withErrorBoundary(
+  PregnancySetupScreen,
+  'PregnancySetup',
+  { canGoBack: true }
+);
+export const SafeMedicationsList = withErrorBoundary(
+  MedicationsListScreen,
+  'MedicationsList',
+  { canGoBack: true }
+);
+export const SafeMedicationDetail = withErrorBoundary(
+  MedicationDetailScreen,
+  'MedicationDetail',
+  { canGoBack: true }
+);
+export const SafeMedicationForm = withErrorBoundary(
+  MedicationFormScreen,
+  'MedicationForm',
+  { canGoBack: true }
+);
+export const SafeMedicationScheduleForm = withErrorBoundary(
+  MedicationScheduleFormScreen,
+  'MedicationScheduleForm',
+  { canGoBack: true }
+);
+export const SafeGlp1Tracker = withErrorBoundary(
+  Glp1TrackerScreen,
+  'Glp1Tracker',
+  { canGoBack: true }
+);
+export const SafeGlp1PenForm = withErrorBoundary(
+  Glp1PenFormScreen,
+  'Glp1PenForm',
+  { canGoBack: true }
+);
+export const SafeGlp1TitrationForm = withErrorBoundary(
+  Glp1TitrationFormScreen,
+  'Glp1TitrationForm',
+  { canGoBack: true }
+);
 
-export const SafeMoodLog = withErrorBoundary(MoodLogScreen, 'MoodLog', { canGoBack: true });
-export const SafeSymptomLog = withErrorBoundary(SymptomLogScreen, 'SymptomLog', { canGoBack: true });
-export const SafeSymptomHistory = withErrorBoundary(SymptomHistoryScreen, 'SymptomHistory', { canGoBack: true });
-export const SafeManageSymptoms = withErrorBoundary(ManageSymptomsScreen, 'ManageSymptoms', { canGoBack: true });
-export const SafeSymptomDefinitionEditor = withErrorBoundary(SymptomDefinitionEditorScreen, 'SymptomDefinitionEditor', { canGoBack: true });
+export const SafeMoodLog = withErrorBoundary(MoodLogScreen, 'MoodLog', {
+  canGoBack: true,
+});
+export const SafeSymptomLog = withErrorBoundary(
+  SymptomLogScreen,
+  'SymptomLog',
+  { canGoBack: true }
+);
+export const SafeSymptomHistory = withErrorBoundary(
+  SymptomHistoryScreen,
+  'SymptomHistory',
+  { canGoBack: true }
+);
+export const SafeManageSymptoms = withErrorBoundary(
+  ManageSymptomsScreen,
+  'ManageSymptoms',
+  { canGoBack: true }
+);
+export const SafeSymptomDefinitionEditor = withErrorBoundary(
+  SymptomDefinitionEditorScreen,
+  'SymptomDefinitionEditor',
+  { canGoBack: true }
+);

@@ -389,7 +389,6 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) => {
     useMindfulnessDay(selectedDate);
   const {
     saveSession: saveMindfulSession,
-    updateSession: updateMindfulSession,
     deleteSession: deleteMindfulSession,
   } = useMindfulnessMutations(selectedDate);
 
@@ -836,6 +835,28 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) => {
                       defaultValue: 'Health Trends',
                     })}
                   </Text>
+                  {/* Beside the heading, not around it: the heading stays a direct
+                      child of the card's wrapper, which carries the card margin. */}
+                  <Pressable
+                    testID="dashboard-reports-link"
+                    accessibilityRole="button"
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    onPress={() => navigation.navigate('Reports')}
+                    className="flex-row items-center"
+                    style={{ position: 'absolute', right: 0, top: 6 }}
+                  >
+                    <Text className="text-accent-primary font-medium">
+                      {t('dashboard.reportsLink', {
+                        defaultValue: 'Reports',
+                      })}
+                    </Text>
+                    <Icon
+                      name="chevron-forward"
+                      size={14}
+                      color={accentColor}
+                      style={{ marginLeft: 2 }}
+                    />
+                  </Pressable>
                   {visibleTrends.length > 0 && (
                     <SegmentedControl
                       segments={RANGE_SEGMENTS(t)}
@@ -849,6 +870,7 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) => {
                     sleep={trends.sleep}
                     hydration={trends.hydration}
                     calories={trends.calories}
+                    vo2max={trends.vo2max}
                     range={trendsRange}
                     weightUnit={weightUnit}
                     waterUnit={waterDisplayUnit}
@@ -869,7 +891,6 @@ const DashboardScreen: React.FC<DashboardScreenProps> = ({ navigation }) => {
                   totalMindfulMinutes={totalMindfulMinutes}
                   selectedDate={selectedDate}
                   onSaveSession={saveMindfulSession}
-                  onUpdateSession={updateMindfulSession}
                   onDeleteSession={deleteMindfulSession}
                   onPressDetails={() =>
                     navigation.navigate('MindfulnessDetail', { selectedDate })

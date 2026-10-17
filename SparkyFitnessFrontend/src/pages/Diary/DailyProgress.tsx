@@ -540,7 +540,7 @@ const DailyProgress = ({
                         </p>
                       )}
 
-                      {bmr && (
+                      {!!bmr && (
                         <p>
                           {t(
                             'exercise.dailyProgress.bmrCalories',
@@ -642,7 +642,7 @@ const DailyProgress = ({
                     </div>
                   )}
 
-                  {bmr && (
+                  {!!bmr && (
                     <div className="text-xs text-primary">
                       {t(
                         'exercise.dailyProgress.bmrCalories',

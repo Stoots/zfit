@@ -70,6 +70,8 @@ export const UserServiceListItem = ({
       custom_model_name: editData.custom_model_name ?? service.model_name ?? '',
       chat_tool_profile:
         editData.chat_tool_profile ?? service.chat_tool_profile ?? 'full',
+      supports_audio_input:
+        editData.supports_audio_input ?? service.supports_audio_input ?? false,
     };
 
     return (
@@ -110,8 +112,8 @@ export const UserServiceListItem = ({
             </div>
             <p className="text-sm text-muted-foreground">
               {serviceTypeLabel}
-              {service.model_name && ` - ${service.model_name}`}
-              {service.custom_url && ` - ${service.custom_url}`}
+              {service.model_name && <span>{` - ${service.model_name}`}</span>}
+              {service.custom_url && <span>{` - ${service.custom_url}`}</span>}
             </p>
           </div>
 
