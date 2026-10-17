@@ -1,3 +1,4 @@
+import DashboardWorkoutPreview from './DashboardWorkoutPreview';
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CalendarDays, ChevronDown, ArrowRight, Repeat } from 'lucide-react';
@@ -15,6 +16,7 @@ import { DASHBOARD_WORKOUT_CARD_ATTRIBUTES } from '@workspace/shared';
 interface DashboardPlanCardProps {
   plan: WorkoutPlanTemplate;
   programContext?: string;
+  previewUserId?: string;
   /** Program-bound plans start the exact scheduled session; standalone plans
    * let the user choose any session. */
   allowSessionPicker: boolean;
@@ -32,6 +34,7 @@ interface DistinctSession {
 const DashboardPlanCard = ({
   plan,
   programContext,
+  previewUserId,
   allowSessionPicker,
   startingSessionId,
   onStart,
@@ -68,6 +71,86 @@ const DashboardPlanCard = ({
     1
   );
   const totalSessions = plan.sessions.length;
+  const summary = (
+    <span className="block min-w-0 space-y-2">
+      {programContext && (
+        <span className="block text-sm text-muted-foreground">
+          {programContext}
+        </span>
+      )}
+      <span className="flex items-center gap-2 flex-wrap">
+        <Badge variant="secondary" className="text-xs font-semibold gap-1">
+          {plan.schedule_type === 'sequential' ? (
+            <>
+              <Repeat className="h-3 w-3 text-primary" />
+              {t('exerciseCard.upNextInPlanBadge', 'Plan Up Next')}
+            </>
+          ) : (
+            <>
+              <CalendarDays className="h-3 w-3 text-primary" />
+              {t('exerciseCard.scheduledTodayBadge', 'Scheduled Today')}
+            </>
+          )}
+        </Badge>
+        {distinctSessions.length > 1 ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="min-h-11 h-auto px-2 py-2 font-semibold text-lg gap-1 hover:bg-muted/80 text-foreground"
+              >
+                <span className="whitespace-normal text-left">
+                  {sessionName}
+                </span>
+                <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-56">
+              <span className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
+                {t('exerciseCard.switchSessionLabel', 'Switch / Pick Session:')}
+              </span>
+              {distinctSessions.map((sessionItem, index) => (
+                <DropdownMenuItem
+                  key={sessionItem.session.id || index}
+                  onClick={() => setSelectedSessionId(sessionItem.session.id)}
+                  className="flex items-center justify-between gap-2 cursor-pointer"
+                >
+                  <span className="truncate">
+                    {index + 1}. {sessionItem.name}
+                  </span>
+                  {sessionItem.isSuggested && (
+                    <Badge
+                      variant="secondary"
+                      className="text-xs px-1.5 py-0 shrink-0"
+                    >
+                      {t('exerciseCard.suggestedBadge', 'Suggested')}
+                    </Badge>
+                  )}
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : (
+          <span className="font-semibold text-xl">{sessionName}</span>
+        )}
+        {plan.schedule_type === 'sequential' && (
+          <span className="text-xs text-muted-foreground font-medium">
+            ({sessionIndex} of {totalSessions})
+          </span>
+        )}
+      </span>
+      <span className="block text-xs text-muted-foreground">
+        {plan.schedule_type === 'sequential'
+          ? t('exerciseCard.activePlanHint', 'Sequential plan: {{name}}', {
+              name: plan.plan_name,
+            })
+          : t('exerciseCard.activeWeeklyPlanHint', 'Active plan: {{name}}', {
+              name: plan.plan_name,
+            })}
+      </span>
+    </span>
+  );
   return (
     <div
       className="border-b pb-3 mb-3 md:pb-5 md:mb-4 flex flex-col items-start justify-between gap-3 md:gap-4"
@@ -82,85 +165,32 @@ const DashboardPlanCard = ({
         ),
       }}
     >
-      <div className="min-w-0 space-y-2">
-        {programContext && (
-          <p className="text-sm text-muted-foreground">{programContext}</p>
-        )}
-        <div className="flex items-center gap-2 flex-wrap">
-          <Badge variant="secondary" className="text-xs font-semibold gap-1">
-            {plan.schedule_type === 'sequential' ? (
-              <>
-                <Repeat className="h-3 w-3 text-primary" />
-                {t('exerciseCard.upNextInPlanBadge', 'Plan Up Next')}
-              </>
-            ) : (
-              <>
-                <CalendarDays className="h-3 w-3 text-primary" />
-                {t('exerciseCard.scheduledTodayBadge', 'Scheduled Today')}
-              </>
+      {programContext && previewUserId ? (
+        <DashboardWorkoutPreview
+          name={sessionName}
+          context={programContext}
+          workout={{ plan, session: currentSession, userId: previewUserId }}
+          onStart={() => onStart(plan, currentSession)}
+          starting={startingSessionId === currentSession.id}
+        >
+          <button
+            type="button"
+            className="w-full min-w-0 text-left rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label={t(
+              'dashboardWorkoutPreview.trigger',
+              'Preview workout: {{name}} — {{context}}',
+              { name: sessionName, context: programContext }
             )}
-          </Badge>
-          {distinctSessions.length > 1 ? (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="min-h-11 h-auto px-2 py-2 font-semibold text-lg gap-1 hover:bg-muted/80 text-foreground"
-                >
-                  <span className="whitespace-normal text-left">
-                    {sessionName}
-                  </span>
-                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-56">
-                <div className="px-2 py-1.5 text-xs font-semibold text-muted-foreground">
-                  {t(
-                    'exerciseCard.switchSessionLabel',
-                    'Switch / Pick Session:'
-                  )}
-                </div>
-                {distinctSessions.map((sessionItem, index) => (
-                  <DropdownMenuItem
-                    key={sessionItem.session.id || index}
-                    onClick={() => setSelectedSessionId(sessionItem.session.id)}
-                    className="flex items-center justify-between gap-2 cursor-pointer"
-                  >
-                    <span className="truncate">
-                      {index + 1}. {sessionItem.name}
-                    </span>
-                    {sessionItem.isSuggested && (
-                      <Badge
-                        variant="secondary"
-                        className="text-xs px-1.5 py-0 shrink-0"
-                      >
-                        {t('exerciseCard.suggestedBadge', 'Suggested')}
-                      </Badge>
-                    )}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          ) : (
-            <span className="font-semibold text-xl">{sessionName}</span>
-          )}
-          {plan.schedule_type === 'sequential' && (
-            <span className="text-xs text-muted-foreground font-medium">
-              ({sessionIndex} of {totalSessions})
+          >
+            {summary}
+            <span className="block text-sm text-primary mt-2">
+              {t('dashboardWorkoutPreview.view', 'View workout')}
             </span>
-          )}
-        </div>
-        <p className="text-xs text-muted-foreground">
-          {plan.schedule_type === 'sequential'
-            ? t('exerciseCard.activePlanHint', 'Sequential plan: {{name}}', {
-                name: plan.plan_name,
-              })
-            : t('exerciseCard.activeWeeklyPlanHint', 'Active plan: {{name}}', {
-                name: plan.plan_name,
-              })}
-        </p>
-      </div>
+          </button>
+        </DashboardWorkoutPreview>
+      ) : (
+        summary
+      )}
       <div className="flex flex-wrap items-center gap-2 shrink-0">
         <Button
           variant="default"
