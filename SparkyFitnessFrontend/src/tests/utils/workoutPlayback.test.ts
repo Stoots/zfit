@@ -1,3 +1,4 @@
+import { displaySetRir } from '@workspace/shared';
 import * as logging from '@/utils/logging';
 import type { WorkoutPreset } from '@/types/workout';
 import type { Exercise } from '@/types/exercises';
@@ -693,6 +694,36 @@ describe('workoutPlayback utils', () => {
 
     expect(payload.exercises?.[0]?.duration_minutes).toBeCloseTo(2.5, 5);
   });
+
+  it.each([
+    { rir: undefined, expected: 2 },
+    { rir: null, expected: null },
+    { rir: 0, expected: 0 },
+  ])(
+    'copies legacy effort on append without changing explicit $rir',
+    ({ rir, expected }) => {
+      const draft = createWorkoutPlaybackDraftFromPreset(
+        createPresetFixture(),
+        '2026-04-27'
+      );
+      const last = draft.exercises[0]!.sets[1]!;
+      last.rpe = 8;
+      if (rir === undefined) delete last.rir;
+      else last.rir = rir;
+      const added = addWorkoutSetToExercise(draft, 0);
+      const set = added.exercises[0]!.sets[2]!;
+      expect(displaySetRir(set)).toBe(expected);
+      expect(set.rir).toBe(expected);
+      const completed = toggleWorkoutSetCompletion(added, {
+        exerciseIndex: 0,
+        setIndex: 2,
+      });
+      expect(
+        buildPresetSessionCreateRequestFromDraft(completed, 'UTC')
+          .exercises?.[0]?.sets[0]?.rir
+      ).toBe(expected);
+    }
+  );
 
   it('updates set fields and supports add/remove set editing', () => {
     const initialDraft = createWorkoutPlaybackDraftFromPreset(

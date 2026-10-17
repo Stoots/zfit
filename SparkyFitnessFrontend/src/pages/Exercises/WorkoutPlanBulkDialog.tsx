@@ -1,4 +1,4 @@
-import { displaySetRir } from '@workspace/shared';
+import { displaySetRir, resolveExerciseModality } from '@workspace/shared';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -72,6 +72,16 @@ function useFieldNames(): Record<WorkoutPlanBulkField, string> {
   };
 }
 
+function setEffortField(exercise: {
+  modality?: string | null;
+  category?: string | null;
+}) {
+  return resolveExerciseModality(exercise.modality, exercise.category) ===
+    'duration_distance'
+    ? 'rpe'
+    : 'rir';
+}
+
 function PrescriptionValues({
   assignment,
   fields,
@@ -88,6 +98,7 @@ function PrescriptionValues({
       exercise_name: assignment.exercise_name,
       sets: assignment.sets,
       modality: assignment.modality,
+      category: null,
     },
   ];
   const displayValue = (value: unknown) =>
@@ -128,7 +139,7 @@ function PrescriptionValues({
                     </span>
                     {(fields.includes('sets')
                       ? Object.entries(
-                          exercise.modality === 'duration_distance'
+                          setEffortField(exercise) === 'rpe'
                             ? set
                             : { ...set, rir: displaySetRir(set) }
                         )
@@ -137,7 +148,7 @@ function PrescriptionValues({
                               key !== 'id' &&
                               key !== 'set_number' &&
                               key !==
-                                (exercise.modality === 'duration_distance'
+                                (setEffortField(exercise) === 'rpe'
                                   ? 'rir'
                                   : 'rpe')
                           )
@@ -146,7 +157,14 @@ function PrescriptionValues({
                               `${fieldNames[key as WorkoutPlanBulkField] ?? key}: ${displayValue(value)}`
                           )
                       : fields
-                          .filter((field) => setFields.includes(field))
+                          .filter(
+                            (field) =>
+                              setFields.includes(field) &&
+                              (field !== 'rpe' ||
+                                setEffortField(exercise) === 'rpe') &&
+                              (field !== 'rir' ||
+                                setEffortField(exercise) !== 'rpe')
+                          )
                           .map(
                             (field) =>
                               `${fieldNames[field]}: ${displayValue(field === 'rir' ? displaySetRir(set) : set[field])}`
@@ -206,6 +224,10 @@ export default function WorkoutPlanBulkDialog({
     })
   );
   const source = sources.find((item) => item.key === sourceKey);
+  const sourceExercises =
+    source?.assignment.preset_snapshot?.exercises ??
+    (source ? [source.assignment] : []);
+  const effortFields = new Set(sourceExercises.map(setEffortField));
   const pending = bulk.preview.isPending || bulk.apply.isPending;
   const resetPreview = () => {
     setPreview(null);
@@ -436,12 +458,10 @@ export default function WorkoutPlanBulkDialog({
               </legend>
               <div className="grid gap-x-6 sm:grid-cols-2">
                 {[
-                  ...setFields.filter(
-                    (field) =>
-                      field !==
-                      (source.assignment.modality === 'duration_distance'
-                        ? 'rir'
-                        : 'rpe')
+                  ...setFields.filter((field) =>
+                    field === 'rpe' || field === 'rir'
+                      ? effortFields.has(field)
+                      : true
                   ),
                   ...(source.assignment.preset_snapshot ? presetFields : []),
                 ].map((field) => (

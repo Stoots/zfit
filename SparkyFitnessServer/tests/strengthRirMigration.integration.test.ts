@@ -242,6 +242,42 @@ it.runIf(optedIn)(
       const read = async () =>
         workoutPresetRepository.getWorkoutPresetById(preset.id, owner);
       expect((await read()).exercises[0].sets[0].rir).toBe(2);
+      // Released mobile editors rebuild the set payload without a RIR property.
+      await workoutPresetRepository.updateWorkoutPreset(preset.id, owner, {
+        exercises: [
+          {
+            exercise_id: exerciseId,
+            sort_order: 0,
+            sets: [
+              {
+                set_number: 1,
+                set_type: 'Working Set',
+                reps: 8,
+                weight: 65,
+                duration: null,
+                distance: null,
+                rest_time: 120,
+                notes: null,
+              },
+            ],
+          },
+        ],
+      });
+      expect((await read()).exercises[0].sets[0]).toMatchObject({
+        rir: 2,
+        weight: 65,
+        rest_time: 120,
+      });
+      await workoutPresetRepository.updateWorkoutPreset(preset.id, owner, {
+        exercises: [
+          {
+            exercise_id: exerciseId,
+            sets: [{ set_number: 1, reps: 8, rir: null }],
+          },
+        ],
+      });
+      expect((await read()).exercises[0].sets[0].rir).toBeNull();
+
       await workoutPresetRepository.updateWorkoutPreset(preset.id, owner, {
         exercises: [
           {
@@ -260,6 +296,55 @@ it.runIf(optedIn)(
         1
       );
       expect((await read()).exercises[1].sets[0].rir).toBe(1.5);
+      await workoutPresetRepository.updateWorkoutPreset(preset.id, owner, {
+        exercises: [
+          { exercise_id: secondId, sets: [{ set_number: 1, reps: 6 }] },
+          { exercise_id: exerciseId, sets: [{ set_number: 1, reps: 8 }] },
+        ],
+      });
+      expect((await read()).exercises[0].sets[0].rir).toBeNull();
+      expect((await read()).exercises[1].sets[0].rir).toBeNull();
+      await workoutPresetRepository.updateWorkoutPreset(preset.id, owner, {
+        exercises: [
+          {
+            exercise_id: exerciseId,
+            sets: [
+              { set_number: 1, rir: 2 },
+              { set_number: 1, rir: 3 },
+            ],
+          },
+        ],
+      });
+      await workoutPresetRepository.updateWorkoutPreset(preset.id, owner, {
+        exercises: [
+          {
+            exercise_id: exerciseId,
+            sets: [{ set_number: 1, reps: 8 }],
+          },
+        ],
+      });
+      expect((await read()).exercises[0].sets[0].rir).toBeNull();
+      await workoutPresetRepository.updateWorkoutPreset(preset.id, owner, {
+        exercises: [
+          {
+            exercise_id: exerciseId,
+            sets: [{ set_number: 1, rir: 2 }],
+          },
+        ],
+      });
+      await workoutPresetRepository.updateWorkoutPreset(preset.id, owner, {
+        exercises: [
+          {
+            exercise_id: exerciseId,
+            sets: [
+              { set_number: 1, reps: 8 },
+              { set_number: 1, reps: 9 },
+            ],
+          },
+        ],
+      });
+      expect((await read()).exercises[0].sets[0].rir).toBeNull();
+      expect((await read()).exercises[0].sets[1].rir).toBeNull();
     } finally {
       await db.query('DELETE FROM public."user" WHERE id=$1', [owner]);
       await db.end();

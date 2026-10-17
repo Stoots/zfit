@@ -10,6 +10,8 @@ Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded her
 
 #### Bug fixes
 
+- Keep web-authored preset RIR when legacy clients edit other set fields; preserve cardio effort options in preset bulk copy and inherited effort when appending legacy workout sets (#82).
+
 - Scope web workout drafts to the signed-in account and acting profile; reset playback on profile changes and clear account drafts on sign-out (#78). Legacy Program drafts migrate only after verifying the signed-in owner's Program list, preserving completed sets and edited weights; unverifiable drafts remain untouched, including on sign-out. Stale session-expiry probes cannot clear drafts after recovery.
 - Prevent empty or untouched prescribed diary workouts (including explicitly started Workout Sessions and weekly prefill) from completing a Program session through linking; keep partial workouts and duration-only individual entries linkable, including historical entries with blank backing sets (#77).
 

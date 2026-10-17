@@ -7,6 +7,7 @@ import {
   calculateDropSetWeightsKg,
   calculateRampedWeightKg,
   findDropSetBaseIndex,
+  displaySetRir,
   instantHourMinute,
   isWeightRampActive,
   resolveExerciseModality,
@@ -855,7 +856,12 @@ export function addWorkoutSetToExercise(
     rest_time: lastSet?.rest_time ?? DEFAULT_REST_SECONDS,
     notes: lastSet?.notes ?? null,
     rpe: lastSet?.rpe ?? null,
-    rir: lastSet?.rir ?? null,
+    rir:
+      exercise.modality === 'duration_distance'
+        ? (lastSet?.rir ?? null)
+        : lastSet
+          ? displaySetRir(lastSet)
+          : null,
     completed: false,
     completed_at: null,
   };
