@@ -1,3 +1,6 @@
+import { z } from 'zod';
+import { error as logError } from '@/utils/logging';
+import { getUserLoggingLevel } from '@/utils/userPreferences';
 import {
   adaptiveWeightStepKg,
   applyAdaptiveLoadFactorKg,
@@ -164,10 +167,18 @@ export interface WorkoutPlaybackStats {
 
 export interface WorkoutPlaybackRouteState {
   returnTo?: string;
+  identity?: WorkoutPlaybackIdentity;
   draft?: WorkoutPlaybackDraft | null;
 }
 
-const WORKOUT_PLAYBACK_STORAGE_PREFIX = 'sparky.workoutPlaybackDraft.v1';
+const WORKOUT_PLAYBACK_STORAGE_PREFIX = 'sparky.workoutPlaybackDraft.v2';
+const LEGACY_WORKOUT_PLAYBACK_STORAGE_PREFIX =
+  'sparky.workoutPlaybackDraft.v1:';
+
+export interface WorkoutPlaybackIdentity {
+  userId: string;
+  activeUserId: string;
+}
 
 const DEFAULT_REST_TIMER: WorkoutPlaybackRestTimer = {
   state: 'idle',
@@ -180,8 +191,33 @@ function nowIso(): string {
   return new Date().toISOString();
 }
 
-export function getWorkoutPlaybackDraftStorageKey(entryDate: string): string {
-  return `${WORKOUT_PLAYBACK_STORAGE_PREFIX}:${entryDate}`;
+function workoutPlaybackAccountPrefix(userId: string): string {
+  return `${WORKOUT_PLAYBACK_STORAGE_PREFIX}:${encodeURIComponent(userId)}:`;
+}
+
+export function getWorkoutPlaybackDraftStorageKey(
+  entryDate: string,
+  identity: WorkoutPlaybackIdentity
+): string {
+  return `${workoutPlaybackAccountPrefix(identity.userId)}${encodeURIComponent(identity.activeUserId)}:${entryDate}`;
+}
+
+export function clearWorkoutPlaybackDraftsForUser(userId: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const prefix = workoutPlaybackAccountPrefix(userId);
+    for (const key of Object.keys(window.localStorage)) {
+      if (key.startsWith(prefix)) {
+        window.localStorage.removeItem(key);
+      }
+    }
+  } catch (error) {
+    logError(
+      getUserLoggingLevel(),
+      'Failed to clear workout playback drafts from storage',
+      error
+    );
+  }
 }
 
 function isWorkoutPlaybackDraft(value: unknown): value is WorkoutPlaybackDraft {
@@ -200,62 +236,106 @@ function isWorkoutPlaybackDraft(value: unknown): value is WorkoutPlaybackDraft {
 }
 
 export function loadWorkoutPlaybackDraftFromStorage(
-  entryDate: string
+  entryDate: string,
+  identity: WorkoutPlaybackIdentity,
+  ownedProgramIds: readonly string[] = []
 ): WorkoutPlaybackDraft | null {
   if (typeof window === 'undefined') {
     return null;
   }
 
-  const storageKey = getWorkoutPlaybackDraftStorageKey(entryDate);
+  const storageKey = getWorkoutPlaybackDraftStorageKey(entryDate, identity);
 
   try {
     const raw = window.localStorage.getItem(storageKey);
     if (!raw) {
-      return null;
+      if (
+        identity.userId !== identity.activeUserId ||
+        !ownedProgramIds.length ||
+        !z.iso.date().safeParse(entryDate).success
+      )
+        return null;
+
+      const legacyKey = `${LEGACY_WORKOUT_PLAYBACK_STORAGE_PREFIX}${entryDate}`;
+      const legacyRaw = window.localStorage.getItem(legacyKey);
+      if (!legacyRaw) return null;
+      const legacy: unknown = JSON.parse(legacyRaw);
+      if (
+        !isWorkoutPlaybackDraft(legacy) ||
+        legacy.entry_date !== entryDate ||
+        !legacy.training_program ||
+        !ownedProgramIds.includes(legacy.training_program.program_id)
+      )
+        return null;
+
+      // Preserve the only saved copy until the account-scoped write succeeds.
+      if (saveWorkoutPlaybackDraftToStorage(legacy, identity)) {
+        window.localStorage.removeItem(legacyKey);
+      }
+      return legacy;
     }
 
     const parsed: unknown = JSON.parse(raw);
-    if (!isWorkoutPlaybackDraft(parsed)) {
+    if (!isWorkoutPlaybackDraft(parsed) || parsed.entry_date !== entryDate) {
       window.localStorage.removeItem(storageKey);
       return null;
     }
 
     return parsed;
   } catch (error) {
-    console.error('Failed to load workout playback draft from storage', error);
+    logError(
+      getUserLoggingLevel(),
+      'Failed to load workout playback draft from storage',
+      error
+    );
     return null;
   }
 }
 
 export function saveWorkoutPlaybackDraftToStorage(
-  draft: WorkoutPlaybackDraft
+  draft: WorkoutPlaybackDraft,
+  identity: WorkoutPlaybackIdentity
 ): boolean {
   if (typeof window === 'undefined') {
     return false;
   }
 
-  const storageKey = getWorkoutPlaybackDraftStorageKey(draft.entry_date);
+  const storageKey = getWorkoutPlaybackDraftStorageKey(
+    draft.entry_date,
+    identity
+  );
 
   try {
     window.localStorage.setItem(storageKey, JSON.stringify(draft));
     return true;
   } catch (error) {
-    console.error('Failed to save workout playback draft to storage', error);
+    logError(
+      getUserLoggingLevel(),
+      'Failed to save workout playback draft to storage',
+      error
+    );
     return false;
   }
 }
 
-export function clearWorkoutPlaybackDraftFromStorage(entryDate: string): void {
+export function clearWorkoutPlaybackDraftFromStorage(
+  entryDate: string,
+  identity: WorkoutPlaybackIdentity
+): void {
   if (typeof window === 'undefined') {
     return;
   }
 
   try {
     window.localStorage.removeItem(
-      getWorkoutPlaybackDraftStorageKey(entryDate)
+      getWorkoutPlaybackDraftStorageKey(entryDate, identity)
     );
   } catch (error) {
-    console.error('Failed to clear workout playback draft from storage', error);
+    logError(
+      getUserLoggingLevel(),
+      'Failed to clear workout playback draft from storage',
+      error
+    );
   }
 }
 
@@ -560,10 +640,12 @@ export function createWorkoutPlaybackDraftFromPreset(
 export function createWorkoutPlaybackRouteState(
   preset: WorkoutPreset,
   entryDate: string,
+  identity: WorkoutPlaybackIdentity,
   returnTo?: string
 ): WorkoutPlaybackRouteState {
   return {
     returnTo,
+    identity,
     draft: createWorkoutPlaybackDraftFromPreset(preset, entryDate),
   };
 }
@@ -601,10 +683,12 @@ export function createWorkoutPlaybackDraftFromExercise(
 export function createWorkoutPlaybackRouteStateFromExercise(
   exercise: Exercise,
   entryDate: string,
+  identity: WorkoutPlaybackIdentity,
   returnTo?: string
 ): WorkoutPlaybackRouteState {
   return {
     returnTo,
+    identity,
     draft: createWorkoutPlaybackDraftFromExercise(exercise, entryDate),
   };
 }

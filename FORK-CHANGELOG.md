@@ -6,6 +6,7 @@ Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded her
 
 #### Bug fixes
 
+- Scope web workout drafts to the signed-in account and acting profile; reset playback on profile changes and clear account drafts on sign-out (#78). Legacy Program drafts migrate only after verifying the signed-in owner's Program list, preserving completed sets and edited weights; unverifiable drafts remain untouched, including on sign-out. Stale session-expiry probes cannot clear drafts after recovery.
 - Prevent empty or untouched prescribed diary workouts (including explicitly started Workout Sessions and weekly prefill) from completing a Program session through linking; keep partial workouts and duration-only individual entries linkable, including historical entries with blank backing sets (#77).
 
 - Restore upstream App Store Workout Plan reads and flat create/edit requests, preserving session identities, optionality and frozen prescriptions; reject ambiguous edits and protected-history removal, including HTTP 409 for flat saves of unscheduled weekly sessions or detached frozen assignments that the App Store form drops (#74).

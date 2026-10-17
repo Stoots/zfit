@@ -1,3 +1,4 @@
+import { clearWorkoutPlaybackDraftsForUser } from '@/utils/workoutPlayback';
 import React, {
   createContext,
   useContext,
@@ -212,6 +213,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
 
   // 2. Cleanup Effect: Handles Logout / Session expiry
   useEffect(() => {
+    let cancelled = false;
     if (!session && !sessionLoading) {
       const now = Date.now();
       const isSticky = now - lastManualSignIn < 2000;
@@ -232,6 +234,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
         apiCall('/ping')
           .then(() => {
             if (
+              cancelled ||
               currentUserRef.current?.id !== probedUserId ||
               Date.now() - lastManualSignInRef.current < 2000
             ) {
@@ -241,6 +244,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
               return;
             }
             console.log('[Auth Hook] No session found, clearing user state.');
+            clearWorkoutPlaybackDraftsForUser(probedUserId);
             setUser(null);
             identityLookupRef.current = null;
             clearDemoRestrictions();
@@ -255,6 +259,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       }
       setIsSyncing(false);
     }
+    return () => {
+      cancelled = true;
+    };
   }, [session, sessionLoading, user, lastManualSignIn, queryClient]);
 
   const refreshUser = useCallback(async () => {
@@ -270,6 +277,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   }, []);
 
   const signOut = useCallback(async () => {
+    const signingOutUserId = currentUserRef.current?.id;
     try {
       const { error } = await authClient.signOut();
       if (error) {
@@ -278,6 +286,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     } catch (err) {
       console.error('[Auth Hook] SignOut unexpected error:', err);
     }
+    if (signingOutUserId) clearWorkoutPlaybackDraftsForUser(signingOutUserId);
     setUser(null);
     identityLookupRef.current = null;
     clearDemoRestrictions();

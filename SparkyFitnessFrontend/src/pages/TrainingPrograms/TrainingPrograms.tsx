@@ -98,6 +98,7 @@ function ProgramWorkspace({ userId }: { userId: string }) {
         state: createWorkoutPlaybackRouteState(
           preset,
           session.effective_date,
+          { userId, activeUserId: userId },
           `${window.location.pathname}${window.location.search}`
         ),
       });
