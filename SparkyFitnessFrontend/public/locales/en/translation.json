@@ -6313,6 +6313,7 @@
     "whatsNew": "What's New"
   },
   "foodUnitSelector": {
+    "saveFailedRetained": "Couldn't save. Your inputs are kept; please try again.",
     "editTitle": "Edit {{name}}",
     "addTitle": "Add {{name}} to Meal",
     "editDescription": "Edit the quantity and unit for {{name}}.",
@@ -7053,6 +7054,11 @@
     "loadFailed": "Could not load your training consistency."
   },
   "cardioTests": {
+    "protocolSelector": "Test protocol",
+    "protocolCooper": "Cooper run",
+    "protocolSprint": "6-second sprint",
+    "protocolPower": "30-second power",
+    "editingAttempt": "Editing Test Attempt",
     "title": "Cardio Tests",
     "intro": "Record Cooper, power, and ramp Test Attempts and compare results over time.",
     "saved": "Test Attempt saved.",

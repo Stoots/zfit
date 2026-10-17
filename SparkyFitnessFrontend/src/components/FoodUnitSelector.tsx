@@ -92,7 +92,7 @@ interface FoodUnitSelectorProps {
     entryTime?: string | null,
     mealType?: string | null,
     notes?: string | null
-  ) => void;
+  ) => void | Promise<void>;
   showUnitSelector?: boolean;
   initialQuantity?: number;
   initialUnit?: string;
@@ -158,6 +158,9 @@ const FoodUnitSelector = ({
   const [mealType, setMealType] = useState('');
   const [loading, setLoading] = useState(false);
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const submittingRef = useRef(false);
+  const [saveError, setSaveError] = useState('');
   const wasOpenRef = useRef(false);
 
   useEffect(() => {
@@ -175,6 +178,7 @@ const FoodUnitSelector = ({
       // and never clears `selectedFood`), so a note typed for one food would
       // otherwise still be in the box when the next one is logged.
       setEntryNotes('');
+      setSaveError('');
 
       if (
         showMealTypeSelect &&
@@ -451,7 +455,6 @@ const FoodUnitSelector = ({
     initialQuantity,
     initialUnit,
     initialVariantId,
-    initialTime,
     loadVariantsData,
     loggingLevel,
     resetConversionState,
@@ -459,67 +462,58 @@ const FoodUnitSelector = ({
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    debug(loggingLevel, 'Handling submit.');
+    if (quantity === undefined || submittingRef.current) return;
 
-    if (quantity === undefined) return;
-
-    if (isConverting) {
-      const convertedVariant = buildConvertedVariant();
-      if (!convertedVariant) {
+    let variant = isConverting ? buildConvertedVariant() : selectedVariant;
+    if (!variant) {
+      if (isConverting) {
         setConversionError(
           'Please enter a valid unit name and conversion factor.'
         );
-        return;
-      }
-      setConversionError('');
-      try {
-        const savedVariant = await createFoodVariantMutation.mutateAsync({
-          foodId: food.id,
-          variant: convertedVariant,
-        });
-        info(loggingLevel, 'Created converted variant:', savedVariant);
-        const variantWithId: FoodVariant = {
-          ...convertedVariant,
-          ...savedVariant,
-        };
-        onSelect(
-          food,
-          quantity,
-          variantWithId.serving_unit,
-          variantWithId,
-          entryTime || null,
-          showMealTypeSelect ? mealType : null,
-          entryNotes.trim() || null
-        );
-        onOpenChange(false);
-        setQuantity(1);
-      } catch (err) {
-        error(loggingLevel, 'Error creating converted variant:', err);
-        setConversionError('Failed to save the new unit. Please try again.');
+      } else {
+        warn(loggingLevel, 'Submit called with no selected variant.');
       }
       return;
     }
 
-    if (selectedVariant) {
-      info(loggingLevel, 'Submitting food selection:', {
+    submittingRef.current = true;
+    setIsSubmitting(true);
+    setSaveError('');
+    try {
+      if (isConverting) {
+        const savedVariant = await createFoodVariantMutation.mutateAsync({
+          foodId: food.id,
+          variant,
+        });
+        const persistedVariant = { ...variant, ...savedVariant };
+        variant = persistedVariant;
+        // A failed diary save must retry with the unit already persisted.
+        setVariants((previous) => [...previous, persistedVariant]);
+        setSelectedVariant(persistedVariant);
+        resetConversionState();
+      }
+      await onSelect(
         food,
         quantity,
-        unit: selectedVariant.serving_unit,
-        variantId: selectedVariant.id || undefined,
-      });
-      onSelect(
-        food,
-        quantity,
-        selectedVariant.serving_unit,
-        selectedVariant,
+        variant.serving_unit,
+        variant,
         entryTime || null,
         showMealTypeSelect ? mealType : null,
         entryNotes.trim() || null
       );
       onOpenChange(false);
       setQuantity(1);
-    } else {
-      warn(loggingLevel, 'Submit called with no selected variant.');
+    } catch (err) {
+      error(loggingLevel, 'Error saving food selection:', err);
+      setSaveError(
+        t(
+          'foodUnitSelector.saveFailedRetained',
+          "Couldn't save. Your inputs are kept; please try again."
+        )
+      );
+    } finally {
+      submittingRef.current = false;
+      setIsSubmitting(false);
     }
   };
 
@@ -575,22 +569,26 @@ const FoodUnitSelector = ({
           : `${quantity} ${displayUnit}`.trim();
 
   const addDisabled =
+    isSubmitting ||
     createFoodVariantMutation.isPending ||
     (!isConverting && !selectedVariant) ||
     (isConverting &&
       (!pendingUnit.trim() ||
         (autoConversionFactor === null &&
           (!conversionFactor || conversionFactor <= 0))));
-  const addLabel = createFoodVariantMutation.isPending
-    ? t('common.saving', 'Saving...')
-    : initialQuantity
-      ? t('foodUnitSelector.updateFood', 'Update Food')
-      : t('foodUnitSelector.addToMeal', 'Add to Meal');
+  const addLabel =
+    isSubmitting || createFoodVariantMutation.isPending
+      ? t('common.saving', 'Saving...')
+      : initialQuantity
+        ? t('foodUnitSelector.updateFood', 'Update Food')
+        : t('foodUnitSelector.addToMeal', 'Add to Meal');
 
   return (
     <Dialog
       open={open && (showUnitSelector ?? true)}
-      onOpenChange={onOpenChange}
+      onOpenChange={(nextOpen) => {
+        if (!submittingRef.current) onOpenChange(nextOpen);
+      }}
     >
       <DialogContent>
         <DialogHeader>
@@ -630,7 +628,7 @@ const FoodUnitSelector = ({
           <div>{t('foodUnitSelector.loadingUnits', 'Loading units...')}</div>
         ) : (
           <form onSubmit={handleSubmit}>
-            <div className="space-y-4">
+            <fieldset disabled={isSubmitting} className="space-y-4 min-w-0">
               <div className="flex justify-end">
                 <Button type="submit" disabled={addDisabled}>
                   {addLabel}
@@ -1070,6 +1068,11 @@ const FoodUnitSelector = ({
                 />
               </div>
 
+              {saveError && (
+                <p role="alert" className="text-sm text-destructive">
+                  {saveError}
+                </p>
+              )}
               <div className="flex justify-end space-x-2">
                 <Button
                   type="button"
@@ -1082,7 +1085,7 @@ const FoodUnitSelector = ({
                   {addLabel}
                 </Button>
               </div>
-            </div>
+            </fieldset>
           </form>
         )}
       </DialogContent>

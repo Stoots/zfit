@@ -1,3 +1,4 @@
+import { useAttemptEditorFocus } from './useAttemptEditorFocus';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -83,6 +84,7 @@ function RampProfile({
   const [editing, setEditing] = useState<string | null>(null);
   const [validationError, setValidationError] = useState('');
   const savingRef = useRef(false);
+  const { headingRef, focusEditor } = useAttemptEditorFocus(editing);
   const linkedEditBlocked = programs.isError && !!editing && !!plannedSessionId;
   useEffect(() => {
     if (date || !selectedPlannedSessionId) return;
@@ -188,6 +190,22 @@ function RampProfile({
           onSubmit={submit}
           className="space-y-4 rounded-lg border bg-card p-4 sm:p-6"
         >
+          {editing && (
+            <h3
+              ref={headingRef}
+              tabIndex={-1}
+              className="scroll-mt-4 text-lg font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              {t('cardioTests.editingAttempt', 'Editing Test Attempt')} ·{' '}
+              <time
+                dateTime={
+                  rows.find((attempt) => attempt.id === editing)?.attempt_date
+                }
+              >
+                {rows.find((attempt) => attempt.id === editing)?.attempt_date}
+              </time>
+            </h3>
+          )}
           {!isActingOnBehalf && (
             <div>
               <Label htmlFor="ramp-planned-session">
@@ -394,8 +412,9 @@ function RampProfile({
                     type="button"
                     variant="outline"
                     disabled={save.isPending}
-                    onClick={() => {
+                    onClick={(event) => {
                       if (savingRef.current) return;
+                      focusEditor(event.currentTarget);
                       setEditing(attempt.id);
                       setDate(attempt.attempt_date);
                       setPlannedSessionId(attempt.planned_session_id ?? '');
