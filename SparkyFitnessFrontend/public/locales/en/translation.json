@@ -1,5 +1,7 @@
 {
   "trainingPrograms": {
+    "jumpToNextSession": "Jump to next session",
+    "noRemainingSessions": "No remaining sessions.",
     "weekProgress": "Week {{current}} of {{total}}",
     "currentProgram": "Current program",
     "schedule": "Schedule",

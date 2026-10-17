@@ -72,6 +72,8 @@ Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded her
 
 #### Bug fixes
 
+- Add a phone-friendly jump from the Program summary to the earliest pending session by effective date, including overdue sessions, and show when none remain (#62).
+
 - Bring populated Cardio Test editors into view with a dated heading and return focus to history after Save or Cancel for all four web protocols (#60).
 
 - Keep web food-entry quantity, unit, time and notes after a failed save; allow retry and block duplicate submissions while saving (#58).
