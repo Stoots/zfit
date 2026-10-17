@@ -18,6 +18,7 @@ import type {
 } from '@workspace/shared';
 import { trainingProgramSchema } from '@workspace/shared';
 import ProgramSchedule from '@/pages/TrainingPrograms/ProgramSchedule';
+import ProgramDetail from '@/pages/TrainingPrograms/ProgramDetail';
 import { programProgress } from '@/pages/TrainingPrograms/programProgress';
 import TrainingPrograms from '@/pages/TrainingPrograms/TrainingPrograms';
 import WorkoutPlaybackPage from '@/pages/Diary/WorkoutPlaybackPage';
@@ -1114,4 +1115,86 @@ it('places a current program before inactive programs without mutating the query
       .map((link) => link.getAttribute('aria-label'))
   ).toEqual(['View Current block', 'View Past block']);
   expect(programs).toEqual([past, active]);
+});
+
+it('jumps past history to the earliest pending effective date, including overdue sessions', () => {
+  const program = scheduleFixture(true);
+  const [first, strength, last] = program.phases[0]!.weeks[0]!.sessions;
+  first!.effective_date = '2026-11-03';
+  strength!.effective_date = '2026-11-01';
+  last!.status = 'completed';
+  const scroll = jest.fn();
+  const previousScroll = HTMLElement.prototype.scrollIntoView;
+  HTMLElement.prototype.scrollIntoView = scroll;
+  try {
+    render(
+      <I18nextProvider i18n={i18n}>
+        <MemoryRouter>
+          <ProgramDetail
+            selected={program}
+            today="2026-11-02"
+            outcomePending={false}
+            startingSessionId={null}
+            onStartSession={jest.fn()}
+            onEdit={jest.fn()}
+            onDelete={jest.fn()}
+            onRecordOutcome={jest.fn()}
+          />
+        </MemoryRouter>
+      </I18nextProvider>
+    );
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Jump to next session' })
+    );
+    expect(sessionRow('Strength')).toHaveFocus();
+    expect(scroll).toHaveBeenCalled();
+    expect(sessionRow('Last run')).toHaveTextContent('Completed');
+    expect(sessionRow('First run')).toBeInTheDocument();
+  } finally {
+    HTMLElement.prototype.scrollIntoView = previousScroll;
+  }
+});
+
+it('explains when no sessions remain while keeping completed, missed and optional history', async () => {
+  stored = scheduleFixture();
+  const [first, strength, last] = stored.phases[0]!.weeks[0]!.sessions;
+  first!.status = 'completed';
+  strength!.status = 'missed';
+  last!.status = 'omitted';
+  last!.is_optional = true;
+  await openStored();
+  expect(screen.getByText('No remaining sessions.')).toBeInTheDocument();
+  expect(
+    screen.queryByRole('button', { name: 'Jump to next session' })
+  ).not.toBeInTheDocument();
+  expect(sessionRow('First run')).toHaveTextContent('Completed');
+  expect(sessionRow('Strength')).toHaveTextContent('Missed');
+  expect(sessionRow('Last run')).toHaveTextContent('Omitted');
+  expect(sessionRow('Last run')).toHaveTextContent('Optional');
+});
+
+it('keeps an unstarted optional assessment in the next-session queue', async () => {
+  stored = scheduleFixture();
+  const sessions = stored.phases[0]!.weeks[0]!.sessions;
+  sessions[0]!.status = 'completed';
+  sessions[1]!.status = 'missed';
+  sessions[2]!.cardio_test_type = 'ramp';
+  sessions[2]!.workout_session_id = null;
+  sessions[2]!.is_optional = true;
+  const previousScroll = HTMLElement.prototype.scrollIntoView;
+  HTMLElement.prototype.scrollIntoView = jest.fn();
+  try {
+    await openStored();
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Jump to next session' })
+    );
+    expect(sessionRow('Last run')).toHaveFocus();
+    expect(
+      within(sessionRow('Last run')).getByRole('link', {
+        name: 'Record Test Attempt',
+      })
+    ).toBeInTheDocument();
+  } finally {
+    HTMLElement.prototype.scrollIntoView = previousScroll;
+  }
 });

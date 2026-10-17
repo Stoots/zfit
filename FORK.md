@@ -73,6 +73,7 @@ Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded her
 #### Bug fixes
 
 - Show readable web chat errors and a labeled Retry that preserves the question and its original Training analysis disclosure without duplicating the transcript; restored or evicted questions use ordinary chat when their original scope is unavailable, and Edit → Update always uses ordinary chat (#64).
+- Add a phone-friendly jump from the Program summary to the earliest pending session by effective date, including overdue sessions, and show when none remain (#62).
 
 - Bring populated Cardio Test editors into view with a dated heading and return focus to history after Save or Cancel for all four web protocols (#60).
 

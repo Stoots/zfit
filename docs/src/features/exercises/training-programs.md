@@ -51,6 +51,10 @@ Preview and cancellation write nothing. Apply retains session/assignment identit
 
 Web plan/Program queries refresh on browser visibility/focus; mobile plan/Program queries refresh on screen focus and foreground resume. Existing in-progress workout drafts and recorded workouts retain their frozen prescription rather than being overwritten.
 
+## Find the next session
+
+In Program details, **Jump to next session** beside the week progress scrolls to and focuses the earliest pending Planned Session by its effective date, including overdue required sessions and pending optional sessions or Cardio Tests. Shifted dates take precedence over authored week order; ties keep the Program's existing session order. Completed, missed and omitted sessions remain in history. When none remain, the summary shows **No remaining sessions.**
+
 ## Completion and missed history
 
 Every session starts **Planned**. Optional sessions become **Omitted** after their effective scheduled day ends in the athlete's saved preference timezone (UTC when absent or invalid). The API derives this status and the next-local-midnight boundary when reading history; it does not require opening the app, a background job or a persisted miss. Spring/fall DST days use their real 23/25-hour local boundaries. In the Program detail view:
