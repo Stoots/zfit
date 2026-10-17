@@ -801,6 +801,27 @@ describe('Exercise entry API schemas', () => {
     expect(result.success).toBe(false);
   });
 
+  it('accepts opt-in earlier/performed filters and rejects invalid wire values', () => {
+    const valid = runSchema('exerciseHistoryQuerySchema', {
+      before: '2026-07-01',
+      performed_only: 'true',
+    });
+    expect(valid.data).toMatchObject({
+      before: '2026-07-01',
+      performed_only: true,
+    });
+    expect(
+      runSchema('exerciseHistoryQuerySchema', { performed_only: 'false' }).data
+        .performed_only
+    ).toBe(false);
+    expect(
+      runSchema('exerciseHistoryQuerySchema', { performed_only: 'yes' }).success
+    ).toBe(false);
+    expect(
+      runSchema('exerciseHistoryQuerySchema', { before: '2026-02-30' }).success
+    ).toBe(false);
+  });
+
   it('accepts a UUID exerciseId filter and rejects non-UUID values', () => {
     const valid = runSchema('exerciseHistoryQuerySchema', {
       exerciseId: '11111111-1111-4111-8111-111111111111',

@@ -6,6 +6,8 @@ Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded her
 
 ### Unreleased
 
+- Show a collapsed **Last time** reference under each web workout-player exercise: prior date, sets, preferred weight unit, RIR and warm-ups; skip today and untouched prescriptions with one filtered history request per exercise (#85).
+
 #### Bug fixes
 
 - Keep web-authored preset RIR when legacy clients edit other set fields; preserve cardio effort in previews and multi-set editors, and derive legacy strength RIR in bulk copies and appended workout sets without changing cardio effort during RIR-only copies (#82).

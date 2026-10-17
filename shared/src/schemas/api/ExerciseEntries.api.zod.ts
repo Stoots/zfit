@@ -25,6 +25,13 @@ export const exerciseHistoryQuerySchema = z
     userId: z.string().uuid().optional(),
     /** Only sessions containing this exercise (standalone entries or preset children). */
     exerciseId: z.string().uuid().optional(),
+    /** Strictly earlier diary days; excludes current/future workouts before pagination. */
+    before: z.iso.date().optional(),
+    /** Entries with sets satisfying diary completion rules; untouched prescriptions are excluded. */
+    performed_only: z
+      .enum(["true", "false"])
+      .transform((value) => value === "true")
+      .optional(),
     // RN's fetch (whatwg-fetch) appends `_=<timestamp>` to GET URLs when a
     // caller passes `cache: 'no-store'`, so the strict schema must tolerate it.
     _: z.string().optional(),

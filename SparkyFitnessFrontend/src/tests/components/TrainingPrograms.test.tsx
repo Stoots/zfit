@@ -24,7 +24,10 @@ import TrainingPrograms from '@/pages/TrainingPrograms/TrainingPrograms';
 import WorkoutPlaybackPage from '@/pages/Diary/WorkoutPlaybackPage';
 import * as api from '@/api/TrainingPrograms/trainingPrograms';
 import { getWorkoutPlanTemplates } from '@/api/Exercises/workoutPlanTemplates';
-import { fetchExerciseEntries } from '@/api/Exercises/exerciseEntryService';
+import {
+  fetchExerciseEntries,
+  fetchLastExercisePerformance,
+} from '@/api/Exercises/exerciseEntryService';
 import { getExerciseById } from '@/api/Exercises/exerciseService';
 import type { WorkoutPlaybackRouteState } from '@/utils/workoutPlayback';
 import en from '../../../public/locales/en/translation.json';
@@ -182,6 +185,7 @@ beforeAll(async () => {
   });
 });
 beforeEach(() => {
+  jest.mocked(fetchLastExercisePerformance).mockResolvedValue(null);
   jest.clearAllMocks();
   mockActor.delegated = false;
   playbackState = undefined;

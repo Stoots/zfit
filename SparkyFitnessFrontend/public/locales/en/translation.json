@@ -1579,6 +1579,8 @@
       "sessionDetails": "Session details"
     },
     "workoutPlaybackPage": {
+      "lastTime": "Last time",
+      "warmUp": "Warm-up",
       "addDropSets": "Add {{sets}} Drop Sets (-{{percent}}%)",
       "addDropSetsFor": "Add drop sets for {{name}}",
       "viewImages": "View {{name}} images",

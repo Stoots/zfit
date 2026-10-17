@@ -1,4 +1,4 @@
-import { legacyRpePatch } from '@workspace/shared';
+import { legacyRpePatch, todayInZone } from '@workspace/shared';
 import { useAuth } from '@/hooks/useAuth';
 import {
   lazy,
@@ -267,6 +267,9 @@ const WorkoutPlaybackSession = ({
   const [recoveryDraft, setRecoveryDraft] = useState(
     initialDraft.recoveryDraft
   );
+  const today = todayInZone(timezone);
+  const historyBeforeDate =
+    draft && draft.entry_date < today ? draft.entry_date : today;
   const draftRef = useRef<WorkoutPlaybackDraft | null>(draft);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [draftStorageFailed, setDraftStorageFailed] = useState(false);
@@ -1435,6 +1438,11 @@ const WorkoutPlaybackSession = ({
       <fieldset disabled={!!recoveryDraft} className="min-w-0">
         <WorkoutPlaybackExercisesList
           exercises={draft.exercises}
+          lastTimeBeforeDate={
+            identity.userId === identity.activeUserId
+              ? historyBeforeDate
+              : undefined
+          }
           setNotesVisibility={setNotesVisibility}
           onToggleSetNotesVisibility={toggleSetNotesVisibility}
           onSelectSet={handleSelectSet}

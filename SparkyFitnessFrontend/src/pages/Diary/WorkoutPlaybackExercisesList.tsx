@@ -19,6 +19,7 @@ import {
   type WorkoutSetPointer,
 } from '@/utils/workoutPlayback';
 import WorkoutPlaybackSetRow from './WorkoutPlaybackSetRow';
+import WorkoutPlaybackLastTime from './WorkoutPlaybackLastTime';
 import AdaptiveSuggestionNotice from './AdaptiveSuggestionNotice';
 import ImageLightbox from '@/components/ImageLightbox';
 import {
@@ -28,6 +29,7 @@ import {
 
 interface WorkoutPlaybackExercisesListProps {
   exercises: WorkoutPlaybackExerciseDraft[];
+  lastTimeBeforeDate?: string;
   setNotesVisibility: Record<string, boolean>;
   onToggleSetNotesVisibility: (setKey: string, visible: boolean) => void;
   onSelectSet: (pointer: WorkoutSetPointer) => void;
@@ -52,6 +54,7 @@ interface WorkoutPlaybackExercisesListProps {
 
 const WorkoutPlaybackExercisesList = ({
   exercises,
+  lastTimeBeforeDate,
   setNotesVisibility,
   onToggleSetNotesVisibility,
   onSelectSet,
@@ -198,6 +201,14 @@ const WorkoutPlaybackExercisesList = ({
                 </button>
               </div>
             </CardHeader>
+            {lastTimeBeforeDate && (
+              <WorkoutPlaybackLastTime
+                key={`${exercise.exercise_id}:${lastTimeBeforeDate}`}
+                exerciseId={exercise.exercise_id}
+                beforeDate={lastTimeBeforeDate}
+                weightUnit={weightUnit}
+              />
+            )}
             {(exercise.adaptive || exercise.suggest_variation) && (
               <div className="px-4 pb-3">
                 <AdaptiveSuggestionNotice

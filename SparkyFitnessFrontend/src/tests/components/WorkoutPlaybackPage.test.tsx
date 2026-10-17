@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import WorkoutPlaybackPage from '@/pages/Diary/WorkoutPlaybackPage';
 import { HttpApiError } from '@/api/api';
+import type { IndividualSessionResponse } from '@workspace/shared';
 import type { WorkoutPreset } from '@/types/workout';
 import {
   buildPresetSessionCreateRequestFromDraft,
@@ -23,12 +24,74 @@ const saveWorkoutPlaybackDraftToStorage = (
   draft: Parameters<typeof saveStoredDraft>[0]
 ) => saveStoredDraft(draft, storageIdentity);
 
+const mockHistoryApi = jest.fn();
+jest.mock('@/api/api', () => ({
+  ...jest.requireActual('@/api/api'),
+  apiCall: (...args: unknown[]) => mockHistoryApi(...args),
+}));
+
+const historicalEntry = (
+  overrides: Partial<IndividualSessionResponse> = {}
+): IndividualSessionResponse => ({
+  type: 'individual',
+  id: 'history-1',
+  name: 'Bench Press',
+  exercise_id: 'exercise-1',
+  entry_date: '2026-04-20',
+  duration_minutes: 10,
+  calories_burned: 0,
+  notes: null,
+  distance: null,
+  avg_heart_rate: null,
+  source: 'manual',
+  exercise_snapshot: null,
+  activity_details: [],
+  superset_group: null,
+  sets: [
+    {
+      id: 1,
+      set_number: 1,
+      set_type: 'Warm-up',
+      reps: 12,
+      weight: 40,
+      rir: 3,
+      rpe: null,
+      duration: null,
+      rest_time: null,
+      notes: null,
+      completed_at: null,
+      is_pr: false,
+    },
+    {
+      id: 2,
+      set_number: 2,
+      set_type: 'Working Set',
+      reps: 8,
+      weight: 75,
+      rir: 0,
+      rpe: 8,
+      duration: null,
+      rest_time: null,
+      notes: null,
+      completed_at: null,
+      is_pr: false,
+    },
+  ],
+  ...overrides,
+});
+const historyPage = (sessions: unknown[], hasMore = false) => ({
+  sessions,
+  pagination: { page: 1, pageSize: 20, totalCount: sessions.length, hasMore },
+});
+
 const mockNavigate = jest.fn();
 const mockCreatePresetSession = jest.fn();
 const mockCompleteProgramSession = jest.fn();
 const mockGetGroupedWorkoutSession = jest.fn();
 const mockSearchParams = new URLSearchParams('date=2026-04-27');
 let mockDistanceUnit: 'km' | 'miles' = 'km';
+let mockWeightUnit = 'kg';
+let mockTimezone = 'UTC';
 let mockLocationState: { returnTo?: string; draft?: unknown } | null = null;
 
 jest.mock('react-i18next', () =>
@@ -50,9 +113,9 @@ jest.mock('react-router-dom', () => ({
 
 jest.mock('@/contexts/PreferencesContext', () => ({
   usePreferences: () => ({
-    weightUnit: 'kg',
+    weightUnit: mockWeightUnit,
     distanceUnit: mockDistanceUnit,
-    timezone: 'UTC',
+    timezone: mockTimezone,
     energyUnit: 'kcal',
     convertEnergy: (value: number) => value,
     getEnergyUnitString: () => 'kcal',
@@ -112,14 +175,185 @@ describe('WorkoutPlaybackPage', () => {
     mockUser = { id: 'user-1', activeUserId: 'user-1' };
     mockOwnedPrograms = { data: [{ id: 'program-1' }], isPending: false };
     mockDistanceUnit = 'km';
+    mockWeightUnit = 'kg';
+    mockTimezone = 'UTC';
     mockNavigate.mockReset();
     mockCreatePresetSession.mockReset();
     mockCompleteProgramSession.mockReset();
     mockGetGroupedWorkoutSession
       .mockReset()
       .mockResolvedValue({ id: 'diary-1', exercises: [] });
+    mockHistoryApi.mockReset().mockResolvedValue(historyPage([]));
     window.localStorage.clear();
     mockLocationState = { returnTo: '/?date=2026-04-27' };
+  });
+
+  it('shows last time’s sets and warm-ups in a collapsed section under the exercise', async () => {
+    mockHistoryApi.mockImplementation(
+      (_url: string, options: { params: { exerciseId: string } }) =>
+        Promise.resolve(
+          historyPage(
+            options.params.exerciseId === 'exercise-1'
+              ? [historicalEntry()]
+              : []
+          )
+        )
+    );
+    mockLocationState = createWorkoutPlaybackRouteState(
+      presetFixture,
+      '2026-04-27',
+      storageIdentity
+    );
+    render(<WorkoutPlaybackPage />);
+    const summary = await screen.findByText('Last time');
+    const details = summary.closest('details')!;
+    expect(details).not.toHaveAttribute('open');
+    expect(details).toHaveTextContent('2026-04-20');
+    expect(details).toHaveTextContent('12 × 40 kg');
+    expect(details).toHaveTextContent('Warm-up');
+    expect(details).toHaveTextContent('8 × 75 kg');
+    expect(details).toHaveTextContent('0 RIR');
+    expect(screen.getAllByText('Last time')).toHaveLength(1);
+  });
+
+  it('requests the latest eligible earlier sets once per exercise', async () => {
+    mockWeightUnit = 'lbs';
+    mockHistoryApi.mockImplementation(
+      (
+        _url: string,
+        options: { params: { exerciseId: string; page: number } }
+      ) =>
+        Promise.resolve(
+          historyPage(
+            options.params.exerciseId === 'exercise-1'
+              ? [historicalEntry()]
+              : options.params.page === 1
+                ? [
+                    historicalEntry({
+                      exercise_id: 'exercise-2',
+                      entry_date: '2026-04-27',
+                    }),
+                  ]
+                : [],
+            true
+          )
+        )
+    );
+    mockLocationState = createWorkoutPlaybackRouteState(
+      presetFixture,
+      '2026-04-27',
+      storageIdentity
+    );
+    render(<WorkoutPlaybackPage />);
+    const details = (await screen.findByText('Last time')).closest('details')!;
+    expect(details).toHaveTextContent('8 × 165.3 lbs');
+    expect(mockHistoryApi).toHaveBeenCalledTimes(2);
+    expect(mockHistoryApi).toHaveBeenCalledWith(
+      '/v2/exercise-entries/history',
+      expect.objectContaining({
+        params: {
+          exerciseId: 'exercise-1',
+          page: 1,
+          pageSize: 1,
+          before: '2026-04-27',
+          performed_only: true,
+        },
+      })
+    );
+  });
+
+  it('excludes the user’s today from a future-dated draft', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-04-26T14:30:00Z'));
+    mockTimezone = 'Australia/Sydney'; // Local today is April 27, while UTC is April 26.
+    try {
+      mockHistoryApi.mockImplementation(
+        (
+          _url: string,
+          options: { params: { exerciseId: string; before?: string } }
+        ) => {
+          const today = historicalEntry({ entry_date: '2026-04-27' });
+          const older = historicalEntry({ entry_date: '2026-04-26' });
+          return Promise.resolve(
+            historyPage(
+              options.params.exerciseId === 'exercise-1'
+                ? [options.params.before === '2026-04-27' ? older : today]
+                : []
+            )
+          );
+        }
+      );
+      mockSearchParams.set('date', '2026-04-28');
+      mockLocationState = createWorkoutPlaybackRouteState(
+        presetFixture,
+        '2026-04-28',
+        storageIdentity
+      );
+      render(<WorkoutPlaybackPage />);
+      const details = (await screen.findByText('Last time')).closest(
+        'details'
+      )!;
+      expect(details).toHaveTextContent('2026-04-26');
+      expect(details).not.toHaveTextContent('2026-04-27');
+      expect(mockHistoryApi).toHaveBeenCalledWith(
+        '/v2/exercise-entries/history',
+        expect.objectContaining({
+          params: expect.objectContaining({ before: '2026-04-27' }),
+        })
+      );
+    } finally {
+      mockSearchParams.set('date', '2026-04-27');
+      jest.useRealTimers();
+    }
+  });
+
+  it('keeps inputs usable while history is pending and hides the section when history is empty', async () => {
+    let resolveHistory!: (value: unknown) => void;
+    mockHistoryApi.mockReturnValue(
+      new Promise((resolve) => {
+        resolveHistory = resolve;
+      })
+    );
+    const oneExercise = {
+      ...presetFixture,
+      exercises: presetFixture.exercises.slice(0, 1),
+    };
+    mockLocationState = createWorkoutPlaybackRouteState(
+      oneExercise,
+      '2026-04-27',
+      storageIdentity
+    );
+    render(<WorkoutPlaybackPage />);
+    expect(screen.getByLabelText('Weight set 1')).toBeEnabled();
+    expect(screen.queryByText('Last time')).not.toBeInTheDocument();
+    resolveHistory(historyPage([]));
+    await waitFor(() => expect(mockHistoryApi).toHaveBeenCalled());
+    expect(screen.queryByText('Last time')).not.toBeInTheDocument();
+  });
+
+  it('hides optional history on a request failure', async () => {
+    mockHistoryApi.mockRejectedValue(new Error('offline'));
+    mockLocationState = createWorkoutPlaybackRouteState(
+      presetFixture,
+      '2026-04-27',
+      storageIdentity
+    );
+    render(<WorkoutPlaybackPage />);
+    await waitFor(() => expect(mockHistoryApi).toHaveBeenCalled());
+    expect(screen.queryByText('Last time')).not.toBeInTheDocument();
+    expect(screen.getAllByLabelText('Weight set 1')[0]).toBeEnabled();
+  });
+
+  it('does not request the owner’s history while acting for someone else', () => {
+    mockUser = { id: 'user-1', activeUserId: 'family-1' };
+    const draft = createWorkoutPlaybackDraftFromPreset(
+      presetFixture,
+      '2026-04-27'
+    );
+    saveStoredDraft(draft, { userId: 'user-1', activeUserId: 'family-1' });
+    mockLocationState = null;
+    render(<WorkoutPlaybackPage />);
+    expect(mockHistoryApi).not.toHaveBeenCalled();
+    expect(screen.queryByText('Last time')).not.toBeInTheDocument();
   });
 
   it.each([

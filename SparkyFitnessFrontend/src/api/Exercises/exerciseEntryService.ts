@@ -5,6 +5,8 @@ import type { ActivityDetailsResponse } from '@/types/exercises';
 import {
   ExerciseSessionResponse,
   exerciseSessionResponseSchema,
+  exerciseHistoryResponseSchema,
+  canLinkDiaryWorkout,
   ExerciseEntryResponse,
   CreateExerciseEntryRequest,
   CreatePresetSessionRequest,
@@ -215,6 +217,40 @@ export const getExerciseProgressData = async (
     }
   );
   return z.array(exerciseProgressResponseSchema).parse(response);
+};
+
+/** The server excludes newer days and untouched prescriptions before limiting. */
+export const fetchLastExercisePerformance = async (
+  exerciseId: string,
+  beforeDate: string,
+  signal: AbortSignal
+): Promise<ExerciseEntryResponse | null> => {
+  const response = exerciseHistoryResponseSchema.parse(
+    await apiCall('/v2/exercise-entries/history', {
+      method: 'GET',
+      params: {
+        exerciseId,
+        page: 1,
+        pageSize: 1,
+        before: beforeDate,
+        performed_only: true,
+      },
+      signal,
+    })
+  );
+  const session = response.sessions[0];
+  if (!session || !session.entry_date || session.entry_date >= beforeDate)
+    return null;
+  const entries = session.type === 'preset' ? session.exercises : [session];
+  const previous = entries
+    .filter(
+      (entry) =>
+        entry.exercise_id === exerciseId &&
+        entry.sets.length > 0 &&
+        canLinkDiaryWorkout({ ...entry, type: 'individual' })
+    )
+    .sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''))[0];
+  return previous ? { ...previous, entry_date: session.entry_date } : null;
 };
 
 export const getExerciseHistory = async (
