@@ -72,6 +72,7 @@ Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded her
 
 #### Bug fixes
 
+- Preview upcoming web dashboard Workout Sessions before starting, with exact prescriptions, occurrence context, accessible phone-sized dialogs, and Cardio Test protocol previews (#67).
 - Show four pending Program workouts on the web dashboard and refresh the queue immediately after completing or linking any occurrence, preserving earlier unfinished sessions and completed outcomes when mutation responses arrive out of order (#49).
 - Restore hidden CSV exercises in place on re-import, counting them as updated while preserving separate-copy imports for hidden manual exercises (#21).
 

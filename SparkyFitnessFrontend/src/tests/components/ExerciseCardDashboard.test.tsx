@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router-dom';
@@ -30,6 +36,10 @@ jest.mock('@/contexts/PreferencesContext', () => ({
     loggingLevel: 'SILENT',
     timezone: 'Australia/Sydney',
     energyUnit: 'kcal',
+    weightUnit: 'kg',
+    distanceUnit: 'km',
+    convertWeight: (value: number) => value,
+    convertDistance: (value: number) => value,
     convertEnergy: (value: number) => value,
     getEnergyUnitString: () => 'kcal',
   }),
@@ -45,12 +55,8 @@ jest.mock('@/hooks/Exercises/useWorkoutPresets', () => ({
 jest.mock('@/hooks/Exercises/useExercises', () => ({
   exerciseByIdOptions: (id: string) => ({
     queryKey: ['exercise', id],
-    queryFn: async () => ({
-      id,
-      name: `Exercise ${id}`,
-      category: null,
-      modality: null,
-    }),
+    queryFn: () => mockExerciseFetch(id),
+    retry: false,
   }),
 }));
 jest.mock('@/hooks/TrainingPrograms/useTrainingPrograms', () => ({
@@ -73,6 +79,7 @@ jest.mock('@/hooks/Exercises/useExerciseEntries', () => ({
 }));
 jest.mock('@/pages/Diary/ExercisePresetEntryDisplay', () => () => null);
 jest.mock('@/pages/Diary/ExerciseEntryDisplay', () => () => null);
+const mockExerciseFetch = jest.fn();
 const mockComplete = jest.fn();
 const mockOutcome = jest.fn();
 const mockFetchEntries = jest.fn();
@@ -180,6 +187,12 @@ const pickerFor = (sessionName: string) =>
 describe('ExerciseCard dashboard plans', () => {
   beforeEach(() => {
     localStorage.clear();
+    mockExerciseFetch.mockReset().mockImplementation(async (id: string) => ({
+      id,
+      name: `Exercise ${id}`,
+      category: null,
+      modality: null,
+    }));
     mockNavigate.mockReset();
     mockComplete.mockReset().mockResolvedValue({});
     mockOutcome.mockReset().mockResolvedValue({});
@@ -190,6 +203,203 @@ describe('ExerciseCard dashboard plans', () => {
     mockFetchEntries
       .mockReset()
       .mockImplementation(() => Promise.resolve({ data: mockState.entries }));
+  });
+
+  it('previews the exact strength occurrence without starting or completing it', async () => {
+    const plan = makePlan('7', 'Program plan', ['Push', 'Pull']);
+    plan.sessions[1]!.assignments[0]!.sets = [
+      { set_number: 1, reps: 12, weight: 40, rest_time: 90 },
+    ];
+    const program = programLinkedTo('7');
+    const first = program.phases[0]!.weeks[0]!.sessions[0]!;
+    program.phases[0]!.weeks[0]!.sessions.push({
+      ...first,
+      id: 'planned-repeat',
+      effective_date: '2026-10-14',
+      workout_session_id: '7-s2',
+      workout_session_name: 'Pull',
+    });
+    mockState.plans = [plan];
+    mockState.programs = { data: [program], isError: false };
+    renderCard();
+    const triggers = screen.getAllByRole('button', {
+      name: /Preview workout:/,
+    });
+    fireEvent.click(triggers[1]!);
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('heading', { name: 'Pull' })).toBeVisible();
+    expect(within(dialog).getByText(/2026-10-14/)).toBeVisible();
+    expect(await within(dialog).findByText(/12 reps/)).toHaveTextContent(
+      '40 kg'
+    );
+    expect(within(dialog).getByText(/90s rest/)).toBeVisible();
+    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(mockComplete).not.toHaveBeenCalled();
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'Start Workout' })
+    );
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledTimes(1));
+    const draft = mockNavigate.mock.calls[0]![1].state.draft;
+    expect(draft.workout_session_id).toBe('7-s2');
+    expect(draft.training_program.session_id).toBe('planned-repeat');
+  });
+
+  it('includes a Cardio Test occurrence in the four-card queue and previews its protocol', async () => {
+    const program = programLinkedTo('7');
+    program.phases[0]!.weeks[0]!.sessions.unshift({
+      ...program.phases[0]!.weeks[0]!.sessions[0]!,
+      id: 'ramp-occurrence',
+      workout_plan_id: null,
+      workout_session_id: null,
+      cardio_test_type: 'ramp',
+      name: 'Ramp assessment',
+      effective_date: '2026-10-11',
+    });
+    mockState.plans = [makePlan('7', 'Program plan', ['Push'])];
+    mockState.programs = { data: [program], isError: false };
+    renderCard();
+    fireEvent.click(
+      screen.getByRole('button', { name: /Preview workout: Ramp Test/ })
+    );
+    const dialog = screen.getByRole('dialog');
+    expect(
+      within(dialog).getByRole('heading', { name: 'Ramp Test' })
+    ).toBeVisible();
+    expect(
+      within(dialog).getByText(/100 W initially, increasing by 20 W per minute/)
+    ).toBeVisible();
+    expect(mockNavigate).not.toHaveBeenCalled();
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'Start Workout' })
+    );
+    expect(mockNavigate).toHaveBeenCalledWith(
+      '/cardio-tests?planned_session_id=ramp-occurrence&protocol=ramp'
+    );
+    expect(mockComplete).not.toHaveBeenCalled();
+  });
+
+  it('shows loading and retry states, then restores focus to the labelled card on close', async () => {
+    mockState.plans = [makePlan('7', 'Program plan', ['Push'])];
+    mockState.programs = { data: [programLinkedTo('7')], isError: false };
+    let rejectLoad!: (reason: Error) => void;
+    mockExerciseFetch.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectLoad = reject;
+        })
+    );
+    renderCard();
+    const trigger = screen.getByRole('button', {
+      name: /Preview workout: Push/,
+    });
+    trigger.focus();
+    fireEvent.click(trigger);
+    expect(screen.getByRole('status')).toHaveTextContent('Loading workout');
+    expect(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: 'Start Workout',
+      })
+    ).toBeDisabled();
+    rejectLoad(new Error('Offline'));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Could not load this workout. Try again.'
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+    expect(await screen.findByText(/8 reps/)).toBeVisible();
+    fireEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'Close' })
+    );
+    await waitFor(() => expect(trigger).toHaveFocus());
+    expect(mockNavigate).not.toHaveBeenCalled();
+    expect(mockComplete).not.toHaveBeenCalled();
+  });
+
+  it('explains an empty session without starting it', async () => {
+    const plan = makePlan('7', 'Program plan', ['Restoration']);
+    plan.sessions[0]!.assignments = [];
+    mockState.plans = [plan];
+    mockState.programs = { data: [programLinkedTo('7')], isError: false };
+    renderCard();
+    fireEvent.click(screen.getByRole('button', { name: /Preview workout:/ }));
+    expect(
+      await screen.findByText(
+        'No exercises are prescribed in this Workout Session.'
+      )
+    ).toBeVisible();
+    expect(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: 'Start Workout',
+      })
+    ).toBeDisabled();
+    expect(mockExerciseFetch).not.toHaveBeenCalled();
+  });
+
+  it('preserves each repeated occurrence and frozen exercise order and targets', async () => {
+    const plan = makePlan('7', 'Program plan', ['Strength']);
+    plan.sessions[0]!.assignments = [
+      {
+        id: 'frozen',
+        sets: [],
+        preset_snapshot: {
+          id: 42,
+          user_id: 'athlete',
+          name: 'Frozen',
+          exercises: [
+            {
+              exercise_id: 'hold',
+              exercise_name: 'Loaded hold',
+              sets: [
+                {
+                  set_number: 1,
+                  duration: 30,
+                  weight: 12,
+                  rest_time: 0,
+                  notes: 'Stay tall',
+                },
+              ],
+            },
+            {
+              exercise_id: 'run',
+              exercise_name: 'Run',
+              sets: [
+                { set_number: 1, distance: 0.4, duration: 120, rest_time: 60 },
+              ],
+            },
+          ],
+        },
+      },
+    ];
+    const program = programLinkedTo('7');
+    program.phases[0]!.weeks[0]!.sessions.push({
+      ...program.phases[0]!.weeks[0]!.sessions[0]!,
+      id: 'repeat',
+      effective_date: '2026-10-15',
+    });
+    mockState.plans = [plan];
+    mockState.programs = { data: [program], isError: false };
+    renderCard();
+    fireEvent.click(
+      screen.getAllByRole('button', { name: /Preview workout:/ })[1]!
+    );
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByText(/2026-10-15/)).toBeVisible();
+    expect(
+      await within(dialog).findByText(/12 kg · 30s · 0s rest · Stay tall/)
+    ).toBeVisible();
+    expect(within(dialog).getByText(/120s · 0.4 km · 60s rest/)).toBeVisible();
+    expect(
+      within(dialog)
+        .getAllByRole('heading', { level: 3 })
+        .map((h) => h.textContent)
+    ).toEqual(['1. Loaded hold', '2. Run']);
+    expect(mockExerciseFetch).not.toHaveBeenCalled();
+    fireEvent.click(
+      within(dialog).getByRole('button', { name: 'Start Workout' })
+    );
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledTimes(1));
+    expect(
+      mockNavigate.mock.calls[0]![1].state.draft.training_program.session_id
+    ).toBe('repeat');
   });
 
   it('offers a date picker and explicit choice for an existing workout on another date', async () => {

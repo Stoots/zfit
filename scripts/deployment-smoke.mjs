@@ -110,6 +110,10 @@ export function expectedWorkoutCards(
   let selected = 0;
   for (const planned of pending) {
     if (selected >= 4) break;
+    if (planned.cardio_test_type) {
+      selected++;
+      continue;
+    }
     const candidate = byId.get(planned.workout_session_id);
     if (
       !candidate ||
