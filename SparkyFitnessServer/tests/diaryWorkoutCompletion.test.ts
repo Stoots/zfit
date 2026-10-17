@@ -20,6 +20,35 @@ describe('diary workout completion eligibility', () => {
     }
   );
 
+  it.each([{ reps: 8 }, { duration: 30 }, { distance: 0.1 }])(
+    'requires a logged set for Workout Plan prescriptions: %j',
+    (set) => {
+      const exercise = {
+        source: 'Workout Plan',
+        is_weekly_prefill: false,
+        duration_minutes: 30,
+        sets: [set],
+      };
+      expect(
+        canLinkDiaryWorkout({ type: 'preset', exercises: [exercise] })
+      ).toBe(false);
+      expect(canLinkDiaryWorkout({ type: 'individual', ...exercise })).toBe(
+        false
+      );
+      expect(
+        canLinkDiaryWorkout({
+          type: 'preset',
+          exercises: [
+            {
+              ...exercise,
+              sets: [{ ...set, completed_at: '2026-10-25T12:00:00Z' }],
+            },
+          ],
+        })
+      ).toBe(true);
+    }
+  );
+
   it('does not count entry duration for untouched prefill or grouped workouts', () => {
     const exercise = {
       duration_minutes: 30,

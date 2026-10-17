@@ -502,6 +502,7 @@ async function lookupDiaryWorkout(
   const entries = await client.query<{
     duration_minutes: number;
     is_weekly_prefill: boolean;
+    source: string | null;
     sets: {
       completed_at: string | null;
       reps: number | null;
@@ -509,7 +510,7 @@ async function lookupDiaryWorkout(
       distance: number | null;
     }[];
   }>(
-    `SELECT ee.duration_minutes, ee.is_weekly_prefill,
+    `SELECT ee.duration_minutes, ee.is_weekly_prefill, ee.source,
        COALESCE((SELECT json_agg(json_build_object('completed_at', s.completed_at,
          'reps', s.reps, 'duration', s.duration, 'distance', s.distance))
          FROM exercise_entry_sets s WHERE s.exercise_entry_id = ee.id), '[]') AS sets

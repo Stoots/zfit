@@ -811,6 +811,16 @@ it.each([
                       is_weekly_prefill: true,
                     })),
                   },
+                  {
+                    ...candidate,
+                    id: uuid(),
+                    name: 'Started prescription',
+                    exercises: candidate.exercises.map((exercise) => ({
+                      ...exercise,
+                      source: 'Workout Plan',
+                      is_weekly_prefill: false,
+                    })),
+                  },
                 ]
               : [
                   {
@@ -880,7 +890,7 @@ it.each([
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole('option', {
-        name: /Untouched prefill|Empty individual/,
+        name: /Untouched prefill|Started prescription|Empty individual/,
       })
     ).not.toBeInTheDocument();
     fill('Completed diary workout', `${type}:${workoutId}`);

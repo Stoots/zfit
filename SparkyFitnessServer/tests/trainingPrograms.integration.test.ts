@@ -222,6 +222,17 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
       db.release();
     }
   }
+  async function seedLoggedSet(entryId: string) {
+    const db = await getSystemClient();
+    try {
+      await db.query(
+        'UPDATE exercise_entry_sets SET completed_at = $2 WHERE exercise_entry_id = $1 AND set_number = 1',
+        [entryId, '2026-10-25T12:00:00Z']
+      );
+    } finally {
+      db.release();
+    }
+  }
   // Missed outcomes are only accepted on or before the athlete's today, so pin
   // the clock after every authored date used below. Only Date is mocked; it is
   // set before sign-up so the issued sessions are valid under it.
@@ -920,6 +931,50 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
     const saved = await reload();
     expect(sessions(saved)[0]).toEqual(sessions(missed)[0]);
     expect(sessions(saved)[2]!.effective_date).toBe('2026-11-03');
+  });
+
+  it('rejects start session then link without performing', async () => {
+    const { session } = await completableSession();
+    const started = await startSession(
+      session.workout_session_id!,
+      '2026-10-25'
+    );
+    expect(started.status).toBe(201);
+    const workout = presetSessionResponseSchema.parse(started.body.session);
+    expect(workout.exercises[0]!.sets[0]!.reps).toBeGreaterThan(0);
+    expect(workout.exercises[0]!.sets[0]!.completed_at).toBeNull();
+    const response = await outcome(session.id, {
+      status: 'completed',
+      workout: { type: 'preset', id: workout.id },
+    });
+    expect(response.status).toBe(400);
+    expect(sessions(await reload())[0]!.status).toBe('planned');
+
+    const saved = await request(app)
+      .put(`/api/exercise-preset-entries/${workout.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        exercises: workout.exercises.map((exercise) => ({
+          id: exercise.id,
+          exercise_id: exercise.exercise_id,
+          workout_plan_assignment_id: exercise.workout_plan_assignment_id,
+          sets: exercise.sets.map((set, index) => ({
+            set_number: set.set_number,
+            reps: set.reps,
+            weight: set.weight,
+            completed_at: index === 0 ? '2026-10-25T12:00:00Z' : null,
+          })),
+        })),
+      });
+    expect(saved.status).toBe(200);
+    expect(
+      (
+        await outcome(session.id, {
+          status: 'completed',
+          workout: { type: 'preset', id: workout.id },
+        })
+      ).status
+    ).toBe(200);
   });
 
   it.each(['empty group', 'empty individual', 'blank set', 'prefill'] as const)(
@@ -2130,6 +2185,7 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
         },
       ],
     });
+    await seedLoggedSet(firstWorkout.exercises[0]!.id);
     const a2Diary = await diaryPrescription(
       a2!.assignments[0]!.id,
       first.effective_date
@@ -5780,6 +5836,7 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
       );
       expect(started.status).toBe(201);
       const diary = presetSessionResponseSchema.parse(started.body.session);
+      await seedLoggedSet(diary.exercises[0]!.id);
       const historical = await diaryPrescription(
         plan.sessions[0]!.assignments[0]!.id,
         first.effective_date

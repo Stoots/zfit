@@ -1,5 +1,6 @@
 interface DiaryExercise {
   is_weekly_prefill?: boolean;
+  source?: string | null;
   duration_minutes: number;
   sets: {
     completed_at?: string | Date | null;
@@ -9,7 +10,7 @@ interface DiaryExercise {
   }[];
 }
 
-/** Manual/imported sets need work values; untouched prescriptions need a logged set. */
+/** Manual/imported sets need work values; Workout Plan prescriptions need a logged set. */
 export function canLinkDiaryWorkout(
   workout:
     | ({ type: "individual" } & DiaryExercise)
@@ -22,12 +23,14 @@ export function canLinkDiaryWorkout(
         (set) =>
           Boolean(set.completed_at) ||
           (!exercise.is_weekly_prefill &&
+            exercise.source !== "Workout Plan" &&
             ((set.reps ?? 0) > 0 ||
               (set.duration ?? 0) > 0 ||
               (set.distance ?? 0) > 0)),
       ) ||
       (workout.type === "individual" &&
         !exercise.is_weekly_prefill &&
+        exercise.source !== "Workout Plan" &&
         exercise.duration_minutes > 0),
   );
 }

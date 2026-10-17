@@ -129,6 +129,18 @@ describe.runIf(run)('persisted authenticated bulk prescription APIs', () => {
       { entry_date: '2099-10-12' }
     );
     expect(started.status, JSON.stringify(started.body)).toBe(201);
+    const db = await getSystemClient();
+    try {
+      await db.query(
+        `UPDATE exercise_entry_sets SET completed_at = now()
+         WHERE set_number = 1 AND exercise_entry_id IN (
+           SELECT id FROM exercise_entries WHERE exercise_preset_entry_id = $1 AND user_id = $2
+         )`,
+        [started.body.session.id, owner]
+      );
+    } finally {
+      db.release();
+    }
     const result = await call(
       `/api/training-programs/${program.id}/sessions/${planned()[index]!.id}/outcome`,
       {
