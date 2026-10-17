@@ -1,4 +1,5 @@
 import { log } from '../config/logging.js';
+import { CustomCategoryExistsError } from '../utils/errors.js';
 import { getClient } from '../db/poolManager.js';
 import measurementRepository from '../models/measurementRepository.js';
 import { loadUserTimezone } from '../utils/timezoneLoader.js';
@@ -526,8 +527,8 @@ async function getOrCreateCustomCategory(
     };
     const newCategory =
       await measurementRepository.createCustomCategory(newCategoryData);
-    // To return the full category object including the id and the default data_type
-    return { id: newCategory.id, ...newCategoryData };
+    // The stored settings win: a concurrent create may have made the category first.
+    return { ...newCategoryData, ...newCategory.category };
   }
 }
 async function getWaterIntake(
@@ -1190,10 +1191,14 @@ async function createCustomCategory(
   try {
     categoryData.user_id = authenticatedUserId; // Ensure user_id is set from authenticated user
     categoryData.created_by_user_id = actingUserId; // Use actingUserId for audit
-    const newCategory =
+    const { id, created } =
       await measurementRepository.createCustomCategory(categoryData);
-    return newCategory;
+    if (!created) {
+      throw new CustomCategoryExistsError(categoryData.name);
+    }
+    return { id };
   } catch (error) {
+    if (error instanceof CustomCategoryExistsError) throw error;
     log(
       'error',
       `Error creating custom category for user ${authenticatedUserId} by ${actingUserId}:`,

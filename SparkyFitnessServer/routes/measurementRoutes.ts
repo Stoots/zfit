@@ -2,6 +2,7 @@ import express from 'express';
 import { authenticate } from '../middleware/authMiddleware.js';
 import checkPermissionMiddleware from '../middleware/checkPermissionMiddleware.js';
 import measurementService from '../services/measurementService.js';
+import { CustomCategoryExistsError } from '../utils/errors.js';
 import { log } from '../config/logging.js';
 import {
   UpsertWaterIntakeBodySchema,
@@ -1047,6 +1048,8 @@ router.get(
  *         description: Custom category created successfully.
  *       400:
  *         description: Validation error.
+ *       409:
+ *         description: A category with that name already exists.
  */
 router.post(
   '/custom-categories',
@@ -1069,6 +1072,9 @@ router.post(
       );
       res.status(201).json(newCategory);
     } catch (error) {
+      if (error instanceof CustomCategoryExistsError) {
+        return res.status(409).json({ error: error.message });
+      }
       // @ts-expect-error TS(2571): Object is of type 'unknown'.
       if (error.message.startsWith('Forbidden')) {
         // @ts-expect-error TS(2571): Object is of type 'unknown'.

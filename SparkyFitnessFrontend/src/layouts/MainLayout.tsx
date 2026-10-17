@@ -387,7 +387,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
           >
             <img
               src="/images/SparkyFitness.webp"
-              alt="SparkyFitness Logo"
+              alt={t('mainLayout.sparkyFitnessLogo', 'SparkyFitness Logo')}
               width={30}
               height={40}
               className="shrink-0"
@@ -536,7 +536,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({
               >
                 <img
                   src="/images/SparkyFitness.webp"
-                  alt="SparkyFitness Logo"
+                  alt={t('mainLayout.sparkyFitnessLogo', 'SparkyFitness Logo')}
                   width={30}
                   height={40}
                 />
@@ -634,7 +634,9 @@ const MainLayout: React.FC<MainLayoutProps> = ({
                 className="touch-target cursor-pointer underline bg-transparent border-0 p-0 text-inherit font-normal text-sm"
                 onClick={onShowAboutDialog}
               >
-                SparkyFitness v{appVersion?.version ?? ''}
+                {t('nav.sparkyFitnessV', 'SparkyFitness v{{version}}', {
+                  version: appVersion?.version ?? '',
+                })}
               </button>
               <span>•</span>
               <button

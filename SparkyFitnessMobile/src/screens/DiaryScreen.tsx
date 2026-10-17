@@ -50,6 +50,8 @@ import {
   useServerConnection,
 } from '../hooks';
 import { useWorkoutPlanCandidates } from '../hooks/useActiveWorkoutPlan';
+import RunProgramBanner from '../components/recording/RunProgramBanner';
+import RunEffortPrompt from '../components/recording/RunEffortPrompt';
 import { useStartLiveWorkout } from '../hooks/useStartLiveWorkout';
 import { useTrainingPrograms } from '../hooks/useTrainingPrograms';
 import {
@@ -72,7 +74,11 @@ import type {
   WorkoutPlanTemplate,
 } from '../types/workoutPlans';
 import { isManualSource } from '../utils/customMeasurementsForm';
-import { formatDateLabel, getDateRelationToToday } from '../utils/dateUtils';
+import {
+  formatDateLabel,
+  getDateRelationToToday,
+  toLocalDateString,
+} from '../utils/dateUtils';
 import { cardioSessionFromDiaryEntry } from '../utils/cardioSession';
 import {
   getHistoricalMealTypeLabel,
@@ -568,6 +574,23 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
                 addSheetRef.current?.present({ initialMenu: 'exercise' })
               }
               onPressPlanSession={handleStartPlanSession}
+              programBanner={
+                <>
+                  <RunEffortPrompt
+                    date={selectedDate}
+                    today={toLocalDateString(new Date())}
+                  />
+                  <RunProgramBanner
+                    date={selectedDate}
+                    exerciseEntries={summary.exerciseEntries}
+                    onStart={() =>
+                      navigation.navigate('RecordActivity', {
+                        programWorkout: true,
+                      })
+                    }
+                  />
+                </>
+              }
               onPressWorkout={(session) => {
                 if (session.type === 'preset') {
                   // The live workout's surface is the active screen; detail is
@@ -580,18 +603,38 @@ const DiaryScreen: React.FC<DiaryScreenProps> = ({ navigation }) => {
                   }
                   navigation.navigate('WorkoutDetail', { session });
                 } else {
-                  const cardioSession = cardioSessionFromDiaryEntry(
+                  const synced = cardioSessionFromDiaryEntry(
                     session,
                     distanceUnit
                   );
-                  if (cardioSession) {
+                  if (synced) {
                     navigation.navigate('CardioSession', {
-                      session: cardioSession,
+                      session: synced,
                       distanceUnit,
                     });
                     return;
                   }
-                  navigation.navigate('ActivityDetail', { session });
+                  // A run, walk or ride logged in the app (a GPS recording
+                  // or a watch run is saved as an in-app entry) opens the
+                  // stats screen too, with an Edit button that hands over to
+                  // the activity editor. Anything without a distance or heart
+                  // rate has nothing for that screen to show.
+                  const inApp =
+                    (session.distance ?? 0) > 0 ||
+                    session.avg_heart_rate != null
+                      ? cardioSessionFromDiaryEntry(session, distanceUnit, {
+                          allowInApp: true,
+                        })
+                      : null;
+                  if (!inApp) {
+                    navigation.navigate('ActivityDetail', { session });
+                    return;
+                  }
+                  navigation.navigate('CardioSession', {
+                    session: inApp,
+                    distanceUnit,
+                    diaryEntry: session,
+                  });
                 }
               }}
             />

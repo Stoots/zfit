@@ -1,0 +1,368 @@
+import pg from 'pg';
+import { addDays, dayOfWeek, todayInZone } from '@workspace/shared';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { getSystemClient, endPool } from '../db/poolManager.js';
+import exerciseService from '../services/exerciseService.js';
+import workoutPlanTemplateService from '../services/workoutPlanTemplateService.js';
+
+/**
+ * #2677 against a real database: a prefill plan's generated rows that the user
+ * edited in place survive editing and deactivating the plan, untouched rows are
+ * regenerated or removed, and no second row appears next to an edited one.
+ * Runs only against a database named *_test, like the other integration tests.
+ */
+async function dbReachable(): Promise<boolean> {
+  if (process.env.SKIP_RLS_MATRIX === '1') return false;
+  if (
+    !process.env.SPARKY_FITNESS_DB_HOST ||
+    !process.env.SPARKY_FITNESS_APP_DB_USER
+  )
+    return false;
+  if (!/(^|[_-])test([_-]|$)/i.test(process.env.SPARKY_FITNESS_DB_NAME ?? ''))
+    return false;
+  const probe = new pg.Client({
+    host: process.env.SPARKY_FITNESS_DB_HOST,
+    port: Number(process.env.SPARKY_FITNESS_DB_PORT) || 5432,
+    database: process.env.SPARKY_FITNESS_DB_NAME,
+    user: process.env.SPARKY_FITNESS_APP_DB_USER,
+    password: process.env.SPARKY_FITNESS_APP_DB_PASSWORD,
+    connectionTimeoutMillis: 2000,
+  });
+  try {
+    await probe.connect();
+    await probe.query('SELECT id FROM public.workout_plan_templates LIMIT 0');
+    return true;
+  } catch {
+    return false;
+  } finally {
+    await probe.end().catch(() => {});
+  }
+}
+
+const RUN = await dbReachable();
+const OWNER = '00000000-0000-4000-b277-000000000001';
+const EXERCISE = '00000000-0000-4000-b277-000000000002';
+// Plans start no earlier than the user's real today (resolveTemplateStartDay),
+// so the fixture uses the current UTC day and the same weekday a week later.
+const now = new Date();
+const TODAY = now.toISOString().slice(0, 10);
+const DOW = now.getUTCDay();
+const NEXT_WEEK = new Date(now.getTime() + 7 * 86_400_000)
+  .toISOString()
+  .slice(0, 10);
+
+describe.runIf(RUN)('workout plan generated entries (#2677)', () => {
+  let sys: pg.PoolClient;
+  let presetId: number;
+  let planId: string | number;
+
+  /** Diary rows linked to the plan on a day, standalone and grouped. */
+  async function rowsOn(day: string) {
+    const standalone = await sys.query(
+      `SELECT ee.id, ee.source
+       FROM public.exercise_entries ee
+       JOIN public.workout_plan_template_assignments a ON a.id = ee.workout_plan_assignment_id
+       WHERE a.template_id = $1 AND ee.entry_date = $2 AND ee.exercise_preset_entry_id IS NULL`,
+      [planId, day]
+    );
+    const sessions = await sys.query(
+      `SELECT DISTINCT pe.id, pe.source
+       FROM public.exercise_preset_entries pe
+       JOIN public.exercise_entries ee ON ee.exercise_preset_entry_id = pe.id
+       JOIN public.workout_plan_template_assignments a ON a.id = ee.workout_plan_assignment_id
+       WHERE a.template_id = $1 AND pe.entry_date = $2`,
+      [planId, day]
+    );
+    return { standalone: standalone.rows, sessions: sessions.rows };
+  }
+
+  async function clearFixtures() {
+    await sys.query(
+      'DELETE FROM public.exercise_preset_entries WHERE user_id = $1',
+      [OWNER]
+    );
+    await sys.query('DELETE FROM public.exercise_entries WHERE user_id = $1', [
+      OWNER,
+    ]);
+    await sys.query(
+      'DELETE FROM public.workout_plan_templates WHERE user_id = $1',
+      [OWNER]
+    );
+    await sys.query('DELETE FROM public.workout_presets WHERE user_id = $1', [
+      OWNER,
+    ]);
+    await sys.query('DELETE FROM public.exercises WHERE id = $1', [EXERCISE]);
+    await sys.query('DELETE FROM public."user" WHERE id = $1', [OWNER]);
+  }
+
+  beforeAll(async () => {
+    sys = await getSystemClient();
+    await clearFixtures();
+    await sys.query(
+      'INSERT INTO public."user" (id, email, email_verified) VALUES ($1, $2, true)',
+      [OWNER, 'workout-plan-2677@example.test']
+    );
+    await sys.query(
+      "INSERT INTO public.exercises (id, name, source, user_id, is_custom, category) VALUES ($1, 'Plan fixture', 'test', $2, true, 'Strength')",
+      [EXERCISE, OWNER]
+    );
+    presetId = (
+      await sys.query(
+        "INSERT INTO public.workout_presets (user_id, name) VALUES ($1, 'Plan fixture preset') RETURNING id",
+        [OWNER]
+      )
+    ).rows[0].id;
+    const presetExercise = (
+      await sys.query(
+        'INSERT INTO public.workout_preset_exercises (workout_preset_id, exercise_id) VALUES ($1, $2) RETURNING id',
+        [presetId, EXERCISE]
+      )
+    ).rows[0].id;
+    await sys.query(
+      'INSERT INTO public.workout_preset_exercise_sets (workout_preset_exercise_id, set_number, reps, weight) VALUES ($1, 1, 10, 40)',
+      [presetExercise]
+    );
+  });
+
+  afterAll(async () => {
+    try {
+      await clearFixtures();
+    } finally {
+      sys.release();
+      await endPool();
+    }
+  });
+
+  it('removes obsolete weekday occurrences while preserving another session and edited history', async () => {
+    const start = addDays(todayInZone('UTC'), 7);
+    const end = addDays(start, 14);
+    const weekday = dayOfWeek(start);
+    const plan = await workoutPlanTemplateService.createWorkoutPlanTemplate(
+      OWNER,
+      {
+        plan_name: 'Schedule fixture',
+        start_date: start,
+        end_date: end,
+        is_active: true,
+        schedule_type: 'weekly',
+        entry_mode: 'prefill',
+        sessions: [0, 1].map((offset) => ({
+          name: `Session ${offset}`,
+          sort_order: offset,
+          day_of_week: (weekday + offset) % 7,
+          assignments: [
+            {
+              exercise_id: EXERCISE,
+              sort_order: 0,
+              sets: [{ set_number: 1, reps: 8, weight: 50 }],
+            },
+          ],
+        })),
+      }
+    );
+    planId = plan.id;
+    const before = await rowsOn(start);
+    const retainedDay = addDays(start, 1);
+    const retainedBefore = await sys.query(
+      'SELECT to_jsonb(entry) AS snapshot FROM exercise_entries entry WHERE user_id = $1 AND exercise_preset_entry_id = $2',
+      [OWNER, (await rowsOn(retainedDay)).sessions[0].id]
+    );
+    const editedDay = addDays(start, 7);
+    const edited = (await rowsOn(editedDay)).sessions[0].id;
+    await exerciseService.updateGroupedWorkoutSession(OWNER, OWNER, edited, {
+      notes: 'keep history',
+    });
+    const sessions = plan.sessions.map((session, index) => ({
+      id: session.id,
+      name: session.name,
+      sort_order: session.sort_order,
+      day_of_week: index === 0 ? (weekday + 2) % 7 : session.day_of_week,
+      assignments: session.assignments.map((assignment) => ({
+        id: assignment.id,
+        exercise_id: assignment.exercise_id!,
+        sort_order: assignment.sort_order,
+        sets: assignment.sets,
+      })),
+    }));
+    await workoutPlanTemplateService.updateWorkoutPlanTemplate(OWNER, planId, {
+      sessions,
+    });
+    expect(before.sessions).toHaveLength(1);
+    expect((await rowsOn(start)).sessions).toHaveLength(0);
+    expect((await rowsOn(addDays(start, 14))).sessions).toHaveLength(0);
+    expect((await rowsOn(addDays(start, 2))).sessions).toHaveLength(1);
+    expect((await rowsOn(editedDay)).sessions.map((row) => row.id)).toEqual([
+      edited,
+    ]);
+    const retainedAfter = await sys.query(
+      'SELECT to_jsonb(entry) AS snapshot FROM exercise_entries entry WHERE user_id = $1 AND exercise_preset_entry_id = $2',
+      [OWNER, (await rowsOn(retainedDay)).sessions[0].id]
+    );
+    expect(retainedAfter.rows).toEqual(retainedBefore.rows);
+  });
+
+  it.each(['later start', 'shorter end'] as const)(
+    'removes obsolete occurrences for a %s while keeping retained snapshots',
+    async (change) => {
+      const start = addDays(todayInZone('UTC'), 7);
+      const middle = addDays(start, 7);
+      const end = addDays(start, 14);
+      const plan = await workoutPlanTemplateService.createWorkoutPlanTemplate(
+        OWNER,
+        {
+          plan_name: 'Date window fixture',
+          start_date: start,
+          end_date: end,
+          is_active: true,
+          schedule_type: 'weekly',
+          entry_mode: 'prefill',
+          sessions: [
+            {
+              name: 'Weekly',
+              sort_order: 0,
+              day_of_week: dayOfWeek(start),
+              assignments: [
+                {
+                  exercise_id: EXERCISE,
+                  sort_order: 0,
+                  sets: [{ set_number: 1, reps: 8, weight: 50 }],
+                },
+              ],
+            },
+          ],
+        }
+      );
+      planId = plan.id;
+      const retainedId = (await rowsOn(middle)).sessions[0].id;
+      const snapshot = await sys.query(
+        'SELECT to_jsonb(entry) AS snapshot FROM exercise_entries entry WHERE exercise_preset_entry_id = $1',
+        [retainedId]
+      );
+      await workoutPlanTemplateService.updateWorkoutPlanTemplate(
+        OWNER,
+        planId,
+        change === 'later start' ? { start_date: middle } : { end_date: middle }
+      );
+      const obsoleteDay = change === 'later start' ? start : end;
+      expect((await rowsOn(obsoleteDay)).sessions).toHaveLength(0);
+      expect((await rowsOn(middle)).sessions.map((row) => row.id)).toEqual([
+        retainedId,
+      ]);
+      expect(
+        (
+          await sys.query(
+            'SELECT to_jsonb(entry) AS snapshot FROM exercise_entries entry WHERE exercise_preset_entry_id = $1',
+            [retainedId]
+          )
+        ).rows
+      ).toEqual(snapshot.rows);
+    }
+  );
+
+  it('keeps edited generated rows on plan edit and deactivation, without duplicates', async () => {
+    // The app always sends the whole plan; the repository update overwrites
+    // every column, so a missing is_active would deactivate the plan.
+    const planFields = {
+      plan_name: 'Plan fixture',
+      start_date: TODAY,
+      end_date: NEXT_WEEK,
+      is_active: true,
+      schedule_type: 'weekly',
+      entry_mode: 'prefill',
+      currentClientDate: TODAY,
+    };
+    const plan = await workoutPlanTemplateService.createWorkoutPlanTemplate(
+      OWNER,
+      {
+        ...planFields,
+        sessions: [
+          {
+            name: 'Weekly',
+            sort_order: 0,
+            day_of_week: DOW,
+            assignments: [
+              {
+                day_of_week: DOW,
+                exercise_id: EXERCISE,
+                sort_order: 0,
+                sets: [{ set_number: 1, reps: 8, weight: 50 }],
+              },
+              {
+                workout_preset_id: presetId,
+                sort_order: 1,
+                preset_snapshot: {
+                  id: presetId,
+                  name: 'Plan fixture preset',
+                  description: null,
+                  workout_format: 'standard',
+                  exercises: [
+                    {
+                      exercise_id: EXERCISE,
+                      exercise_name: 'Plan fixture',
+                      category: 'Strength',
+                      image_url: null,
+                      superset_group: null,
+                      sets: [{ set_number: 1, reps: 10, weight: 40 }],
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+      } as never
+    );
+    planId = plan.id;
+
+    const generated = await rowsOn(TODAY);
+    expect(generated.standalone).toHaveLength(0);
+    expect(generated.sessions).toHaveLength(1);
+    expect(generated.sessions[0].source).toBe('Workout Plan');
+    const entryId = (
+      await sys.query(
+        'SELECT id FROM exercise_entries WHERE exercise_preset_entry_id = $1 ORDER BY id LIMIT 1',
+        [generated.sessions[0].id]
+      )
+    ).rows[0].id;
+    const sessionId = generated.sessions[0].id;
+
+    // The user fills in today's prefilled rows through the regular update paths.
+    await exerciseService.updateExerciseEntry(OWNER, OWNER, entryId, {
+      sets: [{ set_number: 1, reps: 12, weight: 55 }],
+    });
+    await exerciseService.updateGroupedWorkoutSession(OWNER, OWNER, sessionId, {
+      notes: 'done',
+    });
+
+    const nextWeekBefore = await rowsOn(NEXT_WEEK);
+    expect(nextWeekBefore.standalone).toHaveLength(0);
+    expect(nextWeekBefore.sessions).toHaveLength(1);
+
+    await workoutPlanTemplateService.updateWorkoutPlanTemplate(OWNER, planId, {
+      ...planFields,
+      plan_name: 'Plan fixture renamed',
+    } as never);
+
+    const afterEdit = await rowsOn(TODAY);
+    expect(afterEdit.standalone).toHaveLength(0);
+    expect(afterEdit.sessions.map((r) => r.id)).toEqual([sessionId]);
+    // Renaming preserves untouched frozen prescriptions and their stable identities.
+    const nextWeekAfter = await rowsOn(NEXT_WEEK);
+    expect(nextWeekAfter.standalone).toHaveLength(0);
+    expect(nextWeekAfter.sessions).toHaveLength(1);
+    expect(nextWeekAfter.sessions[0].id).toBe(nextWeekBefore.sessions[0].id);
+
+    await workoutPlanTemplateService.updateWorkoutPlanTemplate(OWNER, planId, {
+      ...planFields,
+      plan_name: 'Plan fixture renamed',
+      is_active: false,
+    } as never);
+
+    const afterDeactivate = await rowsOn(TODAY);
+    expect(afterDeactivate.standalone).toHaveLength(0);
+    expect(afterDeactivate.sessions.map((r) => r.id)).toEqual([sessionId]);
+    const nextWeekGone = await rowsOn(NEXT_WEEK);
+    expect(nextWeekGone.standalone).toHaveLength(0);
+    expect(nextWeekGone.sessions).toHaveLength(0);
+  });
+});

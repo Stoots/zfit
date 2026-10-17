@@ -99,43 +99,28 @@ Quick reference of all tables by domain and purpose. For detailed security tier,
 |-------|---------|
 | `exercises` | Custom exercises created by user |
 | `exercise_entries` | Logged exercises for the day |
-| `exercise_preset_entries` | Logged workout presets with frozen workout format and nullable time cap |
+| `exercise_preset_entries` | Logged workout presets for the day |
 | `exercise_entry_sets` | Reps, weights, and sets completed |
 | `exercise_entry_activity_details` | Heart rate, distance, activity data |
+| `shoes` | Running-shoe inventory with retirement mileage; linked from `exercise_entries.shoe_id` |
 | `exercise_entry_laps` | Lap split intervals for workouts |
 | `exercise_entry_hr_zones` | Heart-rate time-in-zone splits per workout |
+| `exercise_entry_distance_series` | Distance-against-time rows for an indoor entry with no route, behind its pace chart. One row per workout (`points` is JSONB) |
 | `exercise_entry_gps_points` | GPS trackpoints & second-by-second telemetry. One row per workout (the `points` column holds the whole track as JSONB), not one row per trackpoint |
 | `workout_presets` | Custom workout/preset templates |
 | `workout_preset_exercises` | Exercises assigned to presets |
 | `workout_preset_exercise_sets` | Reps/sets configured in presets |
 | `workout_plan_templates` | Templates for weekly and sequential workout schedules |
-| `workout_plan_sessions` | Stable owner-consistent sessions with independent prescriptions, optional weekdays and authored order |
-| `workout_plan_template_assignments` | Ordered exercise/preset assignments belonging to an exact Workout Session; presets execute from local snapshots |
-| `workout_plan_assignment_sets` | Individual exercise prescriptions; distance and JSONB extension fields retain effort/ranges and per-side instructions |
+| `workout_plan_template_assignments` | Scheduled workout templates (weekday or ordered sequence) |
+| `workout_plan_assignment_sets` | Sets within assigned workout plans |
 | `workout_feedback` | Session / per-exercise workout feedback (difficulty, pain flag and note) behind adaptive suggestions |
-| `cardio_test_attempts` | Dated Test Attempts for Cooper run and other supported Cardio Tests |
-
-### Training Programs (Tier 1: Owner-Only)
-
-| Table                           | Purpose                                                                |
-| ------------------------------- | ---------------------------------------------------------------------- |
-| `training_programs`             | Goal and inclusive fixed date range for a multi-week Program            |
-| `training_program_phases`       | Ordered goal-bearing Program Phases                                    |
-| `training_program_weeks`        | Chronological, nonoverlapping weeks within phases                      |
-| `training_program_sessions`     | Dated Planned Sessions referencing exact Workout Sessions or Cardio Test protocols |
-| `workout_program_consolidations` | Owner-only approved consolidation manifests and repeat/recovery receipts |
-
-The four Program hierarchy tables and consolidation journal use `create_owner_policy`; composite foreign keys preserve owner identity. A Planned Session references either an exact `workout_plan_sessions` row or a Cardio Test protocol. `cardio_test_attempts.planned_session_id` is nullable for standalone attempts and has a composite foreign key with owner and protocol; only an owner can set it through the API. Program deletion clears this link and retains the attempt. The session's plan ID/name are derived display-only API fields. Removing a Program-referenced workout session/plan, diary-linked assignment or journal-referenced target plan is refused with HTTP 409, atomically. Program deletion cascades through its hierarchy and journal but leaves Workout Plans and their prescriptions intact.
-
-Migration `20261011120000_optional_workout_sessions.sql` adds required-by-default
-`is_optional` flags to the existing library and Program session tables. It does
-not alter ownership policies, existing identities, prescriptions or outcomes.
-New Program bindings inherit library optionality unless overridden; existing
-bindings retain their own stored flag. An uncompleted optional session past its
-effective athlete-local day is projected as `omitted`, with `outcome_at` derived
-from the next local midnight. The database retains its underlying `planned`
-status until an explicit completion link; no scheduler, diary write or automatic
-miss is involved. Required completed/missed history remains immutable.
+| `workout_plan_sessions`             | Stable owner-consistent sessions with independent prescriptions, optional weekdays and authored order                                              |
+| `cardio_test_attempts`              | Dated Test Attempts for Cooper run and other supported Cardio Tests                                                                                |
+| `training_programs`              | Goal and inclusive fixed date range for a multi-week Program                       |
+| `training_program_phases`        | Ordered goal-bearing Program Phases                                                |
+| `training_program_weeks`         | Chronological, nonoverlapping weeks within phases                                  |
+| `training_program_sessions`      | Dated Planned Sessions referencing exact Workout Sessions or Cardio Test protocols |
+| `workout_program_consolidations` | Owner-only approved consolidation manifests and repeat/recovery receipts           |
 
 ### Measurements & Health (Tier 1/3: Owner-Only or Delegate-Write)
 
@@ -179,19 +164,21 @@ miss is involved. Required completed/missed history remains immutable.
 | `symptom_free_days`          | Explicit "no symptoms today" markers                                                   |
 
 ### Cycle & Pregnancy (Tier 1: Owner-Only)
+| Table | Purpose |
+|-------|---------|
+| `cycles` | Menstrual cycle history records |
+| `cycle_settings` | Cycle hub settings (mode, parameters) |
+| `cycle_daily_entries` | Per-day cycle logs (flow, BBT, mood, etc.) |
+| `cycle_test_entries` | Ovulation and pregnancy test logs |
+| `pregnancies` | Pregnancy records (due date, status) |
+| `run_programs` | A person's run program, their place in it, its Diary schedule, goal date, adjustments to it and which diary entries its workouts were done as |
+| `custom_run_programs` | A person's own run or walk plans: a name, the activity and an ordered list of workouts, each a list of timed steps. Starting one copies it into `run_programs` |
+| `pregnancy_kick_sessions` | Fetal kick-counter sessions |
+| `pregnancy_contractions` | Contraction timer logs |
+| `pregnancy_photos` | Bump photo journal |
+| `pregnancy_checklist_state` | Weekly pregnancy checklist completion |
+| `health_appointments` | Prenatal and other health appointments |
 
-| Table                       | Purpose                                    |
-| --------------------------- | ------------------------------------------ |
-| `cycles`                    | Menstrual cycle history records            |
-| `cycle_settings`            | Cycle hub settings (mode, parameters)      |
-| `cycle_daily_entries`       | Per-day cycle logs (flow, BBT, mood, etc.) |
-| `cycle_test_entries`        | Ovulation and pregnancy test logs          |
-| `pregnancies`               | Pregnancy records (due date, status)       |
-| `pregnancy_kick_sessions`   | Fetal kick-counter sessions                |
-| `pregnancy_contractions`    | Contraction timer logs                     |
-| `pregnancy_photos`          | Bump photo journal                         |
-| `pregnancy_checklist_state` | Weekly pregnancy checklist completion      |
-| `health_appointments`       | Prenatal and other health appointments     |
 
 ### User Preferences & Settings (Tier 2: Owner-Only Write, Delegate-Read)
 
@@ -220,22 +207,22 @@ miss is involved. Required completed/missed history remains immutable.
 | `ai_service_settings` | User-defined custom assistant configurations |
 
 ### Admin & System (Tier 1: Admin-Only or Public)
+| Table | Purpose |
+|-------|---------|
+| `global_settings` | Application feature flags and config |
+| `sso_provider` | Active Single Sign-On providers |
+| `oidc_providers` | OpenID Connect integration settings |
+| `external_provider_types` | Search provider configurations (FatSecret, USDA, Canadian Nutrient File, Livsmedelsverket) |
+| `external_data_providers` | Configured API integration credentials, including personal or global Open Food Facts accounts |
+| `openfoodfacts_product_read_rate_limit` | Singleton lease and cooldown coordinating Open Food Facts product reads across server instances |
+| `openfoodfacts_sync_queue` | Dormant revision-aware automatic upload state and retained history; unused by manual contributions |
+| `rate_limit` | Sign-in rate limit counters shared across server instances |
+| `medication_types` | Medication categories lookup |
+| `medication_route_types` | Medication administration routes lookup |
+| `medication_schedule_types` | Medication scheduling frequencies lookup |
+| `admin_activity_logs` | Admin action audits |
+| `day_classification_cache` | Daily summary caching logs |
 
-| Table                                   | Purpose                                                                                            |
-| --------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `global_settings`                       | Application feature flags and config                                                               |
-| `sso_provider`                          | Active Single Sign-On providers                                                                    |
-| `oidc_providers`                        | OpenID Connect integration settings                                                                |
-| `external_provider_types`               | Search provider configurations (FatSecret, USDA, Canadian Nutrient File)                           |
-| `external_data_providers`               | Configured API integration credentials, including personal or global Open Food Facts accounts      |
-| `openfoodfacts_product_read_rate_limit` | Singleton lease and cooldown coordinating Open Food Facts product reads across server instances    |
-| `openfoodfacts_sync_queue`              | Dormant revision-aware automatic upload state and retained history; unused by manual contributions |
-| `rate_limit`                            | Sign-in rate limit counters shared across server instances                                         |
-| `medication_types`                      | Medication categories lookup                                                                       |
-| `medication_route_types`                | Medication administration routes lookup                                                            |
-| `medication_schedule_types`             | Medication scheduling frequencies lookup                                                           |
-| `admin_activity_logs`                   | Admin action audits                                                                                |
-| `day_classification_cache`              | Daily summary caching logs                                                                         |
 
 ### Internal & Shared (Tier 2: Owner-Only or System)
 

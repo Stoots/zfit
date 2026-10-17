@@ -735,7 +735,11 @@ const ExerciseCard = ({
   };
 
   if (loading) {
-    return <div>Loading exercises...</div>;
+    return (
+      <div>
+        {t('diary.exerciseCard.loadingExercises', 'Loading exercises...')}
+      </div>
+    );
   }
 
   return (
@@ -755,7 +759,10 @@ const ExerciseCard = ({
                 <TooltipTrigger asChild>
                   <Button
                     size="icon"
-                    aria-label={t('exerciseCard.startWorkout', 'Start Workout')}
+                    aria-label={t(
+                      'exerciseCard.startWorkoutButton',
+                      'Start Workout'
+                    )}
                     variant="ghost"
                     onClick={handleStartWorkoutPlayback}
                   >
@@ -763,7 +770,7 @@ const ExerciseCard = ({
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>{t('exerciseCard.startWorkout', 'Start Workout')}</p>
+                  <p>{t('exerciseCard.startWorkoutButton', 'Start Workout')}</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -919,7 +926,7 @@ const ExerciseCard = ({
             })}
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pt-2 gap-4">
               <span className="font-semibold">
-                {t('exerciseCard.exerciseTotal', 'Exercise Total')}:
+                {t('exerciseCard.exerciseTotal2', 'Exercise Total:')}
               </span>
               <div className="grid grid-cols-4 gap-2 sm:gap-4 text-xs sm:text-sm">
                 <div className="text-center">
@@ -966,7 +973,7 @@ const ExerciseCard = ({
         {/* Edit Exercise Entry Dialog */}
         {editingEntry && (
           <EditExerciseEntryDialog
-            key={editingEntry ? 'open' : 'close'}
+            key={editingEntry.id}
             entry={editingEntry as ExerciseEntry}
             open={!!editingEntry}
             onOpenChange={(open) => {

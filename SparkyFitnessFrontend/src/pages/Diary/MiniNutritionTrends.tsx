@@ -248,7 +248,10 @@ const MiniNutritionTrends = ({
   if (chartData.length === 0) {
     return (
       <div className="mt-4 p-3 text-center text-sm text-muted-foreground bg-muted rounded-lg">
-        {t('diary.trendsEmpty', 'No trend data available for the past 14 days')}
+        {t(
+          'diary.miniNutritionTrends.noTrendDataAvailableFor',
+          'No trend data available for the past 14 days'
+        )}
       </div>
     );
   }
@@ -279,7 +282,10 @@ const MiniNutritionTrends = ({
   return (
     <div className="mt-4 space-y-3">
       <div className="text-sm font-medium text-foreground mb-2">
-        {t('diary.trendsTitle', '14-Day Nutrition Trends')}
+        {t(
+          'diary.miniNutritionTrends.n14DayNutritionTrends',
+          '14-Day Nutrition Trends'
+        )}
       </div>
 
       {visibleNutrients.map((nutrient) => {

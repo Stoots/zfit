@@ -174,7 +174,11 @@ const WorkoutPlaybackSetRow = ({
           type="button"
           variant="ghost"
           className="h-11 w-11 p-0 tabular-nums"
-          aria-label={`Select set ${setNumber} for ${exerciseName}`}
+          aria-label={t(
+            'diary.workoutPlaybackSetRow.selectSetFor',
+            'Select set {{setNumber}} for {{exerciseName}}',
+            { setNumber, exerciseName }
+          )}
           onClick={() => onSelectSet(pointer)}
         >
           {setNumber}
@@ -191,7 +195,11 @@ const WorkoutPlaybackSetRow = ({
             onChange={(value) => onSetFieldChange(pointer, 'weight', value)}
             inputClassName="pl-2 tabular-nums"
             className="min-w-0"
-            aria-label={`Weight set ${setNumber}`}
+            aria-label={t(
+              'diary.workoutPlaybackSetRow.weightSet',
+              'Weight set {{setNumber}}',
+              { setNumber }
+            )}
           />
         ) : (
           <span
@@ -208,7 +216,11 @@ const WorkoutPlaybackSetRow = ({
             inputMode="numeric"
             min={0}
             step={1}
-            aria-label={`Reps set ${setNumber}`}
+            aria-label={t(
+              'diary.workoutPlaybackSetRow.repsSet',
+              'Reps set {{setNumber}}',
+              { setNumber }
+            )}
             value={reps ?? ''}
             onChange={(event) =>
               onSetFieldChange(
@@ -295,7 +307,11 @@ const WorkoutPlaybackSetRow = ({
       </div>
       <div className="mt-2 grid grid-cols-[2.75rem_minmax(0,1fr)_2.75rem_2.75rem_2.75rem] items-center gap-2">
         <Checkbox
-          aria-label={`Complete set ${setNumber}`}
+          aria-label={t(
+            'diary.workoutPlaybackSetRow.completeSet',
+            'Complete set {{setNumber}}',
+            { setNumber }
+          )}
           checked={completed}
           className="h-11 w-11 shrink-0 rounded-full data-[state=checked]:border-border data-[state=checked]:bg-muted data-[state=checked]:text-muted-foreground"
           onCheckedChange={(checked) =>
@@ -309,7 +325,11 @@ const WorkoutPlaybackSetRow = ({
           }
         >
           <SelectTrigger
-            aria-label={`Type set ${setNumber}`}
+            aria-label={t(
+              'diary.workoutPlaybackSetRow.typeSet',
+              'Type set {{setNumber}}',
+              { setNumber }
+            )}
             className="min-w-0 bg-transparent px-2 text-sm"
           >
             <SelectValue>
@@ -331,7 +351,11 @@ const WorkoutPlaybackSetRow = ({
           type="button"
           variant="ghost"
           className="w-11 px-0 text-sm tabular-nums"
-          aria-label={`Edit rest for set ${setNumber}`}
+          aria-label={t(
+            'diary.workoutPlaybackSetRow.editRestForSet',
+            'Edit rest for set {{setNumber}}',
+            { setNumber }
+          )}
           onClick={() => onOpenRestEditor(pointer)}
         >
           {formatRestChip(restTime)}
@@ -364,7 +388,11 @@ const WorkoutPlaybackSetRow = ({
           type="button"
           variant="ghost"
           size="icon"
-          aria-label={`Toggle notes for set ${setNumber}`}
+          aria-label={t(
+            'diary.workoutPlaybackSetRow.toggleNotesForSet',
+            'Toggle notes for set {{setNumber}}',
+            { setNumber }
+          )}
           aria-expanded={isNotesVisible}
           onClick={() => onToggleNotesVisibility(notesKey)}
         >
@@ -375,7 +403,11 @@ const WorkoutPlaybackSetRow = ({
           variant="ghost"
           size="icon"
           disabled={!canRemove}
-          aria-label={`Remove set ${setNumber} for ${exerciseName}`}
+          aria-label={t(
+            'diary.workoutPlaybackSetRow.removeSetFor',
+            'Remove set {{setNumber}} for {{exerciseName}}',
+            { setNumber, exerciseName }
+          )}
           onClick={() => onRemoveSet(pointer)}
         >
           <Trash2 className="h-4 w-4" />
@@ -383,7 +415,11 @@ const WorkoutPlaybackSetRow = ({
       </div>
       {isNotesVisible && (
         <Textarea
-          aria-label={`Set notes ${setNumber}`}
+          aria-label={t(
+            'diary.workoutPlaybackSetRow.setNotes',
+            'Set notes {{setNumber}}',
+            { setNumber }
+          )}
           value={notes ?? ''}
           onChange={(event) =>
             onSetFieldChange(pointer, 'notes', event.target.value)

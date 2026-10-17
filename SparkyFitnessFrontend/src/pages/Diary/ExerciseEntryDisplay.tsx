@@ -55,22 +55,6 @@ interface ExerciseEntryDisplayProps {
   getEnergyUnitString: (unit: 'kcal' | 'kJ') => string;
 }
 
-// Source badge config
-const SOURCE_BADGES: Record<string, { label: string; className: string }> = {
-  wger: {
-    label: 'Wger',
-    className: 'bg-success/10 text-success bg-success/10 text-success',
-  },
-  'free-exercise-db': {
-    label: 'Free DB',
-    className: 'bg-primary/10 text-primary bg-primary/10 text-primary',
-  },
-  nutritionix: {
-    label: 'Nutritionix',
-    className: 'bg-warning/10 text-warning bg-warning/10 text-warning',
-  },
-};
-
 const ExerciseEntryDisplay: React.FC<ExerciseEntryDisplayProps> = ({
   exerciseEntry,
   currentUserId,
@@ -84,6 +68,22 @@ const ExerciseEntryDisplay: React.FC<ExerciseEntryDisplayProps> = ({
   getEnergyUnitString,
 }) => {
   const { t } = useTranslation();
+  // Source badge config
+  const SOURCE_BADGES: Record<string, { label: string; className: string }> = {
+    wger: {
+      label: t('diary.exerciseEntryDisplay.wger', 'Wger'),
+      className: 'bg-success/10 text-success bg-success/10 text-success',
+    },
+    'free-exercise-db': {
+      label: t('diary.exerciseEntryDisplay.freeDB', 'Free DB'),
+      className: 'bg-primary/10 text-primary bg-primary/10 text-primary',
+    },
+    nutritionix: {
+      label: 'Nutritionix',
+      className: 'bg-warning/10 text-warning bg-warning/10 text-warning',
+    },
+  };
+
   const { weightUnit, distanceUnit, convertDistance, timeFormat } =
     usePreferences();
   const snapshot = exerciseEntry.exercise_snapshot;
@@ -339,7 +339,7 @@ const ExerciseEntryDisplay: React.FC<ExerciseEntryDisplayProps> = ({
         {snapshot?.primary_muscles && snapshot.primary_muscles.length > 0 && (
           <div className="text-xs text-muted-foreground leading-snug">
             <span className="font-medium text-muted-foreground">
-              {t('exerciseCard.primaryMusclesLabel', 'Primary Muscles')}:{' '}
+              {t('exerciseCard.primaryMuscles2', 'Primary Muscles:')}{' '}
             </span>
             {snapshot.primary_muscles
               .map((m) => localizeMuscle(t, m))
@@ -350,8 +350,7 @@ const ExerciseEntryDisplay: React.FC<ExerciseEntryDisplayProps> = ({
           snapshot.secondary_muscles.length > 0 && (
             <div className="text-xs text-muted-foreground leading-snug">
               <span className="font-medium text-muted-foreground">
-                {t('exerciseCard.secondaryMusclesLabel', 'Secondary Muscles')}
-                :{' '}
+                {t('exerciseCard.secondaryMuscles2', 'Secondary Muscles:')}{' '}
               </span>
               {snapshot.secondary_muscles
                 .map((m) => localizeMuscle(t, m))
@@ -361,7 +360,7 @@ const ExerciseEntryDisplay: React.FC<ExerciseEntryDisplayProps> = ({
         {snapshot?.equipment && snapshot.equipment.length > 0 && (
           <div className="text-xs text-muted-foreground leading-snug">
             <span className="font-medium text-muted-foreground">
-              {t('exerciseCard.equipmentLabel', 'Equipment')}:{' '}
+              {t('exerciseCard.equipment2', 'Equipment:')}{' '}
             </span>
             {snapshot.equipment
               .map((eq) => localizeEquipment(t, eq))

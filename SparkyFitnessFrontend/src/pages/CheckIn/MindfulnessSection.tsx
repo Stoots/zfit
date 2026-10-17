@@ -515,8 +515,11 @@ export const MindfulnessSection: React.FC<MindfulnessSectionProps> = ({
                   className="px-8"
                 >
                   <Pause className="w-4 h-4 mr-2" />
-                  {t('mindfulness.pacer.complete', 'Complete')} (
-                  {formatSeconds(breathElapsed)})
+                  {t(
+                    'mindfulness.pacer.complete2',
+                    'Complete ({{breathElapsed}})',
+                    { breathElapsed: formatSeconds(breathElapsed) }
+                  )}
                 </Button>
               )}
             </div>
@@ -686,7 +689,11 @@ export const MindfulnessSection: React.FC<MindfulnessSectionProps> = ({
                       {session.hrv_rmssd != null && (
                         <span className="flex items-center gap-1 text-primary font-medium">
                           <Activity className="w-3 h-3" />
-                          HRV {session.hrv_rmssd} ms
+                          {t(
+                            'checkIn.mindfulnessSection.hrvMs',
+                            'HRV {{hrv_rmssd}} ms',
+                            { hrv_rmssd: session.hrv_rmssd }
+                          )}
                         </span>
                       )}
 

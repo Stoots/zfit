@@ -45,20 +45,6 @@ async function upsertSleepEntry(
       record_utc_offset_minutes,
     } = sleepEntryData;
     let sleepEntryId = id;
-    // If no ID is provided, check for an existing entry for this user, date, and source to prevent duplicates
-    if (!sleepEntryId) {
-      const existingCheck = await client.query(
-        'SELECT id FROM sleep_entries WHERE user_id = $1 AND entry_date = $2 AND source = $3',
-        [userId, entry_date, source]
-      );
-      if (existingCheck.rows.length > 0) {
-        sleepEntryId = existingCheck.rows[0].id;
-        log(
-          'info',
-          `Found existing sleep entry ${sleepEntryId} for user ${userId} on ${entry_date} from source ${source}. Switching to update.`
-        );
-      }
-    }
     if (sleepEntryId) {
       // Attempt to update existing entry. The recording-zone columns use
       // COALESCE so a payload without zone metadata (older mobile client,
@@ -136,10 +122,36 @@ async function upsertSleepEntry(
         throw new Error(`Failed to update sleep entry ${sleepEntryId}.`);
       }
     } else {
-      // Insert new entry
+      // One entry per user, night and source. Inserting through the unique key
+      // makes a concurrent write for the same night update it, not add another.
       const insertQuery = `
                 INSERT INTO sleep_entries (user_id, entry_date, bedtime, wake_time, duration_in_seconds, time_asleep_in_seconds, sleep_score, source, deep_sleep_seconds, light_sleep_seconds, rem_sleep_seconds, awake_sleep_seconds, average_spo2_value, lowest_spo2_value, highest_spo2_value, average_respiration_value, lowest_respiration_value, highest_respiration_value, awake_count, avg_sleep_stress, restless_moments_count, avg_overnight_hrv, body_battery_change, resting_heart_rate, record_timezone, record_utc_offset_minutes)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26)
+                ON CONFLICT (user_id, entry_date, source) DO UPDATE SET
+                    bedtime = EXCLUDED.bedtime,
+                    wake_time = EXCLUDED.wake_time,
+                    duration_in_seconds = EXCLUDED.duration_in_seconds,
+                    time_asleep_in_seconds = EXCLUDED.time_asleep_in_seconds,
+                    sleep_score = EXCLUDED.sleep_score,
+                    deep_sleep_seconds = EXCLUDED.deep_sleep_seconds,
+                    light_sleep_seconds = EXCLUDED.light_sleep_seconds,
+                    rem_sleep_seconds = EXCLUDED.rem_sleep_seconds,
+                    awake_sleep_seconds = EXCLUDED.awake_sleep_seconds,
+                    average_spo2_value = EXCLUDED.average_spo2_value,
+                    lowest_spo2_value = EXCLUDED.lowest_spo2_value,
+                    highest_spo2_value = EXCLUDED.highest_spo2_value,
+                    average_respiration_value = EXCLUDED.average_respiration_value,
+                    lowest_respiration_value = EXCLUDED.lowest_respiration_value,
+                    highest_respiration_value = EXCLUDED.highest_respiration_value,
+                    awake_count = EXCLUDED.awake_count,
+                    avg_sleep_stress = EXCLUDED.avg_sleep_stress,
+                    restless_moments_count = EXCLUDED.restless_moments_count,
+                    avg_overnight_hrv = EXCLUDED.avg_overnight_hrv,
+                    body_battery_change = EXCLUDED.body_battery_change,
+                    resting_heart_rate = EXCLUDED.resting_heart_rate,
+                    record_timezone = COALESCE(EXCLUDED.record_timezone, sleep_entries.record_timezone),
+                    record_utc_offset_minutes = COALESCE(EXCLUDED.record_utc_offset_minutes, sleep_entries.record_utc_offset_minutes),
+                    updated_at = CURRENT_TIMESTAMP
                 RETURNING id;
             `;
       const insertResult = await client.query(insertQuery, [
@@ -171,10 +183,7 @@ async function upsertSleepEntry(
         record_utc_offset_minutes,
       ]);
       sleepEntryId = insertResult.rows[0].id;
-      log(
-        'info',
-        `Inserted new sleep entry ${sleepEntryId} for user ${userId}.`
-      );
+      log('info', `Saved sleep entry ${sleepEntryId} for user ${userId}.`);
     }
     await client.query('COMMIT');
     return { id: sleepEntryId, ...sleepEntryData };

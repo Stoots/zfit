@@ -43,6 +43,19 @@ final class WorkoutSessionStore: ObservableObject {
     /// folds these in. Replaced by each newer snapshot, so a set the phone
     /// has since dropped is not completed later.
     private var pendingUnknownCompletions: Set<String> = []
+    /// Sets the phone has listed as logged, so a set it stops listing is known
+    /// to have been un-logged there. Without this a set the phone has not
+    /// listed yet (just logged here) looks the same as one it dropped. Kept
+    /// in the snapshot so an un-log made while the watch app was closed is
+    /// still noticed afterwards.
+    private var phoneConfirmedIds: Set<String> = []
+    /// Sets un-logged here that the phone still lists as logged, because it
+    /// has not processed the un-log yet. Held out of the phone's list so the
+    /// next update does not log them again. Each leaves once the phone stops
+    /// listing it, or once the set is logged here again. Kept in the snapshot
+    /// so a relaunch does not treat a phone update that still lists the set
+    /// as logging it again.
+    private var pendingUnlogs: Set<String> = []
     /// The phone's rest as last taken from it, so an update that repeats it
     /// leaves a rest adjusted here alone. See `applyTargets`. Not in the
     /// snapshot: the rest itself is not either, so after a relaunch the next
@@ -55,6 +68,13 @@ final class WorkoutSessionStore: ObservableObject {
     /// dismiss it or arm another workout. Not persisted: it is a keepsake of
     /// the moment, not session state.
     @Published private(set) var lastSummary: WorkoutSummary?
+    /// What the plan looked like when the workout started, to tell whether
+    /// the exercises or sets have changed since. Persisted with the snapshot
+    /// so a restored workout is still compared to the plan it started as.
+    private var baselineStructure: [String]?
+    /// Set when Finish is tapped on a workout that changed from its saved
+    /// workout; the workout screen asks whether to update it before ending.
+    @Published var askingPresetUpdate = false
     private var heartRateSum: Double = 0
     private var heartRateCount: Int = 0
     private var heartRateMax: Double?
@@ -103,6 +123,21 @@ final class WorkoutSessionStore: ObservableObject {
     /// the wrist. Not called when the wearer skips the rest or trims it to
     /// zero: they are looking at the watch and already know.
     var onRestFinished: (() -> Void)?
+
+    /// Called when the phone confirms a set logged on this watch is a
+    /// personal record. Once per set.
+    var onPersonalRecord: (() -> Void)?
+    /// Name of the exercise whose set just set a record, shown as a banner
+    /// until it clears itself or the wearer taps it.
+    @Published private(set) var prBannerExercise: String?
+    /// Sets completed on this watch, so a PR the phone flagged for a set
+    /// logged there (or one carried in by a resumed session) is not
+    /// celebrated here.
+    private var wristLoggedSetIds: Set<String> = []
+    private var celebratedPrSetIds: Set<String> = []
+    /// Watch-logged records still waiting for their own banner, in workout order.
+    private var pendingPrSetIds: [String] = []
+    private var prBannerTask: Task<Void, Never>?
 
     private var elapsedTimer: Timer?
     private var restTimer: Timer?
@@ -201,12 +236,37 @@ final class WorkoutSessionStore: ObservableObject {
         targets: [String: SetValues],
         completedSetIds phoneCompleted: Set<String> = [],
         phoneRest: PhoneRest? = nil,
-        setTimers: [String: Date]? = nil
+        setTimers: [String: Date]? = nil,
+        prSetIds: Set<String> = []
     ) {
         guard plan?.sessionId == sessionId, revision > targetRevision else { return }
         targetRevision = revision
+        pendingUnlogs.formIntersection(phoneCompleted)
+        let phoneCompleted = phoneCompleted.subtracting(pendingUnlogs)
+        celebrate(prSetIds)
         let knownIds = Set(steps.map(\.plannedSet.setId))
         pendingUnknownCompletions = phoneCompleted.subtracting(knownIds)
+        // A set the phone listed before and no longer lists was un-logged
+        // there. Only sets it still has targets for count: one it deleted is
+        // not an un-log, and the plan update removes it.
+        let unlogged = phoneConfirmedIds
+            .subtracting(phoneCompleted)
+            .filter { completedSetIds.contains($0) && targets[$0] != nil }
+        phoneConfirmedIds = phoneConfirmedIds
+            .union(phoneCompleted.intersection(knownIds))
+            .subtracting(unlogged)
+            .filter { targets[$0] != nil }
+        if !unlogged.isEmpty {
+            completedSetIds.subtract(unlogged)
+            wristLoggedSetIds.subtract(unlogged)
+            for id in unlogged { loggedValues[id] = nil }
+            // A workout that had every set logged parked the cursor past the
+            // last one: bring it back to the set that is open again.
+            if currentStepIndex >= steps.count,
+               let reopened = steps.firstIndex(where: { unlogged.contains($0.plannedSet.setId) }) {
+                currentStepIndex = reopened
+            }
+        }
         let newlyCompleted = phoneCompleted
             .subtracting(completedSetIds)
             .filter { knownIds.contains($0) }
@@ -236,6 +296,52 @@ final class WorkoutSessionStore: ObservableObject {
         }
         if let setTimers { applyPhoneTimers(setTimers) }
         persistSnapshot(reportedEnergyKcal: nil)
+    }
+
+    /// Fires the record celebration for sets logged here that the phone has
+    /// flagged. The phone decides what a record is; the watch only reacts.
+    /// Several in one update each get a banner, in workout order.
+    private func celebrate(_ prSetIds: Set<String>) {
+        let fresh = prSetIds
+            .intersection(wristLoggedSetIds)
+            .subtracting(celebratedPrSetIds)
+            .subtracting(pendingPrSetIds)
+        guard !fresh.isEmpty else { return }
+        let ordered = steps.compactMap { step -> String? in
+            let id = step.plannedSet.setId
+            return fresh.contains(id) ? id : nil
+        }
+        pendingPrSetIds.append(contentsOf: ordered)
+        // A flagged id with no step still buzzes, after the ones we can name.
+        pendingPrSetIds.append(contentsOf: fresh.subtracting(ordered))
+        presentNextPr()
+    }
+
+    /// Shows the next queued record once the banner is clear. An id counts as
+    /// celebrated only when its banner is shown, so a later one is not dropped.
+    private func presentNextPr() {
+        guard prBannerExercise == nil, !pendingPrSetIds.isEmpty else { return }
+        let setId = pendingPrSetIds.removeFirst()
+        celebratedPrSetIds.insert(setId)
+        prBannerExercise = steps.first { $0.plannedSet.setId == setId }?.exerciseName ?? ""
+        onPersonalRecord?()
+        prBannerTask?.cancel()
+        prBannerTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            guard !Task.isCancelled else { return }
+            self?.dismissPrBanner()
+        }
+    }
+
+    func dismissPrBanner() {
+        prBannerTask?.cancel()
+        prBannerTask = nil
+        prBannerExercise = nil
+        guard !pendingPrSetIds.isEmpty else { return }
+        // Next turn, so the banner can leave before the following record.
+        Task { @MainActor [weak self] in
+            self?.presentNextPr()
+        }
     }
 
     /// Brings the rest on screen in line with the phone's.
@@ -330,12 +436,21 @@ final class WorkoutSessionStore: ObservableObject {
         targetRevision = 0
         planRevision = startingRevision
         pendingUnknownCompletions = []
+        phoneConfirmedIds = []
+        pendingUnlogs = []
         lastPhoneRest = nil
         latestBpm = nil
         activeEnergyKcal = nil
         elapsedSeconds = 0
         lastSummary = nil
+        askingPresetUpdate = false
+        baselineStructure = Self.structure(of: plan)
+        pendingSetCompletion = nil
         resetHeartRateStats()
+        wristLoggedSetIds = []
+        celebratedPrSetIds = []
+        pendingPrSetIds = []
+        dismissPrBanner()
         stopRestTimer()
         clearHold()
         startedAt = Date()
@@ -372,7 +487,8 @@ final class WorkoutSessionStore: ObservableObject {
             capEndsAt: plan.capEndsAt,
             pausedAt: pausedAt,
             excludedPauseSeconds: excludedPauseSeconds,
-            intervalRevision: revision
+            intervalRevision: revision,
+            fromPreset: plan.fromPreset
         )
         persistSnapshot(reportedEnergyKcal: nil)
     }
@@ -408,7 +524,8 @@ final class WorkoutSessionStore: ObservableObject {
             capEndsAt: current.capEndsAt,
             pausedAt: current.pausedAt,
             excludedPauseSeconds: current.excludedPauseSeconds,
-            intervalRevision: current.intervalRevision
+            intervalRevision: current.intervalRevision,
+            fromPreset: current.fromPreset
         )
         steps = Self.steps(for: newPlan)
         let adopted = pendingUnknownCompletions.filter { id in
@@ -443,6 +560,7 @@ final class WorkoutSessionStore: ObservableObject {
     /// Clears local state. Does not itself notify the phone — callers that
     /// mean "the wearer ended this" send `workoutStop` separately.
     func reset() {
+        askingPresetUpdate = false
         plan = nil
         steps = []
         currentStepIndex = 0
@@ -453,11 +571,18 @@ final class WorkoutSessionStore: ObservableObject {
         targetRevision = 0
         planRevision = 0
         pendingUnknownCompletions = []
+        phoneConfirmedIds = []
+        pendingUnlogs = []
+        pendingSetCompletion = nil
         lastPhoneRest = nil
         latestBpm = nil
         activeEnergyKcal = nil
         elapsedSeconds = 0
         resetHeartRateStats()
+        wristLoggedSetIds = []
+        celebratedPrSetIds = []
+        pendingPrSetIds = []
+        dismissPrBanner()
         startedAt = nil
         exerciseWindowStartedAt = [:]
         exerciseWindowSeconds = [:]
@@ -525,7 +650,8 @@ final class WorkoutSessionStore: ObservableObject {
             volumeKg: volumeKg,
             averageBpm: heartRateCount > 0 ? heartRateSum / Double(heartRateCount) : nil,
             maxBpm: heartRateMax,
-            activeEnergyKcal: activeEnergyKcal
+            activeEnergyKcal: activeEnergyKcal,
+            sessionId: plan?.sessionId
         )
     }
 
@@ -535,6 +661,44 @@ final class WorkoutSessionStore: ObservableObject {
 
     func dismissSummary() {
         lastSummary = nil
+    }
+
+    /// The exercises and the number and kind of sets in each, in order: what
+    /// a saved workout is made of. Weights and reps are left out, as on the
+    /// phone, so loading more weight does not count as a change. The
+    /// superset grouping and the exercise's own id are included, so a
+    /// grouping change or two exercises with the same name still count.
+    private static func structure(of plan: ActiveWorkoutPlan) -> [String] {
+        plan.exercises.map { exercise in
+            let sets = exercise.sets.map { $0.setType ?? "normal" }.joined(separator: ",")
+            return "\(exercise.exerciseEntryId)|\(exercise.name)|\(exercise.supersetRun.map(String.init) ?? "-")|\(sets)"
+        }
+    }
+
+    /// Started from a saved workout and since changed: exercises or sets were
+    /// added or removed. Only then does Finish ask whether to update it.
+    var changedFromPreset: Bool {
+        guard let plan, plan.fromPreset == true, let baselineStructure else { return false }
+        return Self.structure(of: plan) != baselineStructure
+    }
+
+    /// Called when Finish is confirmed. Raises the "Update Workout?" question
+    /// and returns true when the workout changed from its saved one; the
+    /// caller then waits for the answer instead of ending the workout.
+    func askPresetUpdateBeforeFinish() -> Bool {
+        guard changedFromPreset else { return false }
+        // Raised a moment later: the Finish confirmation or the exercise sheet
+        // is still closing, and SwiftUI drops an alert presented over a
+        // dismissal in progress, which left Finish doing nothing at all.
+        // The workout can end or be replaced in that moment, so the raise is
+        // only for the one that was finishing.
+        let sessionId = plan?.sessionId
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 450_000_000)
+            guard let self, self.plan?.sessionId == sessionId else { return }
+            self.askingPresetUpdate = true
+        }
+        return true
     }
 
     func recordActiveEnergy(kcal: Double) {
@@ -700,9 +864,17 @@ final class WorkoutSessionStore: ObservableObject {
     /// Marks the current set done, starts the next set's rest, and advances
     /// the cursor. Returns the step that was completed so the caller can
     /// report it — the store never talks to the phone itself.
+    ///
+    /// `holdForEffort` records the completion, including the values and the
+    /// tick time, in the snapshot before returning. The set is sent only
+    /// after Save or Skip, and `clearPendingSetCompletion` drops that record.
     @discardableResult
-    func completeCurrentSet() -> WorkoutStep? {
+    func completeCurrentSet(holdForEffort: Bool = false) -> WorkoutStep? {
         guard let step = currentStep, !isCompleted(step) else { return nil }
+        let logged = values(for: step)
+        // Captured at the tick. A countdown measures from `now`, so reading it
+        // again at Save would count the time spent on the effort screen.
+        var loggedDuration: Int?
         // Stop the buzz. The deadline stays so the caller can still read
         // how long the hold ran.
         // Only when this is the set the timer belongs to: logging another set
@@ -710,11 +882,17 @@ final class WorkoutSessionStore: ObservableObject {
         // timer alone.
         if holdSetId == step.plannedSet.setId {
             if holdStartedAt != nil, holdStoppedAt == nil { holdStoppedAt = Date() }
+            loggedDuration = holdLoggedSeconds(for: step.plannedSet.setId)
             holdLoggedHere = true
             stopHoldTimer()
         }
         rememberLoggedValues(for: [step.plannedSet.setId])
         completedSetIds.insert(step.plannedSet.setId)
+        wristLoggedSetIds.insert(step.plannedSet.setId)
+        // A re-log is a new completion. Leaving the old un-log hold would
+        // make the next phone update that still lists the set look like the
+        // phone had dropped it, and undo this log.
+        pendingUnlogs.remove(step.plannedSet.setId)
 
         // The next set still to do, not simply the next one: a set further on
         // may already have been logged on the phone, and landing on it would
@@ -732,14 +910,62 @@ final class WorkoutSessionStore: ObservableObject {
             // "Workout complete" instead of a rest timer with no way out.
             currentStepIndex = steps.count
         }
+        if holdForEffort {
+            pendingSetCompletion = PendingSetCompletion(
+                setId: step.plannedSet.setId,
+                values: logged,
+                completedAt: Date(),
+                durationSeconds: loggedDuration
+            )
+        }
         persistSnapshot(reportedEnergyKcal: nil)
         return step
+    }
+
+    /// Drops the held completion. Call only after the send was accepted by
+    /// an activated Watch Connectivity session.
+    func clearPendingSetCompletion() {
+        guard pendingSetCompletion != nil else { return }
+        pendingSetCompletion = nil
+        persistSnapshot(reportedEnergyKcal: nil)
+    }
+
+    /// Records Save or Skip on the held completion before the send is tried,
+    /// so a relaunch can still deliver that choice.
+    func markPendingReadyToSend(rpe: Double?) {
+        guard var pending = pendingSetCompletion else { return }
+        pending.rpe = rpe
+        pending.readyToSend = true
+        pendingSetCompletion = pending
+        persistSnapshot(reportedEnergyKcal: nil)
     }
 
     /// How many of an exercise's sets are logged, for the picker's subtitle.
     ///
     /// `filter {}.count` rather than `count(where:)`: the latter is a Swift 6
     /// stdlib addition gated on watchOS 11, and this target deploys to 10.0.
+    /// Un-logs a set the wearer logged, here or on the phone, and puts the
+    /// cursor back on it so it can be done again. Returns whether there was a
+    /// logged set to undo; the caller then tells the phone.
+    @discardableResult
+    func uncompleteStep(_ step: WorkoutStep) -> Bool {
+        let setId = step.plannedSet.setId
+        guard completedSetIds.contains(setId) else { return false }
+        completedSetIds.remove(setId)
+        wristLoggedSetIds.remove(setId)
+        loggedValues[setId] = nil
+        phoneConfirmedIds.remove(setId)
+        pendingUnlogs.insert(setId)
+        if holdSetId == setId { clearHold() }
+        // Any rest on screen ran after the set that is open again.
+        stopRestTimer()
+        if let index = steps.firstIndex(where: { $0.plannedSet.setId == setId }) {
+            moveCursor(to: index)
+        }
+        persistSnapshot(reportedEnergyKcal: nil)
+        return true
+    }
+
     func completedSetCount(for exercise: PlannedExercise) -> Int {
         exercise.sets.filter { completedSetIds.contains($0.setId) }.count
     }
@@ -878,6 +1104,10 @@ final class WorkoutSessionStore: ObservableObject {
         var planRevision: Double?
         /// See `pendingUnknownCompletions`. Optional so older snapshots still decode.
         var pendingUnknownCompletions: [String]?
+        /// See `phoneConfirmedIds`. Optional so older snapshots still decode.
+        var phoneConfirmedIds: [String]?
+        /// See `pendingUnlogs`. Optional so older snapshots still decode.
+        var pendingUnlogs: [String]?
         /// The running (or just-logged) set timer, so a relaunch resumes the
         /// clock instead of showing Start again. Optional so older snapshots
         /// still decode.
@@ -892,7 +1122,73 @@ final class WorkoutSessionStore: ObservableObject {
         /// Measurement seconds already in those totals. Optional so older
         /// snapshots still decode.
         var countedHeartRateSeconds: [Int]?
+        /// What the plan looked like when the workout started, so a relaunch
+        /// still knows whether it changed. Optional so older snapshots still
+        /// decode.
+        var baselineStructure: [String]?
+        /// A set logged here that has not been sent yet because the wearer is
+        /// still picking an effort. Optional so older snapshots still decode.
+        var pendingSetCompletion: PendingSetCompletion?
     }
+
+    /// A completed set waiting on the effort screen. Kept in the snapshot so
+    /// a relaunch can still send it. Cleared only after the send is accepted
+    /// by Watch Connectivity, not while it is sitting in memory.
+    struct PendingSetCompletion: Codable, Equatable {
+        var setId: String
+        var values: SetValues
+        var completedAt: Date
+        /// Seconds the hold had run at the tick. Nil when it was never
+        /// started. Kept so time spent on the effort screen is not logged.
+        var durationSeconds: Int?
+        /// Set when the wearer taps Save. Nil with `readyToSend` means Skip.
+        var rpe: Double?
+        /// The wearer already chose Save or Skip. The send may still be
+        /// waiting for the session to activate.
+        var readyToSend: Bool
+
+        init(
+            setId: String,
+            values: SetValues,
+            completedAt: Date,
+            durationSeconds: Int?,
+            rpe: Double? = nil,
+            readyToSend: Bool = false
+        ) {
+            self.setId = setId
+            self.values = values
+            self.completedAt = completedAt
+            self.durationSeconds = durationSeconds
+            self.rpe = rpe
+            self.readyToSend = readyToSend
+        }
+
+        private enum CodingKeys: String, CodingKey {
+            case setId, values, completedAt, durationSeconds, rpe, readyToSend
+        }
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            setId = try container.decode(String.self, forKey: .setId)
+            values = try container.decode(SetValues.self, forKey: .values)
+            completedAt = try container.decode(Date.self, forKey: .completedAt)
+            durationSeconds = try container.decodeIfPresent(Int.self, forKey: .durationSeconds)
+            rpe = try container.decodeIfPresent(Double.self, forKey: .rpe)
+            readyToSend = try container.decodeIfPresent(Bool.self, forKey: .readyToSend) ?? false
+        }
+
+        func encode(to encoder: Encoder) throws {
+            var container = encoder.container(keyedBy: CodingKeys.self)
+            try container.encode(setId, forKey: .setId)
+            try container.encode(values, forKey: .values)
+            try container.encode(completedAt, forKey: .completedAt)
+            try container.encodeIfPresent(durationSeconds, forKey: .durationSeconds)
+            try container.encodeIfPresent(rpe, forKey: .rpe)
+            try container.encode(readyToSend, forKey: .readyToSend)
+        }
+    }
+
+    private(set) var pendingSetCompletion: PendingSetCompletion?
 
     /// A set timer as stored in the snapshot.
     struct HoldState: Codable, Equatable {
@@ -1016,12 +1312,16 @@ final class WorkoutSessionStore: ObservableObject {
             targetRevision: targetRevision,
             planRevision: planRevision,
             pendingUnknownCompletions: Array(pendingUnknownCompletions),
+            phoneConfirmedIds: Array(phoneConfirmedIds),
+            pendingUnlogs: Array(pendingUnlogs),
             hold: holdState,
             loggedValues: loggedValues,
             heartRateSum: heartRateSum,
             heartRateCount: heartRateCount,
             heartRateMax: heartRateMax,
-            countedHeartRateSeconds: Array(countedHeartRateSeconds)
+            countedHeartRateSeconds: Array(countedHeartRateSeconds),
+            baselineStructure: baselineStructure,
+            pendingSetCompletion: pendingSetCompletion
         )
         if let data = try? JSONEncoder().encode(snapshot) {
             defaults.set(data, forKey: snapshotKey)
@@ -1053,11 +1353,17 @@ final class WorkoutSessionStore: ObservableObject {
         targetRevision = snapshot.targetRevision ?? 0
         planRevision = snapshot.planRevision ?? 0
         pendingUnknownCompletions = Set(snapshot.pendingUnknownCompletions ?? [])
+        phoneConfirmedIds = Set(snapshot.phoneConfirmedIds ?? [])
+        pendingUnlogs = Set(snapshot.pendingUnlogs ?? [])
         restoreHold(snapshot.hold)
         startedAt = snapshot.startedAt
         elapsedSeconds = max(0, Int(Date().timeIntervalSince(snapshot.startedAt)))
         restoredReportedEnergyKcal = snapshot.reportedEnergyKcal
         heartRateSentThrough = snapshot.heartRateSentThrough
+        // `start(with:)` took the baseline from the plan as it was saved, which
+        // may already include changes; the stored one is the real starting plan.
+        if let stored = snapshot.baselineStructure { baselineStructure = stored }
+        pendingSetCompletion = snapshot.pendingSetCompletion
         persistSnapshot(reportedEnergyKcal: snapshot.reportedEnergyKcal)
         return snapshot
     }

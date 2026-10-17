@@ -182,19 +182,22 @@ it.each([
     'Service busy. Try again.',
   ],
   ['{"message":"Service busy."}', 'Service busy.'],
-  ['<html>Bad gateway</html>', 'chat.transportError'],
-  ['{"error":', 'chat.transportError'],
-  ['null', 'chat.transportError'],
-  ['[]', 'chat.transportError'],
-  ['503', 'chat.transportError'],
+  [
+    '<html>Bad gateway</html>',
+    'chat.sparkyChatInterface.failedToProcessMessagePlease',
+  ],
+  ['{"error":', 'chat.sparkyChatInterface.failedToProcessMessagePlease'],
+  ['null', 'chat.sparkyChatInterface.failedToProcessMessagePlease'],
+  ['[]', 'chat.sparkyChatInterface.failedToProcessMessagePlease'],
+  ['503', 'chat.sparkyChatInterface.failedToProcessMessagePlease'],
   ['The service is busy. Try again.', 'The service is busy. Try again.'],
-  ['Failed to fetch', 'chat.transportError'],
-  ['', 'chat.transportError'],
+  ['Failed to fetch', 'chat.sparkyChatInterface.failedToProcessMessagePlease'],
+  ['', 'chat.sparkyChatInterface.failedToProcessMessagePlease'],
 ])('shows readable feedback for %s', (raw, expected) => {
   render(<SparkyChatInterface />);
   mockOnError(new Error(raw));
   expect(mockToast).toHaveBeenLastCalledWith({
-    title: 'chat.errorTitle',
+    title: 'chat.sparkyChatInterface.chatError',
     description: expected,
     variant: 'destructive',
   });

@@ -30,6 +30,8 @@ interface ExerciseSummaryProps {
   entryDate: string;
   onPressWorkout?: (session: ExerciseSessionResponse) => void;
   onAddExercise?: () => void;
+  /** Upstream run-program card. */
+  programBanner?: React.ReactNode;
   onPressPlanSession?: (
     plan: WorkoutPlanTemplate,
     session: WorkoutPlanSession
@@ -45,6 +47,7 @@ const ExerciseSummary: React.FC<ExerciseSummaryProps> = ({
   onPressWorkout,
   onAddExercise,
   onPressPlanSession,
+  programBanner,
   getImageSource,
   weightUnit = 'kg',
   distanceUnit = 'km',
@@ -107,6 +110,7 @@ const ExerciseSummary: React.FC<ExerciseSummaryProps> = ({
     );
     return (
       <View>
+        {programBanner}
         {planBanners}
         {programHistory}
         {onAddExercise ? (
@@ -131,6 +135,7 @@ const ExerciseSummary: React.FC<ExerciseSummaryProps> = ({
 
   return (
     <View>
+      {programBanner}
       {planBanners}
       {programHistory}
       <View className="bg-surface rounded-xl p-4 mb-2 shadow-sm overflow-hidden">

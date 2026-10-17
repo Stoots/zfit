@@ -148,6 +148,7 @@ export function buildWatchWorkoutStartPayload(
     startedAt: startedAt != null ? new Date(startedAt).toISOString() : null,
     armedAt: new Date(armedAtMs).toISOString(),
     capEndsAt: capEndsAtMs != null ? new Date(capEndsAtMs).toISOString() : null,
+    ...(state.sourcePresetId != null ? { fromPreset: true } : {}),
   };
 }
 

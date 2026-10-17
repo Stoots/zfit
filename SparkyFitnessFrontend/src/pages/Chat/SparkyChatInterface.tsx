@@ -229,8 +229,14 @@ const SparkyChatInner = ({
     },
     onError: (error) => {
       toast({
-        title: t('chat.errorTitle'),
-        description: chatErrorMessage(error, t('chat.transportError')),
+        title: t('chat.sparkyChatInterface.chatError', 'Chat Error'),
+        description: chatErrorMessage(
+          error,
+          t(
+            'chat.sparkyChatInterface.failedToProcessMessagePlease',
+            'Failed to process message. Please check your AI service settings.'
+          )
+        ),
         variant: 'destructive',
       });
     },

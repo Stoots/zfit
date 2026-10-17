@@ -6,6 +6,8 @@ Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded her
 
 #### Bug fixes
 
+- Remove untouched future weekly-prefill workouts outside a changed weekday or date window, preserving retained workout identities and edited history.
+
 - Preserve logged web Program sets and weights when reopening the same session from the Dashboard or leaving the player immediately after an edit; show a warning when local draft storage fails. Require the same exact Workout Session when resuming and offer explicit separate-save/discard recovery for incompatible saved drafts, blocking new edits and set logging until that recovery is resolved (#76).
 - Show readable web chat errors and a labeled Retry that preserves the question and its original Training analysis disclosure without duplicating the transcript; restored or evicted questions use ordinary chat when their original scope is unavailable, and Edit → Update always uses ordinary chat (#64).
 - Preview upcoming web dashboard Workout Sessions before starting, with exact prescriptions, occurrence context, accessible phone-sized dialogs, and Cardio Test protocol previews; retain short carry distances and frozen workout formats/time caps, refresh previews after plan edits, and pluralize rep counts (#67).
@@ -49,6 +51,8 @@ Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded her
 - Training Programs: authoring, outcomes, and optional auto-shift (issues #2, #3). See `docs/src/features/exercises/training-programs.md` and `docs/adr/`.
 
 #### Developer tooling
+
+- Sync upstream through #2944 on 2026-10-17, retaining fork Training Programs, Cardio Tests, Training analysis and the web redesign.
 
 - Retire the completed one-off Program consolidation tool and its acceptance job (#50); retain the historical journal, migration, schema and owner-only RLS coverage.
 
