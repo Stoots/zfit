@@ -14,6 +14,20 @@ export async function legacyPlanSessions(
   scheduleType: 'weekly' | 'sequential',
   previous: WorkoutPlanSessionResponse[] = []
 ): Promise<WorkoutPlanSessionInput[]> {
+  if (
+    previous.some((session) =>
+      session.assignments.some(
+        (assignment) =>
+          !assignment.workout_preset_id &&
+          !assignment.exercise_id &&
+          assignment.preset_snapshot
+      )
+    )
+  )
+    throw new HttpError(
+      'This plan has detached frozen assignments that the App Store editor cannot represent. Edit it on the web.',
+      409
+    );
   if (previous.some((session) => session.assignments.length === 0))
     throw new HttpError(
       'This plan has empty sessions that the App Store editor cannot represent. Edit it on the web.',

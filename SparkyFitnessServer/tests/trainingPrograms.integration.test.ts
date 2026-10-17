@@ -28,6 +28,10 @@ import {
 import { getClient, getSystemClient, endPool } from '../db/poolManager.js';
 import errorHandler from '../middleware/errorHandler.js';
 import {
+  createWorkoutPlanDraft,
+  buildWorkoutPlanPayload,
+} from './fixtures/appStoreWorkoutPlanForm.js';
+import {
   databaseReachable,
   requireDatabaseInCI,
 } from './databaseIntegrationGuard.js';
@@ -385,7 +389,7 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
       );
     }
   });
-  it('App Store flat update retains exact identities when removing an unlinked session', async () => {
+  it('App Store rename-only round-trip rejects detached frozen assignments without changing the plan', async () => {
     const exerciseId = await seedExercise();
     const snapshot = {
       id: 123,
@@ -395,65 +399,64 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
       exercises: [],
     };
     const plan = await createPlan({
-      plan_name: 'Flat update',
+      plan_name: 'Original',
+      start_date: '2028-06-01',
+      is_active: false,
       schedule_type: 'sequential',
       sessions: [
         {
-          name: 'Optional',
+          name: 'Strength',
           sort_order: 0,
           day_of_week: null,
           is_optional: true,
-          assignments: [{ preset_snapshot: snapshot, sort_order: 0 }],
-        },
-        {
-          name: 'Strength',
-          sort_order: 1,
-          day_of_week: null,
           assignments: [
+            { preset_snapshot: snapshot, sort_order: 0 },
             {
               exercise_id: exerciseId,
-              sort_order: 0,
+              sort_order: 1,
               sets: prescribedSets(1).map((set) => ({ ...set, rpe: 7 })),
             },
           ],
         },
       ],
     });
-    const assignment = plan.sessions[1]!.assignments[0]!;
-    expect(assignment.sets[0]!.rpe).toBe(7);
-    const payload = {
-      plan_name: 'Flat saved',
-      description: '',
-      start_date: '2028-06-01',
-      end_date: null,
-      is_active: false,
-      schedule_type: 'sequential',
-      entry_mode: 'prompt',
-      currentClientDate: '2028-06-01',
-      assignments: [
-        {
-          id: String(assignment.id),
-          exercise_id: exerciseId,
-          day_of_week: null,
-          session_index: 2,
-          session_name: 'Strength',
-          sort_order: 0,
-          sets: prescribedSets(1).map((set) => ({ ...set, reps: 10 })),
-        },
-      ],
-    };
-    // This unlinked detached assignment can be explicitly removed, retaining the other exact session.
+    const detail = await request(app)
+      .get(`/api/workout-plan-templates/${plan.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(detail.status).toBe(200);
+    const draft = createWorkoutPlanDraft('2028-06-01', detail.body);
+    draft.planName = 'Renamed only';
+    expect(draft.assignments).toHaveLength(2);
+    const payload = buildWorkoutPlanPayload(draft);
+    expect(payload.assignments).toEqual([
+      expect.objectContaining({
+        id: plan.sessions[0]!.assignments[1]!.id,
+        exercise_id: exerciseId,
+      }),
+    ]);
     const response = await request(app)
       .put(`/api/workout-plan-templates/${plan.id}`)
       .set('Authorization', `Bearer ${ownerToken}`)
       .send(payload);
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(409);
+    expect(response.body.error).toContain('web');
+    expect(await reloadPlan(plan.id)).toEqual(plan);
+
+    // The canonical web editor can still explicitly delete the detached prescription.
+    const canonical = planInput(plan);
+    canonical.sessions[0]!.assignments.shift();
+    const removed = await request(app)
+      .put(`/api/workout-plan-templates/${plan.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send(canonical);
+    expect(removed.status).toBe(200);
     const saved = await reloadPlan(plan.id);
-    expect(saved.sessions).toHaveLength(1);
-    expect(saved.sessions[0]!.id).toBe(plan.sessions[1]!.id);
-    expect(saved.sessions[0]!.assignments[0]!.id).toBe(assignment.id);
-    expect(saved.sessions[0]!.assignments[0]!.sets[0]!.reps).toBe(10);
-    expect(saved.sessions[0]!.assignments[0]!.sets[0]!.rpe).toBe(7);
+    expect(saved.sessions).toEqual([
+      {
+        ...plan.sessions[0]!,
+        assignments: [plan.sessions[0]!.assignments[1]!],
+      },
+    ]);
   });
   it('App Store flat authoring rejects ambiguous weekdays and protected history atomically', async () => {
     const exerciseId = await seedExercise();
