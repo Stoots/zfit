@@ -742,6 +742,14 @@ describe.runIf(run)('persisted authenticated bulk prescription APIs', () => {
         "INSERT INTO exercise_preset_entries(user_id,name,entry_date,source) VALUES ($1,'Separate actual workout','2099-10-13','manual') RETURNING id",
         [owner]
       );
+      const entry = await db.query(
+        "INSERT INTO exercise_entries(user_id,exercise_name,entry_date,duration_minutes,calories_burned,exercise_preset_entry_id) VALUES ($1,'Performed lift','2099-10-13',0,0,$2) RETURNING id",
+        [owner, diary.rows[0].id]
+      );
+      await db.query(
+        'INSERT INTO exercise_entry_sets(exercise_entry_id,set_number,reps,weight) VALUES ($1,1,8,50)',
+        [entry.rows[0].id]
+      );
       await db.query('BEGIN');
       await db.query(
         'SELECT id FROM training_programs WHERE id = $1 FOR UPDATE',
