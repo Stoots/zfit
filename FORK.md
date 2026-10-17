@@ -79,4 +79,4 @@ app and tests a Program workout at 390×844 with touch input: log a set, leave,
 reload, restart, verify the draft, finish, and verify the saved diary set.
 It uses synthetic data and isolated inline server settings, ignores repo `.env`,
 disables scheduled jobs, and removes its processes and database on exit.
-Logs and failure screenshots stay under `$TMPDIR` (default `tmp-codex/`).
+Logs and failure screenshots stay under `$TMPDIR` (default `tmp-work/`).

@@ -10,7 +10,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import puppeteer from "puppeteer-core";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
-process.env.TMPDIR ||= resolve(root, "tmp-codex");
+process.env.TMPDIR ||= resolve(root, "tmp-work");
 await mkdir(process.env.TMPDIR, { recursive: true });
 const output = await mkdtemp(resolve(process.env.TMPDIR, "player-e2e-"));
 const container = `zfit-player-e2e-${process.pid}-${randomBytes(4).toString("hex")}`;
