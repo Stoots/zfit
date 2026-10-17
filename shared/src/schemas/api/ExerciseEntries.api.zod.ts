@@ -441,6 +441,7 @@ export const updateExerciseEntryRequestSchema = createExerciseEntryRequestSchema
 
 export const exerciseEntryResponseSchema = z
   .object({
+    is_weekly_prefill: z.boolean().optional(),
     id: z.string(),
     // Nulled rather than cascaded when the library exercise is deleted
     // (20260912150000_preserve_data_on_user_and_library_deletes.sql), so the

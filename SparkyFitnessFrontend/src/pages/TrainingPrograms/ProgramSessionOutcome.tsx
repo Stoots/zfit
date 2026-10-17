@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { isDayString } from '@workspace/shared';
+import { canLinkDiaryWorkout, isDayString } from '@workspace/shared';
 import type {
   TrainingProgram,
   TrainingProgramOutcomeInput,
@@ -66,7 +66,10 @@ export default function ProgramSessionOutcome({
     ) ?? []
   );
   const choices = programs.data
-    ? diary.data?.filter((item) => !linked.has(`${item.type}:${item.id}`))
+    ? diary.data?.filter(
+        (item) =>
+          canLinkDiaryWorkout(item) && !linked.has(`${item.type}:${item.id}`)
+      )
     : [];
   const workout = choices?.find(
     (item) => `${item.type}:${item.id}` === selected

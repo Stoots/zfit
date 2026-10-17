@@ -643,7 +643,13 @@ describe('ExerciseCard dashboard plans', () => {
         id: 'yesterday',
         entry_date: '2026-10-11',
         name: 'Push',
-        exercises: [{ workout_plan_assignment_id: '7-a1' }],
+        exercises: [
+          {
+            workout_plan_assignment_id: '7-a1',
+            duration_minutes: 0,
+            sets: [{ reps: 8, completed_at: '2026-10-12T10:00:00Z' }],
+          },
+        ],
       } as unknown as GroupedExerciseEntry,
     ];
     renderCard();
@@ -697,14 +703,26 @@ describe('ExerciseCard dashboard plans', () => {
         id: 'used',
         entry_date: '2026-10-12',
         name: 'Push',
-        exercises: [{ workout_plan_assignment_id: '7-a1' }],
+        exercises: [
+          {
+            workout_plan_assignment_id: '7-a1',
+            duration_minutes: 0,
+            sets: [{ reps: 8, completed_at: '2026-10-12T10:00:00Z' }],
+          },
+        ],
       },
       {
         type: 'preset',
         id: 'partial',
         entry_date: '2026-10-12',
         name: 'Partial Push',
-        exercises: [{ workout_plan_assignment_id: '7-a1' }],
+        exercises: [
+          {
+            workout_plan_assignment_id: '7-a1',
+            duration_minutes: 0,
+            sets: [{ reps: 8, completed_at: '2026-10-12T10:00:00Z' }],
+          },
+        ],
       },
     ] as unknown as GroupedExerciseEntry[];
     renderCard();
