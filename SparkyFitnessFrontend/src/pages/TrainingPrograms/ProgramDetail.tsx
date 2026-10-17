@@ -50,6 +50,10 @@ export default function ProgramDetail({
 }) {
   const { t } = useTranslation();
   const progress = programProgress(selected, today);
+  const nextSession = selected.phases
+    .flatMap((phase) => phase.weeks.flatMap((week) => week.sessions))
+    .filter((session) => session.status === 'planned')
+    .sort((a, b) => a.effective_date.localeCompare(b.effective_date))[0];
   return (
     <article className="min-w-0 space-y-8">
       <div className="space-y-4 rounded-3xl border bg-card p-5 sm:p-6">
@@ -71,6 +75,27 @@ export default function ProgramDetail({
             defaultValue: 'Week {{current}} of {{total}}',
           })}
         />
+        {nextSession ? (
+          <Button
+            className="min-h-11 w-full sm:w-auto"
+            onClick={() => {
+              const target = document.getElementById(
+                `program-session-${nextSession.id}`
+              );
+              target?.focus({ preventScroll: true });
+              target?.scrollIntoView({ block: 'start', behavior: 'instant' });
+            }}
+          >
+            {t('trainingPrograms.jumpToNextSession', 'Jump to next session')}
+          </Button>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            {t(
+              'trainingPrograms.noRemainingSessions',
+              'No remaining sessions.'
+            )}
+          </p>
+        )}
         <p className="whitespace-pre-wrap break-words">{selected.goal}</p>
         <p className="text-muted-foreground">
           <time dateTime={selected.start_date}>{selected.start_date}</time> –{' '}
@@ -162,7 +187,7 @@ export default function ProgramDetail({
                         session.effective_date === today ? 'date' : undefined
                       }
                       className={cn(
-                        'grid min-w-0 scroll-mt-24 gap-3 p-3 sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-4',
+                        'grid min-w-0 scroll-mt-24 gap-3 p-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:grid-cols-[9rem_minmax(0,1fr)] sm:gap-4',
                         session.effective_date === today &&
                           'rounded-lg outline -outline-offset-1 outline-primary',
                         session.status === 'completed' &&
