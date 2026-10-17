@@ -229,17 +229,19 @@ export function loadWorkoutPlaybackDraftFromStorage(
 
 export function saveWorkoutPlaybackDraftToStorage(
   draft: WorkoutPlaybackDraft
-): void {
+): boolean {
   if (typeof window === 'undefined') {
-    return;
+    return false;
   }
 
   const storageKey = getWorkoutPlaybackDraftStorageKey(draft.entry_date);
 
   try {
     window.localStorage.setItem(storageKey, JSON.stringify(draft));
+    return true;
   } catch (error) {
     console.error('Failed to save workout playback draft to storage', error);
+    return false;
   }
 }
 
