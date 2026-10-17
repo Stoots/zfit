@@ -117,7 +117,7 @@ function PowerProtocol({
     config[protocol].labels.map(() => '')
   );
   const [editing, setEditing] = useState<string | null>(null);
-  const { headingRef, editButtonRef } = useAttemptEditorFocus(editing);
+  const { headingRef, focusEditor } = useAttemptEditorFocus(editing);
   const linkedEditBlocked = programs.isError && !!editing && !!plannedSessionId;
   const [validationError, setValidationError] = useState('');
   const savingRef = useRef(false);
@@ -431,7 +431,7 @@ function PowerProtocol({
                     variant="outline"
                     disabled={save.isPending}
                     onClick={(event) => {
-                      editButtonRef.current = event.currentTarget;
+                      focusEditor(event.currentTarget);
                       select(attempt);
                     }}
                   >

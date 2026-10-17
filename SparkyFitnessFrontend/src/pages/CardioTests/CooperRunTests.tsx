@@ -1,3 +1,4 @@
+import { useSearchParams } from 'react-router-dom';
 import { useAttemptEditorFocus } from './useAttemptEditorFocus';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -7,6 +8,7 @@ import { TrendChart } from '@/components/ui/trend-chart';
 import {
   selectProgramCardioAssessmentChoices,
   type CooperRunAttempt,
+  type cardioTestProtocols,
 } from '@workspace/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,22 +20,82 @@ import RampTests from './RampTests';
 import { useTrainingProgramsList } from '@/hooks/TrainingPrograms/useTrainingPrograms';
 
 export default function CooperRunTests() {
-  const { activeUserId } = useActiveUser();
-  return <ProfileCooperRunTests key={activeUserId ?? ''} />;
+  const { t } = useTranslation();
+  const { activeUserId, hasPermission } = useActiveUser();
+  const canRead = hasPermission('diary');
+  const [params, setParams] = useSearchParams();
+  const requestedProtocol = params.get('protocol');
+  const protocol =
+    requestedProtocol === 'sprint_6s' ||
+    requestedProtocol === 'power_30s' ||
+    requestedProtocol === 'ramp'
+      ? requestedProtocol
+      : 'cooper_run';
+  return (
+    <main className="mx-auto w-full min-w-0 max-w-3xl space-y-6">
+      <header>
+        <h1 className="text-2xl font-semibold">
+          {t('cardioTests.title', 'Cardio Tests')}
+        </h1>
+        <p className="mt-2 max-w-prose text-muted-foreground">
+          {t(
+            'cardioTests.intro',
+            'Record Cooper, power, and ramp Test Attempts and compare results over time.'
+          )}
+        </p>
+      </header>
+
+      {canRead && (
+        <div className="space-y-2">
+          <Label htmlFor="cardio-test-protocol">
+            {t('cardioTests.protocolSelector', 'Test protocol')}
+          </Label>
+          <select
+            id="cardio-test-protocol"
+            value={protocol}
+            onChange={(event) => {
+              const next = new URLSearchParams(params);
+              next.set('protocol', event.target.value);
+              next.delete('planned_session_id');
+              setParams(next);
+            }}
+            className="flex h-11 w-full min-w-0 rounded-md border border-input bg-background px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <option value="cooper_run">
+              {t('cardioTests.protocolCooper', 'Cooper run')}
+            </option>
+            <option value="sprint_6s">
+              {t('cardioTests.protocolSprint', '6-second sprint')}
+            </option>
+            <option value="power_30s">
+              {t('cardioTests.protocolPower', '30-second power')}
+            </option>
+            <option value="ramp">
+              {t('cardioTests.ramp.title', 'Ramp Test')}
+            </option>
+          </select>
+        </div>
+      )}
+
+      <ProfileCooperRunTests
+        key={`${activeUserId ?? ''}-${params.toString()}`}
+        protocol={protocol}
+      />
+    </main>
+  );
 }
 
-function ProfileCooperRunTests() {
+function ProfileCooperRunTests({
+  protocol,
+}: {
+  protocol: keyof typeof cardioTestProtocols;
+}) {
   const { t } = useTranslation();
   const { activeUserId, hasPermission, hasWritePermission, isActingOnBehalf } =
     useActiveUser();
   const canRead = hasPermission('diary');
   const canWrite = hasWritePermission('diary');
-  const requestedProtocol = new URLSearchParams(window.location.search).get(
-    'protocol'
-  );
-  const focusedPowerProtocol =
-    requestedProtocol === 'sprint_6s' || requestedProtocol === 'power_30s';
-  const focusedProtocol = focusedPowerProtocol || requestedProtocol === 'ramp';
+  const focusedProtocol = protocol !== 'cooper_run';
   const { attempts, create, update } = useCooperRunAttempts(
     activeUserId ?? '',
     canRead
@@ -43,7 +105,7 @@ function ProfileCooperRunTests() {
     canRead && !isActingOnBehalf
   );
   const [editing, setEditing] = useState<CooperRunAttempt | null>(null);
-  const { headingRef, editButtonRef } = useAttemptEditorFocus(
+  const { headingRef, focusEditor } = useAttemptEditorFocus(
     editing?.id ?? null
   );
   const [attemptDate, setAttemptDate] = useState('');
@@ -109,19 +171,7 @@ function ProfileCooperRunTests() {
   };
 
   return (
-    <main className="mx-auto w-full min-w-0 max-w-3xl space-y-6">
-      <header>
-        <h1 className="text-2xl font-semibold">
-          {t('cardioTests.title', 'Cardio Tests')}
-        </h1>
-        <p className="mt-2 max-w-prose text-muted-foreground">
-          {t(
-            'cardioTests.intro',
-            'Record Cooper, power, and ramp Test Attempts and compare results over time.'
-          )}
-        </p>
-      </header>
-
+    <>
       {!canRead ? (
         <p role="status">
           {t(
@@ -336,7 +386,7 @@ function ProfileCooperRunTests() {
                           variant="outline"
                           disabled={pending}
                           onClick={(event) => {
-                            editButtonRef.current = event.currentTarget;
+                            focusEditor(event.currentTarget);
                             selectAttempt(attempt);
                           }}
                         >
@@ -351,8 +401,8 @@ function ProfileCooperRunTests() {
           </section>
         </>
       ) : null}
-      <PowerTests />
-      <RampTests />
-    </main>
+      {(protocol === 'sprint_6s' || protocol === 'power_30s') && <PowerTests />}
+      {protocol === 'ramp' && <RampTests />}
+    </>
   );
 }

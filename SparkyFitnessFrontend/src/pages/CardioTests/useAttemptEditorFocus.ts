@@ -1,6 +1,7 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export function useAttemptEditorFocus(editingId: string | null) {
+  const [focusRequest, setFocusRequest] = useState(0);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const editButtonRef = useRef<HTMLButtonElement | null>(null);
 
@@ -13,7 +14,12 @@ export function useAttemptEditorFocus(editingId: string | null) {
       behavior: 'instant',
     });
     if (!editingId) editButtonRef.current = null;
-  }, [editingId]);
+  }, [editingId, focusRequest]);
 
-  return { headingRef, editButtonRef };
+  const focusEditor = (button: HTMLButtonElement) => {
+    editButtonRef.current = button;
+    setFocusRequest((request) => request + 1);
+  };
+
+  return { headingRef, focusEditor };
 }

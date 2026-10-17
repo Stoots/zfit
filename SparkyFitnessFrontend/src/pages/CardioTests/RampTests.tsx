@@ -84,7 +84,7 @@ function RampProfile({
   const [editing, setEditing] = useState<string | null>(null);
   const [validationError, setValidationError] = useState('');
   const savingRef = useRef(false);
-  const { headingRef, editButtonRef } = useAttemptEditorFocus(editing);
+  const { headingRef, focusEditor } = useAttemptEditorFocus(editing);
   const linkedEditBlocked = programs.isError && !!editing && !!plannedSessionId;
   useEffect(() => {
     if (date || !selectedPlannedSessionId) return;
@@ -414,7 +414,7 @@ function RampProfile({
                     disabled={save.isPending}
                     onClick={(event) => {
                       if (savingRef.current) return;
-                      editButtonRef.current = event.currentTarget;
+                      focusEditor(event.currentTarget);
                       setEditing(attempt.id);
                       setDate(attempt.attempt_date);
                       setPlannedSessionId(attempt.planned_session_id ?? '');

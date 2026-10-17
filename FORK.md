@@ -88,6 +88,8 @@ Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded her
 
 #### Features
 
+- Add a phone-friendly protocol selector to web Cardio Tests, showing one protocol’s entry, history and trend while preserving Program assessment deep links (#61).
+
 - Record and graph ramp Test Attempts on web, including heart-rate recovery and Program assessment linking (#6).
 - Add owner-only, read-only Training analysis to web chat with explicit Program, Cardio Test and synced Apple Health disclosure controls (#8).
 

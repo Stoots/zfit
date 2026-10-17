@@ -1,4 +1,5 @@
 import type { ReactElement } from 'react';
+import { BrowserRouter } from 'react-router-dom';
 import {
   act,
   fireEvent,
@@ -7,7 +8,16 @@ import {
   within,
 } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import { renderWithClient } from '../test-utils';
+import { renderWithClient as renderWithQueryClient } from '../test-utils';
+
+function renderWithClient(ui: ReactElement) {
+  const view = renderWithQueryClient(<BrowserRouter>{ui}</BrowserRouter>);
+  return {
+    ...view,
+    rerender: (next: ReactElement) =>
+      view.rerender(<BrowserRouter>{next}</BrowserRouter>),
+  };
+}
 import type {
   CooperRunAttempt,
   CooperRunAttemptInput,
@@ -215,8 +225,60 @@ describe('Cooper run Test Attempts', () => {
     mockServer.records = [];
     mockProtocolRecords = [];
     jest.clearAllMocks();
+    HTMLElement.prototype.scrollIntoView = jest.fn();
     mockActiveUserId = '00000000-0000-4000-a000-000000000001';
     jest.mocked(getTrainingPrograms).mockResolvedValue([]);
+  });
+
+  it('switches protocols from the Tests entry and restores a linked assessment with browser Back', async () => {
+    const sessionId = '00000000-0000-4000-a000-000000000099';
+    window.history.replaceState(
+      {},
+      '',
+      `/cardio-tests?protocol=ramp&planned_session_id=${sessionId}`
+    );
+    jest
+      .mocked(getTrainingPrograms)
+      .mockResolvedValue([scheduledProgram('ramp', sessionId)]);
+    renderWithClient(<CooperRunTests />);
+    const selector = screen.getByRole('combobox', { name: 'Test protocol' });
+    expect(selector).toHaveValue('ramp');
+    selector.focus();
+    await waitFor(() =>
+      expect(screen.getByLabelText('Date')).toHaveValue('2026-09-27')
+    );
+    for (const protocol of ['cooper_run', 'sprint_6s', 'power_30s']) {
+      fireEvent.change(
+        screen.getByRole('combobox', { name: 'Test protocol' }),
+        { target: { value: protocol } }
+      );
+      expect(
+        screen.getByRole('combobox', { name: 'Test protocol' })
+      ).toHaveValue(protocol);
+      expect(
+        screen.getByRole('combobox', { name: 'Test protocol' })
+      ).toHaveFocus();
+      expect(screen.getAllByLabelText('Date')).toHaveLength(1);
+      expect(screen.getByLabelText('Planned assessment')).toHaveValue('');
+      expect(new URLSearchParams(window.location.search).get('protocol')).toBe(
+        protocol
+      );
+      expect(
+        new URLSearchParams(window.location.search).has('planned_session_id')
+      ).toBe(false);
+    }
+    await act(async () => {
+      window.history.go(-3);
+    });
+    await waitFor(() =>
+      expect(
+        screen.getByRole('combobox', { name: 'Test protocol' })
+      ).toHaveValue('ramp')
+    );
+    await waitFor(() =>
+      expect(screen.getByLabelText('Planned assessment')).toHaveValue(sessionId)
+    );
+    expect(screen.getByLabelText('Date')).toHaveValue('2026-09-27');
   });
 
   it.each(['cooper_run', 'sprint_6s', 'power_30s', 'ramp'] as const)(
@@ -264,8 +326,7 @@ describe('Cooper run Test Attempts', () => {
                 },
         ];
       window.history.replaceState({}, '', `/cardio-tests?protocol=${protocol}`);
-      const scrollIntoView = jest.fn();
-      HTMLElement.prototype.scrollIntoView = scrollIntoView;
+      const scrollIntoView = jest.mocked(HTMLElement.prototype.scrollIntoView);
       renderWithClient(<CooperRunTests />);
       const edit = await screen.findByRole('button', { name: 'Edit' });
       fireEvent.click(edit);
@@ -279,9 +340,34 @@ describe('Cooper run Test Attempts', () => {
         behavior: 'instant',
       });
       expect(screen.getAllByLabelText('Date')[0]).toHaveValue('2026-10-14');
+      screen.getAllByLabelText('Date')[0]!.focus();
+      fireEvent.click(edit);
+      expect(
+        screen.getByRole('heading', {
+          name: 'Editing Test Attempt · 2026-10-14',
+        })
+      ).toHaveFocus();
       fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
       expect(edit).toHaveFocus();
       fireEvent.click(edit);
+      const saveMutation =
+        protocol === 'cooper_run'
+          ? updateCooperRunAttempt
+          : saveProtocolAttempt;
+      jest
+        .mocked(saveMutation)
+        .mockRejectedValueOnce(new Error('Save unavailable'));
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Save unavailable'
+      );
+      expect(screen.getAllByLabelText('Date')[0]).toHaveValue('2026-10-14');
+      expect(
+        screen.getByRole('heading', {
+          name: 'Editing Test Attempt · 2026-10-14',
+        })
+      ).toBeInTheDocument();
+      expect(edit).not.toHaveFocus();
       fireEvent.click(screen.getByRole('button', { name: 'Save' }));
       await waitFor(() => expect(edit).toHaveFocus());
       expect(
@@ -641,6 +727,7 @@ describe('Cooper run Test Attempts', () => {
     jest
       .mocked(getTrainingPrograms)
       .mockRejectedValueOnce(new Error('Unavailable'));
+    window.history.replaceState({}, '', '/cardio-tests?protocol=sprint_6s');
     renderWithClient(<CooperRunTests />);
     const sprint = screen.getByRole('region', {
       name: '5 × 6-second sprint (54-second rests)',
@@ -737,6 +824,7 @@ describe('Cooper run Test Attempts', () => {
   );
 
   it('records both power protocols and shows their dated graph and results', async () => {
+    window.history.replaceState({}, '', '/cardio-tests?protocol=sprint_6s');
     renderWithClient(<CooperRunTests />);
     const sprint = screen.getByRole('region', {
       name: '5 × 6-second sprint (54-second rests)',
@@ -774,6 +862,9 @@ describe('Cooper run Test Attempts', () => {
       within(sprint).getByRole('img', { name: /sprint.*trend by date/ })
     ).toBeInTheDocument();
 
+    fireEvent.change(screen.getByRole('combobox', { name: 'Test protocol' }), {
+      target: { value: 'power_30s' },
+    });
     const thirty = screen.getByRole('region', {
       name: '2 × 30-second power (60-second rest)',
     });
@@ -819,6 +910,7 @@ describe('Cooper run Test Attempts', () => {
   });
 
   it('accepts decimal commas on the web power forms used on iPhone', async () => {
+    window.history.replaceState({}, '', '/cardio-tests?protocol=sprint_6s');
     renderWithClient(<CooperRunTests />);
     const sprint = screen.getByRole('region', {
       name: '5 × 6-second sprint (54-second rests)',
@@ -845,6 +937,9 @@ describe('Cooper run Test Attempts', () => {
       )
     );
 
+    fireEvent.change(screen.getByRole('combobox', { name: 'Test protocol' }), {
+      target: { value: 'power_30s' },
+    });
     const thirty = screen.getByRole('region', {
       name: '2 × 30-second power (60-second rest)',
     });
