@@ -6,6 +6,7 @@ Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded her
 
 #### Bug fixes
 
+- Restore upstream App Store Workout Plan reads and flat create/edit requests, preserving session identities, optionality and frozen prescriptions; reject ambiguous edits and protected-history removal, including HTTP 409 for flat saves of unscheduled weekly sessions or detached frozen assignments that the App Store form drops (#74).
 - Remove untouched future weekly-prefill workouts outside a changed weekday or date window, preserving retained workout identities and edited history.
 
 - Preserve logged web Program sets and weights when reopening the same session from the Dashboard or leaving the player immediately after an edit; show a warning when local draft storage fails. Require the same exact Workout Session when resuming and offer explicit separate-save/discard recovery for incompatible saved drafts, blocking new edits and set logging until that recovery is resolved (#76).

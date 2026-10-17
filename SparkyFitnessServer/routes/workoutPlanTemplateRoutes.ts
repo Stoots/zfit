@@ -1,8 +1,10 @@
+import {
+  compatiblePlanCreateSchema,
+  compatiblePlanUpdateSchema,
+} from '../schemas/workoutPlanCompatibility.js';
 import express from 'express';
 import { z } from 'zod';
 import {
-  workoutPlanCreateRequestSchema,
-  workoutPlanUpdateRequestSchema,
   workoutPlanBulkRequestSchema,
   workoutPlanBulkApplyRequestSchema,
 } from '@workspace/shared';
@@ -208,7 +210,7 @@ router.post(
  *   post:
  *     summary: Create a new workout plan template
  *     tags: [Fitness & Workouts]
- *     description: Creates a new workout plan template for the authenticated user.
+ *     description: Creates a plan from canonical sessions or upstream App Store flat assignments. Flat preset selections are frozen server-side. Do not combine assignments and sessions.
  *     security:
  *       - cookieAuth: []
  *     requestBody:
@@ -231,7 +233,7 @@ router.post(
  */
 router.post('/', authenticate, async (req, res, next) => {
   try {
-    const parsedBody = workoutPlanCreateRequestSchema.safeParse(req.body);
+    const parsedBody = compatiblePlanCreateSchema.safeParse(req.body);
     if (!parsedBody.success) {
       return res.status(400).json({
         error: 'Invalid workout plan payload.',
@@ -253,7 +255,7 @@ router.post('/', authenticate, async (req, res, next) => {
  *   get:
  *     summary: Get all workout plan templates
  *     tags: [Fitness & Workouts]
- *     description: Retrieves all workout plan templates for the authenticated user.
+ *     description: Retrieves all plans with canonical sessions and a derived legacy flat assignments projection.
  *     security:
  *       - cookieAuth: []
  *     responses:
@@ -287,7 +289,7 @@ router.get('/', authenticate, async (req, res, next) => {
  *   get:
  *     summary: Get a specific workout plan template by ID
  *     tags: [Fitness & Workouts]
- *     description: Retrieves a specific workout plan template by its ID.
+ *     description: Retrieves a plan with canonical sessions and a derived legacy flat assignments projection.
  *     security:
  *       - cookieAuth: []
  *     parameters:
@@ -341,7 +343,7 @@ router.get('/:id', authenticate, async (req, res, next) => {
  *   put:
  *     summary: Update an existing workout plan template
  *     tags: [Fitness & Workouts]
- *     description: Updates an existing workout plan template.
+ *     description: Accepts canonical sessions or upstream App Store flat assignments. Flat saves preserve session identity, optionality and frozen presets. Ambiguous mappings and protected-history removals return 4xx without saving.
  *     security:
  *       - cookieAuth: []
  *     parameters:
@@ -376,7 +378,7 @@ router.get('/:id', authenticate, async (req, res, next) => {
  */
 router.put('/:id', authenticate, async (req, res, next) => {
   try {
-    const parsedBody = workoutPlanUpdateRequestSchema.safeParse(req.body);
+    const parsedBody = compatiblePlanUpdateSchema.safeParse(req.body);
     if (!parsedBody.success) {
       return res.status(400).json({
         error: 'Invalid workout plan payload.',

@@ -39,6 +39,22 @@ if (
     'Bulk prescription scenarios require a named disposable database.'
   );
 
+// CRUD responses also carry the App Store projection; bulk responses are canonical.
+function canonicalPlan(body: unknown): WorkoutPlanResponse {
+  const plan = workoutPlanResponseSchema.parse(body);
+  delete plan.assignments;
+  delete plan.next_assignment;
+  for (const session of plan.sessions) {
+    for (const assignment of session.assignments) {
+      delete assignment.template_id;
+      delete assignment.day_of_week;
+      delete assignment.session_index;
+      delete assignment.session_name;
+    }
+  }
+  return plan;
+}
+
 describe.runIf(run)('persisted authenticated bulk prescription APIs', () => {
   const app = express();
   let owner: string, other: string, token: string, otherToken: string;
@@ -121,7 +137,7 @@ describe.runIf(run)('persisted authenticated bulk prescription APIs', () => {
       .get(`/api/workout-plan-templates/${plan.id}`)
       .set('Authorization', `Bearer ${token}`);
     expect(response.status).toBe(200);
-    return workoutPlanResponseSchema.parse(response.body);
+    return canonicalPlan(response.body);
   }
   async function outcome(index: number) {
     const started = await call(
@@ -250,7 +266,7 @@ describe.runIf(run)('persisted authenticated bulk prescription APIs', () => {
       })),
     });
     expect(response.status, JSON.stringify(response.body)).toBe(201);
-    plan = workoutPlanResponseSchema.parse(response.body);
+    plan = canonicalPlan(response.body);
     const created = await call('/api/training-programs', {
       name: 'Bulk Program',
       goal: 'Preserve weeks',
@@ -461,7 +477,7 @@ describe.runIf(run)('persisted authenticated bulk prescription APIs', () => {
     const applied = await apply(p);
     expect(applied.status, JSON.stringify(applied.body)).toBe(200);
     const saved = await reload();
-    expect(workoutPlanResponseSchema.parse(applied.body.plan)).toEqual(saved);
+    expect(canonicalPlan(applied.body.plan)).toEqual(saved);
     expect(saved.sessions[0]).toEqual(plan.sessions[0]);
     expect(saved.sessions[3]).toEqual(plan.sessions[3]);
     for (const i of [1, 2]) {
@@ -558,7 +574,7 @@ describe.runIf(run)('persisted authenticated bulk prescription APIs', () => {
           })),
         });
         expect(created.status, JSON.stringify(created.body)).toBe(201);
-        effortPlan = workoutPlanResponseSchema.parse(created.body);
+        effortPlan = canonicalPlan(created.body);
       }
       const source = effortPlan.sessions[0]!;
       const targets = effortPlan.sessions.slice(1, 3).map((session) => ({
@@ -903,7 +919,7 @@ describe.runIf(run)('persisted authenticated bulk prescription APIs', () => {
       })),
     });
     expect(created.status, JSON.stringify(created.body)).toBe(201);
-    const frozen = workoutPlanResponseSchema.parse(created.body);
+    const frozen = canonicalPlan(created.body);
     const source = frozen.sessions[0]!;
     const body: WorkoutPlanBulkRequest = {
       plan_id: frozen.id,
@@ -928,7 +944,7 @@ describe.runIf(run)('persisted authenticated bulk prescription APIs', () => {
     expect(await fullState()).toEqual(before);
     const result = await apply(p);
     expect(result.status, JSON.stringify(result.body)).toBe(200);
-    const saved = workoutPlanResponseSchema.parse(result.body.plan);
+    const saved = canonicalPlan(result.body.plan);
     const expected = structuredClone(frozen);
     const target = expected.sessions[1]!.assignments[0]!.preset_snapshot!;
     target.workout_format = 'amrap';
@@ -1033,7 +1049,7 @@ describe.runIf(run)('persisted authenticated bulk prescription APIs', () => {
       sessions: authored.flat(),
     });
     expect(created.status, JSON.stringify(created.body)).toBe(201);
-    const fixture = workoutPlanResponseSchema.parse(created.body);
+    const fixture = canonicalPlan(created.body);
     expect(fixture.sessions).toHaveLength(57);
     const weekSessions = authored.map((week, index) =>
       fixture.sessions.filter(
@@ -1096,7 +1112,7 @@ describe.runIf(run)('persisted authenticated bulk prescription APIs', () => {
     expect(await fullState()).toEqual(before);
     const result = await apply(p);
     expect(result.status, JSON.stringify(result.body)).toBe(200);
-    const saved = workoutPlanResponseSchema.parse(result.body.plan);
+    const saved = canonicalPlan(result.body.plan);
     const expected = structuredClone(fixture.sessions);
     for (const target of targets)
       expected.find(
