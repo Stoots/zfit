@@ -199,7 +199,6 @@ const ExerciseStatisticsScreen: React.FC<ExerciseStatisticsScreenProps> = ({
 
   const renderCardio = () => (
     <>
-      {' '}
       <Button
         variant="outline"
         accessibilityRole="button"
