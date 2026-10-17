@@ -458,6 +458,41 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
       },
     ]);
   });
+  it('App Store rename-only round-trip rejects unscheduled weekly sessions without changing the plan', async () => {
+    const exerciseId = await seedExercise();
+    const plan = await createPlan({
+      plan_name: 'Unscheduled weekly plan',
+      start_date: '2028-06-01',
+      is_active: false,
+      schedule_type: 'weekly',
+      sessions: [
+        {
+          name: 'Unscheduled strength',
+          day_of_week: null,
+          sort_order: 0,
+          assignments: [
+            { exercise_id: exerciseId, sort_order: 0, sets: prescribedSets(1) },
+          ],
+        },
+      ],
+    });
+    const detail = await request(app)
+      .get(`/api/workout-plan-templates/${plan.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(detail.status).toBe(200);
+    const draft = createWorkoutPlanDraft('2028-06-01', detail.body);
+    draft.planName = 'Renamed only';
+    const payload = buildWorkoutPlanPayload(draft);
+    expect(payload.assignments).toHaveLength(1);
+    expect(payload.assignments[0]!.day_of_week).toBeNull();
+    const response = await request(app)
+      .put(`/api/workout-plan-templates/${plan.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send(payload);
+    expect(response.status).toBe(409);
+    expect(response.body.error).toContain('Edit this plan on the web.');
+    expect(await reloadPlan(plan.id)).toEqual(plan);
+  });
   it('App Store flat authoring rejects ambiguous weekdays and protected history atomically', async () => {
     const exerciseId = await seedExercise();
     const plan = await createPlan({

@@ -42,6 +42,14 @@ export async function legacyPlanSessions(
       'Multiple sessions on one weekday cannot be edited with flat assignments. Edit this plan on the web.',
       409
     );
+  if (
+    scheduleType === 'weekly' &&
+    previous.some((session) => session.day_of_week === null)
+  )
+    throw new HttpError(
+      'Unscheduled weekly sessions cannot be edited with flat assignments. Edit this plan on the web.',
+      409
+    );
   const sessions = new Map<number, WorkoutPlanSessionInput>();
   for (const assignment of assignments) {
     const slot =
