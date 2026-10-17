@@ -1,12 +1,18 @@
 import {
-  workoutPlanCreateRequestSchema,
-  workoutPlanUpdateRequestSchema,
+  compatiblePlanCreateSchema,
+  compatiblePlanUpdateSchema,
+  type CompatiblePlanCreate,
+  type CompatiblePlanUpdate,
+} from '../schemas/workoutPlanCompatibility.js';
+import {
   type WorkoutPlanCreateRequest,
   type WorkoutPlanUpdateRequest,
   type WorkoutPlanBulkRequest,
   type WorkoutPlanBulkApplyRequest,
 } from '@workspace/shared';
-import workoutPlanTemplateRepository from '../models/workoutPlanTemplateRepository.js';
+import workoutPlanTemplateRepository, {
+  type WorkoutPlanTemplateRow,
+} from '../models/workoutPlanTemplateRepository.js';
 import { log } from '../config/logging.js';
 import { HttpError } from '../utils/errors.js';
 import { resolveTemplateStartDay } from '../utils/timezoneLoader.js';
@@ -21,30 +27,34 @@ export type UpdateWorkoutPlanTemplateInput = WorkoutPlanUpdateRequest;
 
 async function createWorkoutPlanTemplate(
   userId: string,
-  planData: CreateWorkoutPlanTemplateInput
+  planData: CompatiblePlanCreate
 ) {
-  const parsed = workoutPlanCreateRequestSchema.safeParse(planData);
+  const parsed = compatiblePlanCreateSchema.safeParse(planData);
   if (!parsed.success)
     throw Object.assign(new Error(parsed.error.message), { status: 400 });
   const input = parsed.data;
   const scheduleType = input.schedule_type ?? 'sequential';
   const today = await resolveTemplateStartDay(userId, input.currentClientDate);
-  return workoutPlanTemplateRepository.createWorkoutPlanTemplate(
-    {
-      ...input,
-      start_date: input.start_date === undefined ? today : input.start_date,
-      schedule_type: scheduleType,
-      entry_mode:
-        scheduleType === 'sequential'
-          ? 'prompt'
-          : (input.entry_mode ?? 'prompt'),
-      user_id: userId,
-    },
-    today
+  return withLegacyAssignments(
+    await workoutPlanTemplateRepository.createWorkoutPlanTemplate(
+      {
+        ...input,
+        start_date: input.start_date === undefined ? today : input.start_date,
+        schedule_type: scheduleType,
+        entry_mode:
+          scheduleType === 'sequential'
+            ? 'prompt'
+            : (input.entry_mode ?? 'prompt'),
+        user_id: userId,
+      },
+      today
+    )
   );
 }
 async function getWorkoutPlanTemplatesByUserId(userId: string) {
-  return workoutPlanTemplateRepository.getWorkoutPlanTemplatesByUserId(userId);
+  const plans =
+    await workoutPlanTemplateRepository.getWorkoutPlanTemplatesByUserId(userId);
+  return plans.map(withLegacyAssignments);
 }
 async function getWorkoutPlanTemplateById(
   userId: string,
@@ -59,14 +69,14 @@ async function getWorkoutPlanTemplateById(
     throw Object.assign(new Error('Workout plan template not found.'), {
       status: 404,
     });
-  return plan;
+  return withLegacyAssignments(plan);
 }
 async function updateWorkoutPlanTemplate(
   userId: string,
   templateId: string | number,
-  updateData: UpdateWorkoutPlanTemplateInput
+  updateData: CompatiblePlanUpdate
 ) {
-  const parsed = workoutPlanUpdateRequestSchema.safeParse(updateData);
+  const parsed = compatiblePlanUpdateSchema.safeParse(updateData);
   if (!parsed.success)
     throw Object.assign(new Error(parsed.error.message), { status: 400 });
   const ownerId =
@@ -87,11 +97,13 @@ async function updateWorkoutPlanTemplate(
     );
   // Identity checks, disposable prefill cleanup and idempotent insertion
   // share one repository transaction.
-  return workoutPlanTemplateRepository.updateWorkoutPlanTemplate(
-    templateId,
-    userId,
-    parsed.data,
-    parsed.data.currentClientDate
+  return withLegacyAssignments(
+    await workoutPlanTemplateRepository.updateWorkoutPlanTemplate(
+      templateId,
+      userId,
+      parsed.data,
+      parsed.data.currentClientDate
+    )
   );
 }
 async function deleteWorkoutPlanTemplate(
@@ -143,28 +155,29 @@ async function deleteWorkoutPlanTemplate(
     });
   }
 }
+function withLegacyAssignments(plan: WorkoutPlanTemplateRow) {
+  let sessionIndex = 0;
+  for (const session of plan.sessions) {
+    if (session.assignments.length > 0) sessionIndex++;
+    for (const assignment of session.assignments) {
+      // Keep the session model authoritative while serving the upstream app.
+      assignment.template_id = plan.id;
+      assignment.day_of_week = session.day_of_week;
+      assignment.session_index =
+        plan.schedule_type === 'sequential' ? sessionIndex : null;
+      assignment.session_name = session.name;
+    }
+  }
+  plan.assignments = plan.sessions.flatMap((session) => session.assignments);
+  plan.next_assignment = plan.next_assignments?.[0] ?? null;
+  return plan;
+}
 async function getActiveWorkoutPlanForDate(userId: string, date: string) {
   const plans = await workoutPlanTemplateRepository.getActiveWorkoutPlanForDate(
     userId,
     date
   );
-  for (const plan of plans) {
-    let sessionIndex = 0;
-    for (const session of plan.sessions) {
-      if (session.assignments.length > 0) sessionIndex++;
-      for (const assignment of session.assignments) {
-        // Keep the session model authoritative while serving the upstream app.
-        assignment.template_id = plan.id;
-        assignment.day_of_week = session.day_of_week;
-        assignment.session_index =
-          plan.schedule_type === 'sequential' ? sessionIndex : null;
-        assignment.session_name = session.name;
-      }
-    }
-    plan.assignments = plan.sessions.flatMap((session) => session.assignments);
-    plan.next_assignment = plan.next_assignments?.[0] ?? null;
-  }
-  return plans;
+  return plans.map(withLegacyAssignments);
 }
 async function getBulkPrescriptionCandidates(
   userId: string,

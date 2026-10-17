@@ -1,3 +1,7 @@
+import {
+  workoutPlanCreateRequestSchema,
+  workoutPlanUpdateRequestSchema,
+} from '@workspace/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../services/workoutPlanTemplateService.js', () => ({
@@ -149,7 +153,9 @@ describe('AI independently prescribed Workout Sessions', () => {
     });
     expect(result).toContain('Workout plan "Cycle" created');
     expect(svc.createWorkoutPlanTemplate).toHaveBeenCalledTimes(1);
-    const input = svc.createWorkoutPlanTemplate.mock.calls[0]![1];
+    const input = workoutPlanCreateRequestSchema.parse(
+      svc.createWorkoutPlanTemplate.mock.calls[0]![1]
+    );
     expect(input.sessions).toHaveLength(2);
     expect(input.sessions[0]!.assignments[0]!.sets).toHaveLength(2);
     expect(input.sessions[1]!.assignments[0]!.sets).toHaveLength(3);
@@ -174,8 +180,9 @@ describe('AI independently prescribed Workout Sessions', () => {
     expect(result).toContain('Workout plan "Cycle" created');
     expect(svc.createWorkoutPlanTemplate).toHaveBeenCalledTimes(1);
     expect(
-      svc.createWorkoutPlanTemplate.mock.calls[0]![1].sessions[0]!
-        .assignments[0]!.exercise_id
+      workoutPlanCreateRequestSchema.parse(
+        svc.createWorkoutPlanTemplate.mock.calls[0]![1]
+      ).sessions[0]!.assignments[0]!.exercise_id
     ).toBe(exerciseId);
   });
 
@@ -202,9 +209,9 @@ describe('AI independently prescribed Workout Sessions', () => {
     });
     expect(result).toContain('Workout plan "Cycle" created');
     expect(svc.createWorkoutPlanTemplate).toHaveBeenCalledTimes(1);
-    const snapshot =
-      svc.createWorkoutPlanTemplate.mock.calls[0]![1].sessions[0]!
-        .assignments[0]!.preset_snapshot;
+    const snapshot = workoutPlanCreateRequestSchema.parse(
+      svc.createWorkoutPlanTemplate.mock.calls[0]![1]
+    ).sessions[0]!.assignments[0]!.preset_snapshot;
     expect(presets.getWorkoutPresetById).toHaveBeenCalledWith(7, 'user-1');
     expect(snapshot).toEqual(preset);
     preset.exercises[0]!.sets[0]!.notes = 'Library changed';
@@ -225,8 +232,9 @@ describe('AI independently prescribed Workout Sessions', () => {
     expect(result).toContain('Workout plan "Cycle" created');
     expect(svc.createWorkoutPlanTemplate).toHaveBeenCalledTimes(1);
     expect(
-      svc.createWorkoutPlanTemplate.mock.calls[0]![1].sessions[0]!
-        .assignments[0]!.preset_snapshot!.exercises[0]!.sets[0]
+      workoutPlanCreateRequestSchema.parse(
+        svc.createWorkoutPlanTemplate.mock.calls[0]![1]
+      ).sessions[0]!.assignments[0]!.preset_snapshot!.exercises[0]!.sets[0]
     ).toEqual({ id: 700, ...set });
   });
 
@@ -251,8 +259,9 @@ describe('AI independently prescribed Workout Sessions', () => {
     expect(presets.getWorkoutPresetById).not.toHaveBeenCalled();
     expect(presets.getWorkoutPresetByName).not.toHaveBeenCalled();
     expect(
-      svc.updateWorkoutPlanTemplate.mock.calls[0]![2].sessions![0]!
-        .assignments[0]
+      workoutPlanUpdateRequestSchema.parse(
+        svc.updateWorkoutPlanTemplate.mock.calls[0]![2]
+      ).sessions![0]!.assignments[0]
     ).toMatchObject({ id: 10, preset_snapshot: preset });
   });
 
@@ -435,8 +444,9 @@ describe('AI independently prescribed Workout Sessions', () => {
     expect(presets.getWorkoutPresetById).not.toHaveBeenCalled();
     expect(presets.getWorkoutPresetByName).not.toHaveBeenCalled();
     expect(
-      svc.updateWorkoutPlanTemplate.mock.calls[0]![2].sessions![0]!
-        .assignments[0]
+      workoutPlanUpdateRequestSchema.parse(
+        svc.updateWorkoutPlanTemplate.mock.calls[0]![2]
+      ).sessions![0]!.assignments[0]
     ).toMatchObject({
       id: 10,
       workout_preset_id: null,
@@ -491,8 +501,9 @@ describe('AI independently prescribed Workout Sessions', () => {
     expect(result).toContain('Workout plan "Cycle" created');
     expect(svc.createWorkoutPlanTemplate).toHaveBeenCalledTimes(1);
     expect(
-      svc.createWorkoutPlanTemplate.mock.calls[0]![1].sessions[0]!
-        .assignments[0]!.sets![0]!.set_type
+      workoutPlanCreateRequestSchema.parse(
+        svc.createWorkoutPlanTemplate.mock.calls[0]![1]
+      ).sessions[0]!.assignments[0]!.sets![0]!.set_type
     ).toBeNull();
   });
 
