@@ -1,6 +1,7 @@
 import { getErrorMessage } from '@/utils/api';
 
 export function chatErrorMessage(error: unknown, fallback: string): string {
+  if (error === undefined || error === null) return fallback;
   let message = (
     error instanceof Error ? error.message : getErrorMessage(error)
   ).trim();

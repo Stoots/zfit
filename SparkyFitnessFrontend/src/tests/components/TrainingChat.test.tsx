@@ -128,6 +128,7 @@ jest.mock('react-i18next', () => ({
 }));
 import { useChatQuestionSource } from '@/hooks/AI/useChatQuestionSource';
 import SparkyChatInterface from '@/pages/Chat/SparkyChatInterface';
+import { chatErrorMessage } from '@/utils/chatError';
 
 beforeEach(() => {
   mockHistory = [];
@@ -161,6 +162,15 @@ it('asks in read-only training mode and displays the answer with explicitly sele
   expect(body.messages[0].parts[0].text).toBe('Summarize my training program');
   delete (global as { fetch?: unknown }).fetch;
 });
+
+it.each([undefined, null])(
+  'uses translated fallback when the chat error is %s',
+  (error) => {
+    expect(chatErrorMessage(error, 'Please try again.')).toBe(
+      'Please try again.'
+    );
+  }
+);
 
 it.each([
   [
