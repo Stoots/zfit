@@ -291,6 +291,7 @@ const Diary = () => {
       info(loggingLevel, 'Food entry added successfully.');
     } catch (err) {
       error(loggingLevel, 'Error adding food entry:', err);
+      throw err;
     }
   };
 

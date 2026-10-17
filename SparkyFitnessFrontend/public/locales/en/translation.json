@@ -6311,6 +6311,7 @@
     "whatsNew": "What's New"
   },
   "foodUnitSelector": {
+    "saveFailedRetained": "Couldn't save. Your inputs are kept; please try again.",
     "editTitle": "Edit {{name}}",
     "addTitle": "Add {{name}} to Meal",
     "editDescription": "Edit the quantity and unit for {{name}}.",
