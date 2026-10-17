@@ -229,14 +229,14 @@ const ExerciseDatabaseManager = () => {
             onCheckedChange={(value) =>
               table.toggleAllPageRowsSelected(!!value)
             }
-            aria-label="Select all"
+            aria-label={t('common.selectAll', 'Select all')}
           />
         ),
         cell: ({ row }) => (
           <Checkbox
             checked={row.getIsSelected()}
             onCheckedChange={(value) => row.toggleSelected(!!value)}
-            aria-label="Select row"
+            aria-label={t('common.selectRow', 'Select row')}
             disabled={row.original.user_id !== user?.id}
           />
         ),
@@ -323,7 +323,9 @@ const ExerciseDatabaseManager = () => {
               {exercise.primary_muscles &&
                 exercise.primary_muscles.length > 0 && (
                   <div className="text-xs text-muted-foreground truncate max-w-[150px]">
-                    <span className="font-medium">Muscles: </span>
+                    <span className="font-medium">
+                      {t('exercises.muscles', 'Muscles:')}{' '}
+                    </span>
                     {exercise.primary_muscles
                       .map((m) => localizeMuscle(t, m))
                       .join(', ')}
@@ -331,7 +333,9 @@ const ExerciseDatabaseManager = () => {
                 )}
               {exercise.equipment && exercise.equipment.length > 0 && (
                 <div className="text-xs text-muted-foreground truncate max-w-[150px]">
-                  <span className="font-medium">Equipment: </span>
+                  <span className="font-medium">
+                    {t('exercises.equipment', 'Equipment:')}{' '}
+                  </span>
                   {exercise.equipment
                     .map((eq) => localizeEquipment(t, eq))
                     .join(', ')}
@@ -352,7 +356,9 @@ const ExerciseDatabaseManager = () => {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="h-11 w-11 p-0">
-                  <span className="sr-only">Open menu</span>
+                  <span className="sr-only">
+                    {t('exercises.openMenu', 'Open menu')}
+                  </span>
                   <MoreHorizontal className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
@@ -501,7 +507,7 @@ const ExerciseDatabaseManager = () => {
                   <SelectTrigger className="w-40">
                     <SelectValue
                       placeholder={t(
-                        'exercise.databaseManager.allCategoriesPlaceholder',
+                        'exercise.databaseManager.allCategoriesItem',
                         'All Categories'
                       )}
                     />
@@ -534,7 +540,7 @@ const ExerciseDatabaseManager = () => {
                   <SelectTrigger className="w-32">
                     <SelectValue
                       placeholder={t(
-                        'exercise.databaseManager.allOwnershipPlaceholder',
+                        'exercise.databaseManager.allOwnershipItem',
                         'All'
                       )}
                     />

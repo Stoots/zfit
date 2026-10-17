@@ -30,7 +30,11 @@ export const EnergyCircle = ({
     <div className="min-w-0 space-y-2">
       <Numeral
         value={remaining}
-        unit={`${getEnergyUnitString(unit)} ${t('exercise.dailyProgress.remaining', 'remaining')}`}
+        unit={t(
+          'exercise.dailyProgress.remaining2',
+          'remaining {{energyUnitString}}',
+          { energyUnitString: getEnergyUnitString(unit) }
+        )}
         subline={subline}
       />
       {targetBand !== undefined && (

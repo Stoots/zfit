@@ -307,7 +307,11 @@ export const CaffeineCard = ({ date, userId }: CaffeineCardProps) => {
             <div className="flex items-center justify-between">
               <span className="text-xs text-muted-foreground flex items-center gap-1">
                 <Moon className="w-3 h-3 text-primary" />
-                {t('diary.caffeine.atBedtime', 'At Bedtime')} ({target_bedtime})
+                {t(
+                  'diary.caffeine.atBedtime2',
+                  'At Bedtime ({{target_bedtime}})',
+                  { target_bedtime }
+                )}
               </span>
             </div>
             <div className="flex items-baseline gap-1 mt-1">
@@ -562,7 +566,9 @@ export const CaffeineCard = ({ date, userId }: CaffeineCardProps) => {
                 key={`${dose.at}-${idx}`}
                 className="text-xs px-3 py-1.5 rounded-full border flex items-center gap-1.5"
               >
-                <span className="font-medium">{dose.name || 'Dose'}:</span>
+                <span className="font-medium">
+                  {dose.name || t('diary.caffeineCard.dose', 'Dose')}:
+                </span>
                 <span>{dose.mg}mg</span>
                 <span className="text-xs text-muted-foreground">
                   (

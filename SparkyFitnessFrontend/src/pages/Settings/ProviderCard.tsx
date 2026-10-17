@@ -63,6 +63,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { usePreferences } from '@/contexts/PreferencesContext';
 import { ExternalDataProvider } from './ExternalProviderSettings';
 
+import { useTranslation } from 'react-i18next';
 interface ProviderCardProps {
   provider: ExternalDataProvider;
   isLoading: boolean;
@@ -91,7 +92,10 @@ const PROVIDER_PORTALS: Record<string, { label: string; url: string }> = {
     label: 'Polar Flow Applications',
     url: 'https://flow.polar.com/settings/applications',
   },
-  garmin: { label: 'Garmin Connect', url: 'https://connect.garmin.com/' },
+  garmin: {
+    label: 'Garmin Connect',
+    url: 'https://connect.garmin.com/',
+  },
   nutritionix: {
     label: 'Nutritionix Console',
     url: 'https://developer.nutritionix.com/',
@@ -128,6 +132,7 @@ export const ProviderCard = ({
   startEditing,
   isAdminMode = false,
 }: ProviderCardProps) => {
+  const { t } = useTranslation();
   const { user } = useAuth();
   const [isCnfDialogOpen, setIsCnfDialogOpen] = useState(false);
   const isCnf = provider.provider_type === 'canadian-nutrient-file';
@@ -504,13 +509,13 @@ export const ProviderCard = ({
           <h4 className="font-medium">{provider.provider_name}</h4>
           {provider.is_public && (
             <span className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded font-semibold">
-              Global
+              {t('settings.providerCard.global', 'Global')}
             </span>
           )}
           {!provider.is_public &&
             (provider.visibility === 'private' ||
               provider.user_id === user?.id) && (
-              <span title="Private">
+              <span title={t('settings.providerCard.private', 'Private')}>
                 <Lock className="h-3 w-3 text-muted-foreground" />
               </span>
             )}
@@ -522,18 +527,32 @@ export const ProviderCard = ({
               size="sm"
               onClick={() => setIsCnfDialogOpen(true)}
               disabled={loading}
-              title="Bulk Import / Re-Sync"
+              title={t(
+                'settings.providerCard.bulkImportReSync',
+                'Bulk Import / Re-Sync'
+              )}
               className="flex items-center gap-1.5"
             >
               {cnfStatus?.isRunning ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                  <span>Importing ({cnfStatus.progress}%)...</span>
+                  <span>
+                    {t(
+                      'settings.providerCard.importing',
+                      'Importing ({{progress}}%)...',
+                      { progress: cnfStatus.progress }
+                    )}
+                  </span>
                 </>
               ) : (
                 <>
                   <Download className="h-4 w-4" />
-                  <span>Bulk Import / Sync</span>
+                  <span>
+                    {t(
+                      'settings.providerCard.bulkImportSync',
+                      'Bulk Import / Sync'
+                    )}
+                  </span>
                 </>
               )}
             </Button>
@@ -545,7 +564,7 @@ export const ProviderCard = ({
               size="sm"
               onClick={config.sync}
               disabled={loading}
-              title="Manual Sync"
+              title={t('settings.providerCard.manualSync', 'Manual Sync')}
             >
               <RefreshCw
                 className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`}
@@ -558,7 +577,7 @@ export const ProviderCard = ({
               onClick={config.connect}
               disabled={loading}
             >
-              Connect
+              {t('settings.providerCard.connect', 'Connect')}
             </Button>
           ) : null}
 
@@ -571,7 +590,7 @@ export const ProviderCard = ({
                   size="sm"
                   onClick={config.disconnect}
                   disabled={loading}
-                  title="Disconnect"
+                  title={t('settings.providerCard.disconnect', 'Disconnect')}
                 >
                   <Link2Off className="h-4 w-4" />
                 </Button>
@@ -595,7 +614,7 @@ export const ProviderCard = ({
             </>
           ) : (
             <div className="text-xs text-muted-foreground px-2 py-1 rounded">
-              Read-only
+              {t('settings.providerCard.readOnly', 'Read-only')}
             </div>
           )}
           {(isAdminMode ||
@@ -617,7 +636,7 @@ export const ProviderCard = ({
             ?.display_name || provider.provider_type}
           {provider.base_url && (
             <>
-              {' - URL: '}
+              {` - ${t('settings.providerCard.urlLabel', 'URL:')} `}
               <a
                 href={provider.base_url}
                 target="_blank"
@@ -636,7 +655,7 @@ export const ProviderCard = ({
               'free-exercise-db',
               'wger',
             ].includes(provider.provider_type) && (
-              <span>{` - App ID: ${
+              <span>{` - ${t('settings.providerCard.appIdLabel', 'App ID:')} ${
                 provider.provider_type === 'yazio'
                   ? (yazioDisplay.username || yazioDisplay.clientId).substring(
                       0,
@@ -654,27 +673,35 @@ export const ProviderCard = ({
               'fatsecret',
               'withings',
             ].includes(provider.provider_type) && (
-              <span>{` - App Key: ${provider.app_key.substring(0, 4)}...`}</span>
+              <span>{` - ${t('settings.providerCard.appKeyLabel', 'App Key:')} ${provider.app_key.substring(0, 4)}...`}</span>
             )}
           {provider.sync_frequency && (
-            <span>{` - Sync: ${provider.sync_frequency}`}</span>
+            <span>{` - ${t('settings.providerCard.syncLabel', 'Sync:')} ${provider.sync_frequency}`}</span>
           )}
         </p>
 
         {provider.provider_type === 'swissfood' && (
           <p className="text-xs text-muted-foreground mt-1.5 max-w-2xl leading-relaxed">
-            Supported languages: <strong>English (en)</strong>,{' '}
-            <strong>German (de)</strong>, <strong>French (fr)</strong>, and{' '}
-            <strong>Italian (it)</strong>. Defaults to English if your active
-            language is not supported.{' '}
-            <a
-              href="https://naehrwertdaten.ch/en/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:underline font-medium ml-1"
-            >
-              Swiss Food Composition Database
-            </a>
+            <Trans
+              i18nKey="settings.providerCard.supportedLanguagesEnglishEnGerman"
+              defaults={
+                'Supported languages: <strong>English (en)</strong>, <strong2>German (de)</strong2>, <strong3>French (fr)</strong3>, and <strong4>Italian (it)</strong4>. Defaults to English if your active language is not supported. <link>Swiss Food Composition Database</link>'
+              }
+              components={{
+                strong: <strong />,
+                strong2: <strong />,
+                strong3: <strong />,
+                strong4: <strong />,
+                link: (
+                  <a
+                    href="https://naehrwertdaten.ch/en/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline font-medium ml-1"
+                  />
+                ),
+              }}
+            />
           </p>
         )}
 
@@ -712,8 +739,11 @@ export const ProviderCard = ({
                 <div className="flex items-center justify-between text-xs font-medium">
                   <span className="flex items-center gap-1.5">
                     <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
-                    Importing catalog: {cnfStatus.processed} / {cnfStatus.total}{' '}
-                    foods
+                    {t(
+                      'settings.providerCard.importingCatalogFoods',
+                      'Importing catalog: {{processed}} / {{total}} foods',
+                      { processed: cnfStatus.processed, total: cnfStatus.total }
+                    )}
                   </span>
                   <span className="font-mono text-xs font-semibold">
                     {cnfStatus.progress}%
@@ -721,8 +751,18 @@ export const ProviderCard = ({
                 </div>
                 <Progress value={cnfStatus.progress} className="h-2" />
                 <div className="flex justify-between text-[11px] text-muted-foreground">
-                  <span>{cnfStatus.imported} imported</span>
-                  <span>{cnfStatus.updated} updated</span>
+                  <span>
+                    {t(
+                      'settings.providerCard.imported',
+                      '{{imported}} imported',
+                      { imported: cnfStatus.imported }
+                    )}
+                  </span>
+                  <span>
+                    {t('settings.providerCard.updated', '{{updated}} updated', {
+                      updated: cnfStatus.updated,
+                    })}
+                  </span>
                 </div>
               </div>
             )}
@@ -731,32 +771,43 @@ export const ProviderCard = ({
 
         {provider.provider_type === 'free-exercise-db' && (
           <p className="text-xs text-muted-foreground mt-1.5 max-w-2xl leading-relaxed">
-            Fetches exercise data directly from the community repository at{' '}
-            <a
-              href="https://github.com/yuhonas/free-exercise-db"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:underline font-medium"
-            >
-              yuhonas/free-exercise-db on GitHub
-            </a>
-            .
+            <Trans
+              i18nKey="settings.providerCard.fetchesExerciseDataDirectlyFrom2"
+              defaults={
+                'Fetches exercise data directly from the community repository at <link>yuhonas/free-exercise-db on GitHub</link>.'
+              }
+              components={{
+                link: (
+                  <a
+                    href="https://github.com/yuhonas/free-exercise-db"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline font-medium"
+                  />
+                ),
+              }}
+            />
           </p>
         )}
 
         {provider.provider_type === 'wger' && (
           <p className="text-xs text-muted-foreground mt-1.5 max-w-2xl leading-relaxed">
-            The wger provider is public, free, and requires no credentials. It
-            fetches workout and exercise data directly from the official{' '}
-            <a
-              href="https://wger.de/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-primary hover:underline font-medium"
-            >
-              wger Project Website
-            </a>
-            .
+            <Trans
+              i18nKey="settings.providerCard.theWgerProviderIsPublic2"
+              defaults={
+                'The wger provider is public, free, and requires no credentials. It fetches workout and exercise data directly from the official <link>wger Project Website</link>.'
+              }
+              components={{
+                link: (
+                  <a
+                    href="https://wger.de/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline font-medium"
+                  />
+                ),
+              }}
+            />
           </p>
         )}
 
@@ -765,16 +816,23 @@ export const ProviderCard = ({
           if (!portal) return null;
           return (
             <p className="text-xs text-muted-foreground mt-1.5 max-w-2xl leading-relaxed">
-              For more details or to manage your integration, visit the{' '}
-              <a
-                href={portal.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-primary hover:underline font-medium"
-              >
-                {portal.label}
-              </a>
-              .
+              <Trans
+                i18nKey="settings.providerCard.forMoreDetailsOrTo2"
+                defaults={
+                  'For more details or to manage your integration, visit the <link>{{label}}</link>.'
+                }
+                values={{ label: portal.label }}
+                components={{
+                  link: (
+                    <a
+                      href={portal.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-primary hover:underline font-medium"
+                    />
+                  ),
+                }}
+              />
             </p>
           );
         })()}
@@ -783,13 +841,19 @@ export const ProviderCard = ({
           <div className="text-sm text-muted-foreground">
             {config.lastSync && (
               <span>
-                Last Sync: {new Date(config.lastSync).toLocaleString()}
+                {t('settings.providerCard.lastSync2', 'Last Sync: {{value}}', {
+                  value: new Date(config.lastSync).toLocaleString(),
+                })}
               </span>
             )}
             {config.lastSync && config.tokenExpires && <span> | </span>}
             {config.tokenExpires && (
               <span>
-                Token Expires: {new Date(config.tokenExpires).toLocaleString()}
+                {t(
+                  'settings.providerCard.tokenExpires2',
+                  'Token Expires: {{value}}',
+                  { value: new Date(config.tokenExpires).toLocaleString() }
+                )}
               </span>
             )}
           </div>
@@ -815,28 +879,52 @@ export const ProviderCard = ({
         'coros_mcp',
       ].includes(provider.provider_type) && (
         <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-md p-2 text-xs text-yellow-800 dark:text-yellow-200 mt-2 flex items-center gap-1">
-          <strong>Note from CodewithCJ:</strong> I don't own{' '}
-          {provider.provider_name} device/subscription.
+          <Trans
+            i18nKey="settings.providerCard.noteFromCodewithCJIDon"
+            defaults={
+              "<strong>Note from CodewithCJ:</strong> I don't own {{provider_name}} device/subscription."
+            }
+            values={{ provider_name: provider.provider_name }}
+            components={{ strong: <strong /> }}
+          />
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="underline cursor-help decoration-dotted ml-1">
-                  How to improve this?
+                  {t(
+                    'settings.providerCard.howToImproveThis',
+                    'How to improve this?'
+                  )}
                 </span>
               </TooltipTrigger>
               <TooltipContent className="max-w-xs p-4">
                 <p>
-                  Help improve this integration by sharing anonymized mock data!
+                  {t(
+                    'settings.providerCard.helpImproveThisIntegrationBy',
+                    'Help improve this integration by sharing anonymized mock data!'
+                  )}
                 </p>
                 <p className="mt-2 text-xs">
-                  Enable <strong>Allow Local Provider Response Capture</strong>{' '}
-                  in <strong>Admin &gt; Global Provider Settings</strong>, then
-                  check <strong>Capture raw provider response</strong> in the
-                  Sync Range dialog.
+                  <Trans
+                    i18nKey="settings.providerCard.enableAllowLocalProviderResponse"
+                    defaults={
+                      'Enable <strong>Allow Local Provider Response Capture</strong> in <strong2>Admin > Global Provider Settings</strong2>, then check <strong3>Capture raw provider response</strong3> in the Sync Range dialog.'
+                    }
+                    components={{
+                      strong: <strong />,
+                      strong2: <strong />,
+                      strong3: <strong />,
+                    }}
+                  />
                 </p>
                 <p className="mt-2 text-xs">
-                  Share the exported diagnostic bundle with{' '}
-                  <strong>CodewithCJ</strong> on Discord.
+                  <Trans
+                    i18nKey="settings.providerCard.shareTheExportedDiagnosticBundle2"
+                    defaults={
+                      'Share the exported diagnostic bundle with <strong>CodewithCJ</strong> on Discord.'
+                    }
+                    components={{ strong: <strong /> }}
+                  />
                 </p>
               </TooltipContent>
             </Tooltip>

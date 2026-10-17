@@ -592,7 +592,7 @@ const DailyProgress = ({
               </div>
 
               {/* Detailed Burned Breakdown (Visible if data present) */}
-              {(exerciseSource !== 'none' || bmr) && (
+              {!!(exerciseSource !== 'none' || bmr) && (
                 <div className="text-center p-2 bg-primary/10 rounded-lg space-y-1">
                   <div className="text-sm font-medium text-primary">
                     {t(
@@ -711,8 +711,11 @@ const DailyProgress = ({
                         {t('exercise.dailyProgress.dataPoints', 'Data Points')}
                       </span>
                       <span className="font-semibold text-foreground">
-                        {adaptiveTdeeData.daysOfData || 0}{' '}
-                        {t('exercise.dailyProgress.days', 'days')}
+                        {t(
+                          'exercise.dailyProgress.days2',
+                          '{{daysOfData}} days',
+                          { daysOfData: adaptiveTdeeData.daysOfData || 0 }
+                        )}
                       </span>
                     </div>
                   </div>

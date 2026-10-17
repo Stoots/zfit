@@ -533,7 +533,7 @@ export default function WorkoutPlaybackIntervalHud({
 
             <div className="flex flex-wrap items-center justify-between gap-2 bg-muted/40 px-3.5 py-2.5 rounded-xl border border-border">
               <span className="text-xs font-semibold text-muted-foreground">
-                {t('interval.extraReps', 'Additional Reps')}:
+                {t('interval.additionalReps', 'Additional Reps:')}
               </span>
               <div className="flex items-center gap-1.5">
                 <Button

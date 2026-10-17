@@ -47,8 +47,11 @@ export const NutrientGrid = ({
                 className="flex items-center justify-between gap-3 border-b py-3"
               >
                 <Label className="text-sm">
-                  {t('nutrition.calories', 'Calories')} (
-                  {getEnergyUnitString(energyUnit)})
+                  {t(
+                    'diary.nutrientsGrid.calories2',
+                    'Calories ({{energyUnitString}})',
+                    { energyUnitString: getEnergyUnitString(energyUnit) }
+                  )}
                 </Label>
                 <div className="text-base font-medium tabular-nums">
                   {Math.round(
@@ -103,9 +106,13 @@ export const NutrientGrid = ({
       {baseVariant && (
         <div className="bg-muted p-4 rounded-lg mt-4">
           <h4 className="font-medium mb-2">
-            {t('diary.baseValues', 'Base values (per {{serving}})', {
-              serving: formatServingLabel(baseVariant),
-            })}
+            {t(
+              'diary.nutrientsGrid.baseValuesPer2',
+              'Base Values (per {{baseVariant}}):',
+              {
+                baseVariant: formatServingLabel(baseVariant),
+              }
+            )}
           </h4>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 text-sm">
             <div>

@@ -773,11 +773,12 @@ export const attachExerciseEntryDistanceSeriesRequestSchema = z
       .max(1000)
       .refine(
         (points) =>
-          points.every(
-            (point, i) =>
-              i === 0 ||
-              (point[0] >= points[i - 1]![0] && point[1] >= points[i - 1]![1]),
-          ),
+          points.every((point, i) => {
+            const previous = points[i - 1];
+            return (
+              !previous || (point[0] >= previous[0] && point[1] >= previous[1])
+            );
+          }),
         {
           message:
             "Active seconds and cumulative metres must not decrease from one row to the next.",

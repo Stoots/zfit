@@ -928,8 +928,10 @@ const EnhancedFoodSearch = ({
     setIsOnlineLoading(true);
 
     toast({
-      title: 'Searching barcode',
-      description: `Looking up: ${barcode}...`,
+      title: t('foodSearch.searchingBarcode', 'Searching barcode'),
+      description: t('foodSearch.lookingUp', 'Looking up: {{barcode}}...', {
+        barcode,
+      }),
     });
 
     try {
@@ -942,8 +944,13 @@ const EnhancedFoodSearch = ({
           onFoodSelect(data.food, 'food');
           setShowBarcodeScanner(false);
           toast({
-            title: 'Food found in database',
-            description: `Found: ${data.food.name}`,
+            title: t(
+              'foodSearch.foodFoundInDatabase',
+              'Food found in database'
+            ),
+            description: t('foodSearch.found', 'Found: {{name}}', {
+              name: data.food.name,
+            }),
           });
           return;
         }
@@ -965,21 +972,32 @@ const EnhancedFoodSearch = ({
         setScannedFood(mapped);
 
         toast({
-          title: 'Barcode scanned successfully',
-          description: `Found product: ${data.food.name}`,
+          title: t(
+            'foodSearch.barcodeScannedSuccessfully',
+            'Barcode scanned successfully'
+          ),
+          description: t('foodSearch.foundProduct', 'Found product: {{name}}', {
+            name: data.food.name,
+          }),
         });
       } else {
         setScannedFood(null);
         toast({
-          title: 'Product not found',
-          description: `No product found for this barcode using selected provider.`,
+          title: t('foodSearch.productNotFound', 'Product not found'),
+          description: t(
+            'foodSearch.noProductFoundForThis',
+            'No product found for this barcode using selected provider.'
+          ),
           variant: 'destructive',
         });
       }
     } catch {
       toast({
-        title: 'Error',
-        description: 'Failed to search barcode.',
+        title: t('common.error', 'Error'),
+        description: t(
+          'foodSearch.failedToSearchBarcode',
+          'Failed to search barcode.'
+        ),
         variant: 'destructive',
       });
     } finally {
@@ -995,13 +1013,20 @@ const EnhancedFoodSearch = ({
       setEditingProduct(null);
 
       toast({
-        title: 'Food added',
-        description: `${foodData.name} has been added and is ready to be added to your meal`,
+        title: t('foodSearch.foodAdded', 'Food added'),
+        description: t(
+          'foodSearch.hasBeenAddedAndIs',
+          '{{name}} has been added and is ready to be added to your meal',
+          { name: foodData.name }
+        ),
       });
     } catch (error) {
       toast({
-        title: 'Error',
-        description: 'Failed to process the edited food',
+        title: t('common.error', 'Error'),
+        description: t(
+          'foodSearch.failedToProcessTheEdited',
+          'Failed to process the edited food'
+        ),
         variant: 'destructive',
       });
     }
@@ -1031,8 +1056,11 @@ const EnhancedFoodSearch = ({
       setShowEditDialog(true);
     } else {
       toast({
-        title: 'Error',
-        description: 'Failed to retrieve detailed nutrition for this item.',
+        title: t('common.error', 'Error'),
+        description: t(
+          'foodSearch.failedToRetrieveDetailedNutrition',
+          'Failed to retrieve detailed nutrition for this item.'
+        ),
         variant: 'destructive',
       });
     }
@@ -1095,9 +1123,11 @@ const EnhancedFoodSearch = ({
         setShowEditDialog(true);
       } catch {
         toast({
-          title: 'Error',
-          description:
-            'Failed to retrieve detailed nutrition. Using partial data.',
+          title: t('common.error', 'Error'),
+          description: t(
+            'foodSearch.failedToRetrieveDetailedNutrition2',
+            'Failed to retrieve detailed nutrition. Using partial data.'
+          ),
           variant: 'destructive',
         });
         setEditingProduct(food);
@@ -1264,7 +1294,7 @@ const EnhancedFoodSearch = ({
             }
           >
             <SelectTrigger className="w-32">
-              <SelectValue placeholder="All" />
+              <SelectValue placeholder={t('foodSearch.all', 'All')} />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">

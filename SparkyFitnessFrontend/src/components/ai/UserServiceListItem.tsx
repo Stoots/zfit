@@ -141,7 +141,10 @@ export const UserServiceListItem = ({
                   variant="outline"
                   size="sm"
                   onClick={onStartEdit}
-                  aria-label="Edit Service"
+                  aria-label={t(
+                    'ai.userServiceListItem.editService',
+                    'Edit Service'
+                  )}
                 >
                   <Edit className="h-4 w-4" />
                 </Button>
@@ -150,7 +153,10 @@ export const UserServiceListItem = ({
                   size="sm"
                   onClick={onDelete}
                   disabled={loading}
-                  aria-label="Delete Service"
+                  aria-label={t(
+                    'ai.userServiceListItem.deleteService',
+                    'Delete Service'
+                  )}
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
