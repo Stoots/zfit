@@ -6,6 +6,7 @@ import type { WorkoutPreset } from '@/types/workout';
 import {
   buildPresetSessionCreateRequestFromDraft,
   createWorkoutPlaybackDraftFromPreset,
+  createWorkoutPlaybackRouteState,
   loadWorkoutPlaybackDraftFromStorage,
   saveWorkoutPlaybackDraftToStorage,
 } from '@/utils/workoutPlayback';
@@ -98,6 +99,260 @@ describe('WorkoutPlaybackPage', () => {
     window.localStorage.clear();
     mockLocationState = { returnTo: '/?date=2026-04-27' };
   });
+
+  it('starts the new exact Workout Session after a planned occurrence is rebound', () => {
+    const stored = createWorkoutPlaybackDraftFromPreset(
+      {
+        ...presetFixture,
+        workout_session_id: 'old-workout-session',
+        training_program: { program_id: 'program-1', session_id: 'planned-1' },
+      },
+      '2026-04-27'
+    );
+    stored.exercises[0]!.sets[0]!.weight = 92.5;
+    stored.load_adjustments_applied = true;
+    saveWorkoutPlaybackDraftToStorage(stored);
+    mockLocationState = createWorkoutPlaybackRouteState(
+      {
+        ...presetFixture,
+        workout_session_id: 'new-workout-session',
+        training_program: { program_id: 'program-1', session_id: 'planned-1' },
+      },
+      '2026-04-27'
+    );
+    render(<WorkoutPlaybackPage />);
+    expect(document.getElementById('set-weight-0-0')).toHaveValue(80);
+  });
+
+  it('blocks active edits and set logging across remount while recovery is pending', () => {
+    const stored = createWorkoutPlaybackDraftFromPreset(
+      { ...presetFixture, workout_session_id: 'old-workout-session' },
+      '2026-04-27'
+    );
+    stored.exercises[0]!.sets[0]!.weight = 92.5;
+    stored.exercises[0]!.sets[0]!.completed = true;
+    saveWorkoutPlaybackDraftToStorage(stored);
+    mockLocationState = createWorkoutPlaybackRouteState(
+      { ...presetFixture, workout_session_id: 'new-workout-session' },
+      '2026-04-27'
+    );
+    const view = render(<WorkoutPlaybackPage />);
+    const weight = document.getElementById('set-weight-0-0')!;
+    fireEvent.change(screen.getByLabelText('Gym / Location'), {
+      target: { value: 'Unsaved location' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Log set' }));
+    expect(screen.getByRole('button', { name: 'Log set' })).toBeDisabled();
+    expect(weight).toBeDisabled();
+    expect(weight).toHaveValue(80);
+    expect(screen.getByLabelText('Gym / Location')).toBeDisabled();
+    expect(screen.getByLabelText('Gym / Location')).toHaveValue('');
+    expect(screen.getByText('0/2')).toBeInTheDocument();
+    expect(screen.getByLabelText('Notes')).toBeDisabled();
+    expect(screen.getByLabelText('Start Time')).toBeDisabled();
+    expect(loadWorkoutPlaybackDraftFromStorage('2026-04-27')).toEqual(stored);
+    view.unmount();
+    render(<WorkoutPlaybackPage />);
+    expect(screen.getByRole('button', { name: 'Log set' })).toBeDisabled();
+    expect(document.getElementById('set-weight-0-0')).toHaveValue(80);
+    expect(
+      screen.getByText(/resolve the saved workout first/i)
+    ).toBeInTheDocument();
+    expect(loadWorkoutPlaybackDraftFromStorage('2026-04-27')).toEqual(stored);
+    expect(mockCreatePresetSession).not.toHaveBeenCalled();
+    expect(mockCompleteProgramSession).not.toHaveBeenCalled();
+  });
+
+  it.each(['save', 'discard'])(
+    'preserves an incompatible draft until explicit %s recovery',
+    async (action) => {
+      const stored = createWorkoutPlaybackDraftFromPreset(
+        {
+          ...presetFixture,
+          workout_session_id: 'old-workout-session',
+          training_program: {
+            program_id: 'program-1',
+            session_id: 'planned-1',
+          },
+        },
+        '2026-04-27'
+      );
+      stored.exercises[0]!.sets[0]!.weight = 92.5;
+      stored.exercises[0]!.sets[0]!.completed = true;
+      stored.exercises[0]!.workout_plan_assignment_id = 17;
+      saveWorkoutPlaybackDraftToStorage(stored);
+      mockLocationState = createWorkoutPlaybackRouteState(
+        {
+          ...presetFixture,
+          workout_session_id: 'new-workout-session',
+          training_program: {
+            program_id: 'program-1',
+            session_id: 'planned-1',
+          },
+        },
+        '2026-04-27'
+      );
+      mockCreatePresetSession.mockResolvedValue({
+        id: 'separate-1',
+        exercises: [],
+      });
+      render(<WorkoutPlaybackPage />);
+      expect(
+        screen.getByText(/Another workout draft is saved/)
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: 'Finish Workout' })
+      ).toBeDisabled();
+      expect(loadWorkoutPlaybackDraftFromStorage('2026-04-27')).toEqual(stored);
+      if (action === 'save') {
+        fireEvent.click(
+          screen.getByRole('button', { name: 'Save as a separate workout' })
+        );
+        await waitFor(() =>
+          expect(mockCreatePresetSession).toHaveBeenCalledWith(
+            expect.objectContaining({
+              workoutPlanAssignmentId: null,
+              exercises: [
+                expect.objectContaining({
+                  workout_plan_assignment_id: null,
+                  sets: [expect.objectContaining({ weight: 92.5 })],
+                }),
+              ],
+            })
+          )
+        );
+      } else {
+        fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
+        fireEvent.click(
+          screen.getAllByRole('button', { name: 'Discard' }).at(-1)!
+        );
+        expect(mockCreatePresetSession).not.toHaveBeenCalled();
+      }
+      await waitFor(() =>
+        expect(
+          screen.getByRole('button', { name: 'Finish Workout' })
+        ).toBeEnabled()
+      );
+      expect(
+        loadWorkoutPlaybackDraftFromStorage('2026-04-27')?.workout_session_id
+      ).toBe('new-workout-session');
+      expect(document.getElementById('set-weight-0-0')).toHaveValue(80);
+      expect(mockCompleteProgramSession).not.toHaveBeenCalled();
+      expect(document.getElementById('set-weight-0-0')).toBeEnabled();
+      fireEvent.click(screen.getByRole('button', { name: 'Log set' }));
+      expect(
+        loadWorkoutPlaybackDraftFromStorage('2026-04-27')?.exercises[0]?.sets[0]
+      ).toMatchObject({ completed: true, weight: 80 });
+    }
+  );
+
+  it('resumes logged Program sets when Start Workout is used again from the Dashboard', async () => {
+    const preset = {
+      ...presetFixture,
+      workout_session_id: 'workout-session-1',
+      training_program: { program_id: 'program-1', session_id: 'planned-1' },
+    };
+    mockLocationState = createWorkoutPlaybackRouteState(preset, '2026-04-27');
+    const view = render(<WorkoutPlaybackPage />);
+    fireEvent.change(document.getElementById('set-weight-0-0')!, {
+      target: { value: '92.5' },
+    });
+    fireEvent.blur(document.getElementById('set-weight-0-0')!);
+    fireEvent.click(screen.getByRole('button', { name: 'Log set' }));
+    await waitFor(() => {
+      expect(
+        loadWorkoutPlaybackDraftFromStorage('2026-04-27')?.exercises[0]?.sets[0]
+      ).toMatchObject({ completed: true, weight: 92.5 });
+    });
+    expect(mockCompleteProgramSession).not.toHaveBeenCalled();
+    expect(mockCreatePresetSession).not.toHaveBeenCalled();
+    view.unmount();
+    mockLocationState = createWorkoutPlaybackRouteState(preset, '2026-04-27');
+    render(<WorkoutPlaybackPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'Finish Workout' }));
+    await waitFor(() =>
+      expect(mockCompleteProgramSession).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: expect.objectContaining({
+            performed_exercises: [
+              expect.objectContaining({
+                exercise_id: 'exercise-1',
+                sets: [expect.objectContaining({ weight: 92.5 })],
+              }),
+            ],
+          }),
+        })
+      )
+    );
+  });
+
+  it('keeps a just-logged weighted set when the player closes before the save delay', () => {
+    mockLocationState = createWorkoutPlaybackRouteState(
+      {
+        ...presetFixture,
+        training_program: { program_id: 'program-1', session_id: 'planned-1' },
+      },
+      '2026-04-27'
+    );
+    const view = render(<WorkoutPlaybackPage />);
+    const weight = document.getElementById('set-weight-0-0')!;
+    fireEvent.change(weight, { target: { value: '92.5' } });
+    fireEvent.blur(weight);
+    fireEvent.click(screen.getByRole('button', { name: 'Log set' }));
+    view.unmount();
+    expect(
+      loadWorkoutPlaybackDraftFromStorage('2026-04-27')?.exercises[0]?.sets[0]
+    ).toMatchObject({ completed: true, weight: 92.5 });
+    expect(mockCompleteProgramSession).not.toHaveBeenCalled();
+  });
+
+  it('shows a warning when local draft persistence fails', () => {
+    mockLocationState = createWorkoutPlaybackRouteState(
+      presetFixture,
+      '2026-04-27'
+    );
+    const storage = jest
+      .spyOn(Storage.prototype, 'setItem')
+      .mockImplementation(() => {
+        throw new DOMException('Storage full', 'QuotaExceededError');
+      });
+    const log = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      render(<WorkoutPlaybackPage />);
+      expect(
+        screen.getByText(/Could not save your local workout progress/)
+      ).toBeInTheDocument();
+    } finally {
+      storage.mockRestore();
+      log.mockRestore();
+    }
+  });
+
+  it.each([
+    { program_id: 'program-1', session_id: 'planned-2' },
+    { program_id: 'program-2', session_id: 'planned-1' },
+    undefined,
+  ])(
+    'does not restore a different Program occurrence into %j',
+    (training_program) => {
+      const stored = createWorkoutPlaybackDraftFromPreset(
+        presetFixture,
+        '2026-04-27'
+      );
+      stored.training_program = {
+        program_id: 'program-1',
+        session_id: 'planned-1',
+      };
+      stored.exercises[0]!.sets[0]!.weight = 92.5;
+      saveWorkoutPlaybackDraftToStorage(stored);
+      mockLocationState = createWorkoutPlaybackRouteState(
+        { ...presetFixture, training_program },
+        '2026-04-27'
+      );
+      render(<WorkoutPlaybackPage />);
+      expect(document.getElementById('set-weight-0-0')).toHaveValue(80);
+    }
+  );
 
   it('finishes a Program draft through one atomic completion request', async () => {
     const draft = createWorkoutPlaybackDraftFromPreset(
@@ -262,56 +517,65 @@ describe('WorkoutPlaybackPage', () => {
     ).not.toBeInTheDocument();
   });
 
-  it('keeps a failed Program draft for an idempotent retry and blocks double submission', async () => {
-    const draft = createWorkoutPlaybackDraftFromPreset(
-      presetFixture,
-      '2026-04-27'
-    );
-    draft.training_program = {
-      program_id: 'program-1',
-      session_id: 'planned-1',
-    };
-    draft.exercises[0]!.workout_plan_assignment_id = 17;
-    mockLocationState = { returnTo: '/?date=2026-04-27', draft };
-    let rejectFirst!: (reason: Error) => void;
-    mockCompleteProgramSession.mockImplementationOnce(
-      () =>
-        new Promise((_, reject) => {
-          rejectFirst = reject;
-        })
-    );
-    mockCompleteProgramSession.mockResolvedValueOnce({
-      phases: [
-        {
-          weeks: [
-            {
-              sessions: [
-                { id: 'planned-1', completed_workout: { id: 'diary-1' } },
-              ],
-            },
-          ],
-        },
-      ],
-    });
-    render(<WorkoutPlaybackPage />);
-    fireEvent.click(screen.getByRole('button', { name: 'Log set' }));
-    await waitFor(() =>
-      expect(loadWorkoutPlaybackDraftFromStorage('2026-04-27')).not.toBeNull()
-    );
-    fireEvent.click(screen.getByRole('button', { name: 'Finish Workout' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Finish Workout' }));
-    expect(mockCompleteProgramSession).toHaveBeenCalledTimes(1);
-    rejectFirst(new Error('uncertain response'));
-    await waitFor(() =>
-      expect(screen.getByText(/Failed to save workout/)).toBeInTheDocument()
-    );
-    expect(loadWorkoutPlaybackDraftFromStorage('2026-04-27')).not.toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Finish Workout' }));
-    await waitFor(() =>
-      expect(mockCompleteProgramSession).toHaveBeenCalledTimes(2)
-    );
-    expect(mockCreatePresetSession).not.toHaveBeenCalled();
-  });
+  it.each([
+    new Error('uncertain response'),
+    new HttpApiError(
+      'Workout changed while it was being saved. Reload the diary and retry.',
+      409
+    ),
+  ])(
+    'keeps a failed Program draft for an idempotent retry and blocks double submission (%s)',
+    async (failure) => {
+      const draft = createWorkoutPlaybackDraftFromPreset(
+        presetFixture,
+        '2026-04-27'
+      );
+      draft.training_program = {
+        program_id: 'program-1',
+        session_id: 'planned-1',
+      };
+      draft.exercises[0]!.workout_plan_assignment_id = 17;
+      mockLocationState = { returnTo: '/?date=2026-04-27', draft };
+      let rejectFirst!: (reason: Error) => void;
+      mockCompleteProgramSession.mockImplementationOnce(
+        () =>
+          new Promise((_, reject) => {
+            rejectFirst = reject;
+          })
+      );
+      mockCompleteProgramSession.mockResolvedValueOnce({
+        phases: [
+          {
+            weeks: [
+              {
+                sessions: [
+                  { id: 'planned-1', completed_workout: { id: 'diary-1' } },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+      render(<WorkoutPlaybackPage />);
+      fireEvent.click(screen.getByRole('button', { name: 'Log set' }));
+      await waitFor(() =>
+        expect(loadWorkoutPlaybackDraftFromStorage('2026-04-27')).not.toBeNull()
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Finish Workout' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Finish Workout' }));
+      expect(mockCompleteProgramSession).toHaveBeenCalledTimes(1);
+      rejectFirst(failure);
+      await waitFor(() =>
+        expect(screen.getByText(/Failed to save workout/)).toBeInTheDocument()
+      );
+      expect(loadWorkoutPlaybackDraftFromStorage('2026-04-27')).not.toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Finish Workout' }));
+      await waitFor(() =>
+        expect(mockCompleteProgramSession).toHaveBeenCalledTimes(2)
+      );
+      expect(mockCreatePresetSession).not.toHaveBeenCalled();
+    }
+  );
 
   it('keeps a conflicting Program draft and offers a separate unlinked save or discard', async () => {
     const draft = createWorkoutPlaybackDraftFromPreset(
