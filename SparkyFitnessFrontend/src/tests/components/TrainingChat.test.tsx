@@ -4,10 +4,12 @@ import { useState } from 'react';
 import type { UIMessage } from 'ai';
 
 const mockToast = jest.fn();
+let mockHistory: Array<{ id: string; content: string; isUser: boolean }> = [];
 let mockOnError: (error: Error) => void;
 
 let mockTransport: {
   prepareSendMessagesRequest: (options: {
+    trigger: 'submit-message' | 'regenerate-message';
     messages: UIMessage[];
     body: object;
   }) => Promise<{ body: Record<string, unknown> }>;
@@ -39,6 +41,7 @@ jest.mock('@/components/thread', () => ({
                   ],
                 },
               ],
+              trigger: 'submit-message',
               body: {},
             });
             const response = await global.fetch('/api/chat/stream', {
@@ -63,7 +66,7 @@ jest.mock('@/hooks/AI/useAIServiceSettings', () => ({
 }));
 jest.mock('@/hooks/AI/useSparkyChat', () => ({
   useChatPreferencesQuery: () => ({ data: {} }),
-  useChatHistoryQuery: () => ({ data: [] }),
+  useChatHistoryQuery: () => ({ data: mockHistory }),
 }));
 jest.mock('@/hooks/useInvalidateKeys', () => ({
   useDiaryInvalidation: () => jest.fn(),
@@ -98,6 +101,11 @@ jest.mock('react-i18next', () => ({
   }),
 }));
 import SparkyChatInterface from '@/pages/Chat/SparkyChatInterface';
+
+beforeEach(() => {
+  mockHistory = [];
+  mockToast.mockClear();
+});
 
 it('asks in read-only training mode and displays the answer with explicitly selected disclosure scope', async () => {
   const fetchMock = jest.fn().mockResolvedValue({
@@ -169,6 +177,7 @@ it('retains the failed question disclosure even after the next-question controls
   });
   const original = await mockTransport.prepareSendMessagesRequest({
     messages: [question],
+    trigger: 'submit-message',
     body: {},
   });
   expect(original.body['trainingAnalysis']).toMatchObject({
@@ -186,6 +195,7 @@ it('retains the failed question disclosure even after the next-question controls
   fireEvent.click(screen.getByLabelText('Training analysis (read-only)'));
   const retried = await mockTransport.prepareSendMessagesRequest({
     messages: [question],
+    trigger: 'regenerate-message',
     body: {},
   });
   expect(retried.body['trainingAnalysis']).toEqual(
@@ -198,17 +208,114 @@ it('does not opt an ordinary failed question into Training analysis on retry', a
   render(<SparkyChatInterface />);
   await mockTransport.prepareSendMessagesRequest({
     messages: [question],
+    trigger: 'submit-message',
     body: {},
   });
   fireEvent.click(screen.getByLabelText('Training analysis (read-only)'));
   const retried = await mockTransport.prepareSendMessagesRequest({
     messages: [question],
+    trigger: 'regenerate-message',
     body: {},
   });
   expect(retried.body['trainingAnalysis']).toBeUndefined();
   const next = await mockTransport.prepareSendMessagesRequest({
     messages: [question, { ...question, id: 'next-question' }],
+    trigger: 'submit-message',
     body: {},
   });
   expect(next.body['trainingAnalysis']).toMatchObject({ programs: true });
+});
+
+it.each([false, true])(
+  'restored question never inherits next-question analysis (original analysis: %s)',
+  async (originalAnalysis) => {
+    const mounted = render(<SparkyChatInterface />);
+    if (originalAnalysis) {
+      fireEvent.click(screen.getByLabelText('Training analysis (read-only)'));
+      fireEvent.change(screen.getByLabelText('chat.trainingAnalysis.program'), {
+        target: { value: '11111111-1111-4111-8111-111111111111' },
+      });
+    }
+    await mockTransport.prepareSendMessagesRequest({
+      messages: [question],
+      trigger: 'submit-message',
+      body: {},
+    });
+    mounted.unmount();
+    mockHistory = [
+      {
+        id: question.id,
+        content: 'Summarize my training program',
+        isUser: true,
+      },
+      { id: 'saved-answer', content: 'Saved answer', isUser: false },
+    ];
+    render(<SparkyChatInterface />);
+    fireEvent.click(screen.getByLabelText('Training analysis (read-only)'));
+    const regenerated = await mockTransport.prepareSendMessagesRequest({
+      messages: [question],
+      trigger: 'regenerate-message',
+      body: {},
+    });
+    expect(regenerated.body['trainingAnalysis']).toBeUndefined();
+    expect(regenerated.body['messages']).toEqual([question]);
+    expect(mockToast).toHaveBeenLastCalledWith({
+      description: 'chat.trainingAnalysis.newQuestionRequired',
+    });
+    const retry = await mockTransport.prepareSendMessagesRequest({
+      messages: [question],
+      trigger: 'regenerate-message',
+      body: {},
+    });
+    expect(retry.body['trainingAnalysis']).toBeUndefined();
+    fireEvent.click(screen.getByLabelText('Training analysis (read-only)'));
+    mockToast.mockClear();
+    const ordinary = await mockTransport.prepareSendMessagesRequest({
+      messages: [question],
+      trigger: 'regenerate-message',
+      body: {},
+    });
+    expect(ordinary.body['trainingAnalysis']).toBeUndefined();
+    expect(mockToast).not.toHaveBeenCalled();
+  }
+);
+
+it('evicts the oldest scope after 50 questions and retries it without analysis', async () => {
+  render(<SparkyChatInterface />);
+  fireEvent.click(screen.getByLabelText('Training analysis (read-only)'));
+  for (let index = 0; index < 51; index++) {
+    await mockTransport.prepareSendMessagesRequest({
+      messages: [{ ...question, id: `question-${index}` }],
+      trigger: 'submit-message',
+      body: {},
+    });
+  }
+  fireEvent.click(screen.getByLabelText('chat.trainingAnalysis.ramp'));
+  const retained = await mockTransport.prepareSendMessagesRequest({
+    messages: [{ ...question, id: 'question-1' }],
+    trigger: 'regenerate-message',
+    body: {},
+  });
+  expect(retained.body['trainingAnalysis']).toMatchObject({ test_types: [] });
+  mockToast.mockClear();
+  for (let retry = 0; retry < 2; retry++) {
+    const evicted = await mockTransport.prepareSendMessagesRequest({
+      messages: [{ ...question, id: 'question-0' }],
+      trigger: 'regenerate-message',
+      body: {},
+    });
+    expect(evicted.body['trainingAnalysis']).toBeUndefined();
+    expect(evicted.body['messages']).toEqual([
+      { ...question, id: 'question-0' },
+    ]);
+    expect(mockToast).toHaveBeenLastCalledWith({
+      description: 'chat.trainingAnalysis.newQuestionRequired',
+    });
+  }
+  const next = await mockTransport.prepareSendMessagesRequest({
+    messages: [{ ...question, id: 'question-51' }],
+    trigger: 'submit-message',
+    body: {},
+  });
+  expect(next.body['trainingAnalysis']).toMatchObject({ test_types: ['ramp'] });
 });

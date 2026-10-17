@@ -129,6 +129,7 @@ const SparkyChatInner = ({
       },
       prepareSendMessagesRequest: async (options: {
         id: string;
+        trigger: 'submit-message' | 'regenerate-message';
         messages: UIMessage[];
         requestMetadata: unknown;
         body: Record<string, unknown> | undefined;
@@ -164,11 +165,26 @@ const SparkyChatInner = ({
           .reverse()
           .find((message) => message.role === 'user');
         // Reload reuses the question ID; later control edits belong to the next question.
-        if (question && !questionScopes.has(question.id)) {
+        if (
+          question &&
+          !questionScopes.has(question.id) &&
+          options.trigger === 'submit-message' &&
+          options.messages.at(-1)?.role === 'user' &&
+          !history.some((message) => message.id === question.id)
+        ) {
           questionScopes.set(
             question.id,
             analysisEnabled ? structuredClone(analysisScope) : undefined
           );
+          if (questionScopes.size > 50) {
+            const oldest = questionScopes.keys().next().value;
+            if (oldest !== undefined) questionScopes.delete(oldest);
+          }
+        }
+        if (question && !questionScopes.has(question.id) && analysisEnabled) {
+          toast({
+            description: t('chat.trainingAnalysis.newQuestionRequired'),
+          });
         }
         const analysis = question ? questionScopes.get(question.id) : undefined;
         if (
