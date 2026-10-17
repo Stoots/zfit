@@ -73,6 +73,7 @@ Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded her
 #### Bug fixes
 
 - Preview upcoming web dashboard Workout Sessions before starting, with exact prescriptions, occurrence context, accessible phone-sized dialogs, and Cardio Test protocol previews; retain short carry distances and frozen workout formats/time caps (#67).
+- Put daily weight entry and Save before the trend chart on web Check-In, keeping the selected date, preferred units and complete measurement form (#63).
 - Show four pending Program workouts on the web dashboard and refresh the queue immediately after completing or linking any occurrence, preserving earlier unfinished sessions and completed outcomes when mutation responses arrive out of order (#49).
 - Restore hidden CSV exercises in place on re-import, counting them as updated while preserving separate-copy imports for hidden manual exercises (#21).
 
