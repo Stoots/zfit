@@ -150,6 +150,7 @@ describe('workoutPlayback utils', () => {
     const routeState = createWorkoutPlaybackRouteState(
       createPresetFixture(),
       '2026-04-27',
+      { userId: 'user-1', activeUserId: 'user-1' },
       '/diary'
     );
 
@@ -197,6 +198,7 @@ describe('workoutPlayback utils', () => {
     const routeState = createWorkoutPlaybackRouteStateFromExercise(
       exercise,
       '2026-04-27',
+      { userId: 'user-1', activeUserId: 'user-1' },
       '/diary'
     );
 
@@ -205,28 +207,93 @@ describe('workoutPlayback utils', () => {
     expect(routeState.draft?.exercises[0]?.exercise_id).toBe('ex-123');
   });
 
+  it('isolates drafts by signed-in account and acting profile, including deletion', () => {
+    const alice = { userId: 'alice', activeUserId: 'alice' };
+    const family = { userId: 'alice', activeUserId: 'family' };
+    const bob = { userId: 'bob', activeUserId: 'family' };
+    const draft = createWorkoutPlaybackDraftFromPreset(
+      createPresetFixture(),
+      '2026-04-27'
+    );
+    saveWorkoutPlaybackDraftToStorage(draft, alice);
+    expect(
+      loadWorkoutPlaybackDraftFromStorage('2026-04-27', family)
+    ).toBeNull();
+    expect(loadWorkoutPlaybackDraftFromStorage('2026-04-27', bob)).toBeNull();
+    saveWorkoutPlaybackDraftToStorage(
+      { ...draft, name: 'Family workout' },
+      family
+    );
+    saveWorkoutPlaybackDraftToStorage({ ...draft, name: 'Bob workout' }, bob);
+    clearWorkoutPlaybackDraftFromStorage('2026-04-27', family);
+    expect(loadWorkoutPlaybackDraftFromStorage('2026-04-27', alice)?.name).toBe(
+      draft.name
+    );
+    expect(
+      loadWorkoutPlaybackDraftFromStorage('2026-04-27', family)
+    ).toBeNull();
+    expect(loadWorkoutPlaybackDraftFromStorage('2026-04-27', bob)?.name).toBe(
+      'Bob workout'
+    );
+  });
+
+  it('drops legacy drafts instead of guessing their owner', () => {
+    const draft = createWorkoutPlaybackDraftFromPreset(
+      createPresetFixture(),
+      '2026-04-27'
+    );
+    window.localStorage.setItem(
+      'sparky.workoutPlaybackDraft.v1:2026-04-27',
+      JSON.stringify(draft)
+    );
+    expect(
+      loadWorkoutPlaybackDraftFromStorage('2026-04-27', {
+        userId: 'bob',
+        activeUserId: 'bob',
+      })
+    ).toBeNull();
+    expect(
+      window.localStorage.getItem('sparky.workoutPlaybackDraft.v1:2026-04-27')
+    ).toBeNull();
+  });
+
   it('saves, loads, and clears a persisted draft by date', () => {
     const draft = createWorkoutPlaybackDraftFromPreset(
       createPresetFixture(),
       '2026-04-27'
     );
 
-    saveWorkoutPlaybackDraftToStorage(draft);
+    saveWorkoutPlaybackDraftToStorage(draft, {
+      userId: 'u1',
+      activeUserId: 'u1',
+    });
     expect(
       window.localStorage.getItem(
-        getWorkoutPlaybackDraftStorageKey('2026-04-27')
+        getWorkoutPlaybackDraftStorageKey('2026-04-27', {
+          userId: 'u1',
+          activeUserId: 'u1',
+        })
       )
     ).not.toBeNull();
 
-    const restored = loadWorkoutPlaybackDraftFromStorage('2026-04-27');
+    const restored = loadWorkoutPlaybackDraftFromStorage('2026-04-27', {
+      userId: 'u1',
+      activeUserId: 'u1',
+    });
 
     expect(restored?.preset_id).toBe('preset-1');
     expect(restored?.entry_date).toBe('2026-04-27');
 
-    clearWorkoutPlaybackDraftFromStorage('2026-04-27');
+    clearWorkoutPlaybackDraftFromStorage('2026-04-27', {
+      userId: 'u1',
+      activeUserId: 'u1',
+    });
     expect(
       window.localStorage.getItem(
-        getWorkoutPlaybackDraftStorageKey('2026-04-27')
+        getWorkoutPlaybackDraftStorageKey('2026-04-27', {
+          userId: 'u1',
+          activeUserId: 'u1',
+        })
       )
     ).toBeNull();
   });

@@ -1,3 +1,4 @@
+import { useAuth } from '@/hooks/useAuth';
 import {
   lazy,
   Suspense,
@@ -48,6 +49,7 @@ import {
   setWorkoutPlaybackRestTimer,
   toggleWorkoutSetCompletion,
   type WorkoutPlaybackRouteState,
+  type WorkoutPlaybackIdentity,
   type WorkoutPlaybackDraft,
   type WorkoutSetEditableField,
   type WorkoutSetPointer,
@@ -114,7 +116,8 @@ function clampRestSeconds(seconds: number): number {
 
 function getInitialDraft(
   requestedDate: string | null,
-  routeState: WorkoutPlaybackRouteState | null
+  routeState: WorkoutPlaybackRouteState | null,
+  identity: WorkoutPlaybackIdentity
 ): {
   draft: WorkoutPlaybackDraft | null;
   recoveryDraft: WorkoutPlaybackDraft | null;
@@ -126,7 +129,8 @@ function getInitialDraft(
     }
 
     const stored = loadWorkoutPlaybackDraftFromStorage(
-      existingDraft.entry_date
+      existingDraft.entry_date,
+      identity
     );
     // Starting the same Planned Session again must resume the lifter's edits.
     if (
@@ -150,7 +154,7 @@ function getInitialDraft(
   }
 
   return {
-    draft: loadWorkoutPlaybackDraftFromStorage(requestedDate),
+    draft: loadWorkoutPlaybackDraftFromStorage(requestedDate, identity),
     recoveryDraft: null,
   };
 }
@@ -198,20 +202,48 @@ function startRestTimer(
 }
 
 const WorkoutPlaybackPage = () => {
+  const { user } = useAuth();
+  const location = useLocation();
+  const identityKey = JSON.stringify([
+    user?.id,
+    user?.activeUserId || user?.id,
+  ]);
+  const routeIdentity = (location.state as WorkoutPlaybackRouteState | null)
+    ?.identity;
+  if (!user) return null;
+  return (
+    <WorkoutPlaybackSession
+      key={identityKey}
+      identity={{ userId: user.id, activeUserId: user.activeUserId || user.id }}
+      routeState={
+        routeIdentity?.userId === user.id &&
+        routeIdentity.activeUserId === (user.activeUserId || user.id)
+          ? (location.state as WorkoutPlaybackRouteState | null)
+          : null
+      }
+    />
+  );
+};
+
+const WorkoutPlaybackSession = ({
+  identity,
+  routeState,
+}: {
+  identity: WorkoutPlaybackIdentity;
+  routeState: WorkoutPlaybackRouteState | null;
+}) => {
   const { t } = useTranslation();
   const { weightUnit, timezone } = usePreferences();
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const requestedDate = searchParams.get('date');
-  const routeState =
-    (location.state as WorkoutPlaybackRouteState | null) ?? null;
   const returnPath = getReturnPath(requestedDate, routeState);
 
   const scrubbedRouteStateRef = useRef(false);
   const persistedDraftDateRef = useRef<string | null>(null);
   const [initialDraft] = useState(() =>
-    getInitialDraft(requestedDate, routeState)
+    getInitialDraft(requestedDate, routeState, identity)
   );
   const [draft, setDraft] = useState(initialDraft.draft);
   const [recoveryDraft, setRecoveryDraft] = useState(
@@ -509,12 +541,13 @@ const WorkoutPlaybackPage = () => {
     navigate(`${location.pathname}${location.search}`, {
       replace: true,
       state: routeState.returnTo
-        ? { returnTo: routeState.returnTo }
+        ? { returnTo: routeState.returnTo, identity }
         : undefined,
     });
   }, [
     location.pathname,
     location.search,
+    identity,
     navigate,
     routeState,
     routeState?.draft,
@@ -525,7 +558,10 @@ const WorkoutPlaybackPage = () => {
     if (recoveryDraft) return;
     if (!draft) {
       if (persistedDraftDateRef.current) {
-        clearWorkoutPlaybackDraftFromStorage(persistedDraftDateRef.current);
+        clearWorkoutPlaybackDraftFromStorage(
+          persistedDraftDateRef.current,
+          identity
+        );
         persistedDraftDateRef.current = null;
       }
       return;
@@ -535,12 +571,15 @@ const WorkoutPlaybackPage = () => {
       persistedDraftDateRef.current &&
       persistedDraftDateRef.current !== draft.entry_date
     ) {
-      clearWorkoutPlaybackDraftFromStorage(persistedDraftDateRef.current);
+      clearWorkoutPlaybackDraftFromStorage(
+        persistedDraftDateRef.current,
+        identity
+      );
     }
 
-    setDraftStorageFailed(!saveWorkoutPlaybackDraftToStorage(draft));
+    setDraftStorageFailed(!saveWorkoutPlaybackDraftToStorage(draft, identity));
     persistedDraftDateRef.current = draft.entry_date;
-  }, [draft, recoveryDraft]);
+  }, [draft, recoveryDraft, identity]);
 
   useEffect(() => {
     draftRef.current = draft;
@@ -1037,20 +1076,20 @@ const WorkoutPlaybackPage = () => {
 
   const handleConfirmDiscard = useCallback(() => {
     if (recoveryDraft) {
-      clearWorkoutPlaybackDraftFromStorage(recoveryDraft.entry_date);
+      clearWorkoutPlaybackDraftFromStorage(recoveryDraft.entry_date, identity);
       setRecoveryDraft(null);
       setSaveError(null);
       setIsDiscardDialogOpen(false);
       return;
     }
     if (draft) {
-      clearWorkoutPlaybackDraftFromStorage(draft.entry_date);
+      clearWorkoutPlaybackDraftFromStorage(draft.entry_date, identity);
     }
     setDraft(null);
     setSaveError(null);
     setIsDiscardDialogOpen(false);
     navigate(returnPath);
-  }, [draft, recoveryDraft, navigate, returnPath]);
+  }, [draft, recoveryDraft, navigate, returnPath, identity]);
 
   const handleFinishWorkout = useCallback(
     async (saveSeparately = false) => {
@@ -1098,7 +1137,10 @@ const WorkoutPlaybackPage = () => {
           : null;
         const saved = program ? null : await createPresetSession(payload);
         if (recoveryDraft) {
-          clearWorkoutPlaybackDraftFromStorage(recoveryDraft.entry_date);
+          clearWorkoutPlaybackDraftFromStorage(
+            recoveryDraft.entry_date,
+            identity
+          );
           setRecoveryDraft(null);
           setSaveError(null);
           return;
@@ -1113,7 +1155,7 @@ const WorkoutPlaybackPage = () => {
           ? await getGroupedWorkoutSession(programWorkout.id).catch(() => null)
           : saved;
         const finalStats = getWorkoutPlaybackStats(draft);
-        clearWorkoutPlaybackDraftFromStorage(draft.entry_date);
+        clearWorkoutPlaybackDraftFromStorage(draft.entry_date, identity);
         // The summary stays up over the cleared player; closing it returns to
         // the diary the way finishing always has.
         setFinishSummary({
@@ -1179,6 +1221,7 @@ const WorkoutPlaybackPage = () => {
     },
     [
       completeProgramSession,
+      identity,
       requiresSeparateSave,
       recoveryDraft,
       createPresetSession,

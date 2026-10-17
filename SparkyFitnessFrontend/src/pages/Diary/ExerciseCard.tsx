@@ -182,6 +182,7 @@ const ExerciseCard = ({
     targetPlan: WorkoutPlanTemplate,
     session: WorkoutPlanSession
   ) => {
+    if (!user) return;
     const sessionId = session.id;
     setStartingSession(sessionId);
     try {
@@ -212,6 +213,7 @@ const ExerciseCard = ({
         state: createWorkoutPlaybackRouteState(
           preset,
           selectedDate,
+          { userId: user.id, activeUserId: user.activeUserId || user.id },
           `${window.location.pathname}${window.location.search}`
         ),
       });
@@ -372,6 +374,7 @@ const ExerciseCard = ({
     }
 
     if (addDialogIntent === 'playback') {
+      if (!user) return;
       debug(
         loggingLevel,
         `Exercise selected for workout playback from ${sourceMode}:`,
@@ -380,6 +383,7 @@ const ExerciseCard = ({
       const routeState = createWorkoutPlaybackRouteStateFromExercise(
         exercise,
         selectedDate,
+        { userId: user.id, activeUserId: user.activeUserId || user.id },
         `${window.location.pathname}${window.location.search}`
       );
 
@@ -411,10 +415,12 @@ const ExerciseCard = ({
   };
 
   const handleWorkoutPresetSelected = (preset: WorkoutPreset) => {
+    if (!user) return;
     debug(loggingLevel, 'Workout preset selected in ExerciseCard:', preset);
     const routeState = createWorkoutPlaybackRouteState(
       preset,
       selectedDate,
+      { userId: user.id, activeUserId: user.activeUserId || user.id },
       `${window.location.pathname}${window.location.search}`
     );
 

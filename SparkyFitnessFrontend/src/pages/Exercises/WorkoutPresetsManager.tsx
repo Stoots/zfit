@@ -247,6 +247,7 @@ const WorkoutPresetsManager = () => {
 
   const handleStartWorkoutPlayback = React.useCallback(
     (preset: WorkoutPreset) => {
+      if (!user) return;
       if (!preset.exercises || preset.exercises.length === 0) {
         toast({
           title: t('common.error', 'Error'),
@@ -262,6 +263,7 @@ const WorkoutPresetsManager = () => {
       const routeState = createWorkoutPlaybackRouteState(
         preset,
         today,
+        { userId: user.id, activeUserId: user.activeUserId || user.id },
         `${location.pathname}${location.search}`
       );
 
@@ -269,7 +271,7 @@ const WorkoutPresetsManager = () => {
         state: routeState,
       });
     },
-    [location.pathname, location.search, navigate, t]
+    [location.pathname, location.search, navigate, t, user]
   );
 
   const columns = React.useMemo<ColumnDef<DataTableFeatures, WorkoutPreset>[]>(

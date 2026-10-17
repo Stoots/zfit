@@ -1,3 +1,4 @@
+import { clearWorkoutPlaybackDraftsForUser } from '@/utils/workoutPlayback';
 import React, {
   createContext,
   useContext,
@@ -241,6 +242,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
               return;
             }
             console.log('[Auth Hook] No session found, clearing user state.');
+            clearWorkoutPlaybackDraftsForUser(probedUserId);
             setUser(null);
             identityLookupRef.current = null;
             clearDemoRestrictions();
@@ -270,6 +272,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
   }, []);
 
   const signOut = useCallback(async () => {
+    const signingOutUserId = currentUserRef.current?.id;
     try {
       const { error } = await authClient.signOut();
       if (error) {
@@ -278,6 +281,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
     } catch (err) {
       console.error('[Auth Hook] SignOut unexpected error:', err);
     }
+    if (signingOutUserId) clearWorkoutPlaybackDraftsForUser(signingOutUserId);
     setUser(null);
     identityLookupRef.current = null;
     clearDemoRestrictions();

@@ -1,3 +1,9 @@
+import {
+  createWorkoutPlaybackDraftFromExercise,
+  saveWorkoutPlaybackDraftToStorage,
+  loadWorkoutPlaybackDraftFromStorage,
+} from '@/utils/workoutPlayback';
+import type { Exercise } from '@/types/exercises';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { AuthProvider, useAuth } from '@/hooks/useAuth';
 import { fetchIdentityUser } from '@/api/Auth/auth';
@@ -46,6 +52,31 @@ describe('AuthProvider demo status resolution', () => {
       fullName: 'Real User',
       isDemo: false,
     });
+  });
+
+  it('clears every acting-profile draft for the account on sign-out', async () => {
+    const { result } = renderProvider();
+    act(() =>
+      result.current.signIn('u1', 'family', 'real@example.com', 'user', false)
+    );
+    const draft = createWorkoutPlaybackDraftFromExercise(
+      { id: 'ex1', name: 'Walk' } as Exercise,
+      '2026-04-27'
+    );
+    const own = { userId: 'u1', activeUserId: 'u1' };
+    const family = { userId: 'u1', activeUserId: 'family' };
+    const other = { userId: 'u2', activeUserId: 'u2' };
+    saveWorkoutPlaybackDraftToStorage(draft, own);
+    saveWorkoutPlaybackDraftToStorage(draft, family);
+    saveWorkoutPlaybackDraftToStorage(draft, other);
+    await act(() => result.current.signOut());
+    expect(loadWorkoutPlaybackDraftFromStorage('2026-04-27', own)).toBeNull();
+    expect(
+      loadWorkoutPlaybackDraftFromStorage('2026-04-27', family)
+    ).toBeNull();
+    expect(
+      loadWorkoutPlaybackDraftFromStorage('2026-04-27', other)
+    ).not.toBeNull();
   });
 
   // The manual signIn writes the same id with both MFA flags false, so for an

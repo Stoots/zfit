@@ -7,9 +7,19 @@ import {
   buildPresetSessionCreateRequestFromDraft,
   createWorkoutPlaybackDraftFromPreset,
   createWorkoutPlaybackRouteState,
-  loadWorkoutPlaybackDraftFromStorage,
-  saveWorkoutPlaybackDraftToStorage,
+  loadWorkoutPlaybackDraftFromStorage as loadStoredDraft,
+  saveWorkoutPlaybackDraftToStorage as saveStoredDraft,
 } from '@/utils/workoutPlayback';
+
+let mockUser = { id: 'user-1', activeUserId: 'user-1' };
+jest.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ user: mockUser }) }));
+
+const storageIdentity = { userId: 'user-1', activeUserId: 'user-1' };
+const loadWorkoutPlaybackDraftFromStorage = (date: string) =>
+  loadStoredDraft(date, storageIdentity);
+const saveWorkoutPlaybackDraftToStorage = (
+  draft: Parameters<typeof saveStoredDraft>[0]
+) => saveStoredDraft(draft, storageIdentity);
 
 const mockNavigate = jest.fn();
 const mockCreatePresetSession = jest.fn();
@@ -25,7 +35,14 @@ jest.mock('react-i18next', () =>
 
 jest.mock('react-router-dom', () => ({
   useNavigate: () => mockNavigate,
-  useLocation: () => ({ state: mockLocationState }),
+  useLocation: () => ({
+    state: mockLocationState
+      ? {
+          identity: { userId: 'user-1', activeUserId: 'user-1' },
+          ...mockLocationState,
+        }
+      : null,
+  }),
   useSearchParams: () => [mockSearchParams],
 }));
 
@@ -89,6 +106,7 @@ const presetFixture: WorkoutPreset = {
 
 describe('WorkoutPlaybackPage', () => {
   beforeEach(() => {
+    mockUser = { id: 'user-1', activeUserId: 'user-1' };
     mockDistanceUnit = 'km';
     mockNavigate.mockReset();
     mockCreatePresetSession.mockReset();
@@ -98,6 +116,100 @@ describe('WorkoutPlaybackPage', () => {
       .mockResolvedValue({ id: 'diary-1', exercises: [] });
     window.localStorage.clear();
     mockLocationState = { returnTo: '/?date=2026-04-27' };
+  });
+
+  it.each([
+    { id: 'user-2', activeUserId: 'user-2' },
+    { id: 'user-1', activeUserId: 'family-1' },
+  ])('resets the player when identity changes to %j', (nextUser) => {
+    mockLocationState = createWorkoutPlaybackRouteState(
+      presetFixture,
+      '2026-04-27',
+      { userId: 'user-1', activeUserId: 'user-1' }
+    );
+    const view = render(<WorkoutPlaybackPage />);
+    fireEvent.change(document.getElementById('set-weight-0-0')!, {
+      target: { value: '92.5' },
+    });
+    fireEvent.blur(document.getElementById('set-weight-0-0')!);
+    mockUser = nextUser;
+    view.rerender(<WorkoutPlaybackPage />);
+    expect(document.getElementById('set-weight-0-0')).not.toBeInTheDocument();
+    expect(mockCreatePresetSession).not.toHaveBeenCalled();
+    expect(mockCompleteProgramSession).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { id: 'user-2', activeUserId: 'user-2' },
+    { id: 'user-1', activeUserId: 'family-1' },
+  ])(
+    'restores only the current identity draft after switching to %j',
+    (nextUser) => {
+      const own = createWorkoutPlaybackDraftFromPreset(
+        presetFixture,
+        '2026-04-27'
+      );
+      own.load_adjustments_applied = true;
+      own.exercises[0]!.sets[0]!.weight = 92.5;
+      saveWorkoutPlaybackDraftToStorage(own);
+      saveStoredDraft(
+        { ...own, name: 'Other workout' },
+        { userId: nextUser.id, activeUserId: nextUser.activeUserId }
+      );
+      mockLocationState = null;
+      const view = render(<WorkoutPlaybackPage />);
+      expect(screen.getByText('Upper Body')).toBeInTheDocument();
+      mockUser = nextUser;
+      view.rerender(<WorkoutPlaybackPage />);
+      expect(screen.getByText('Other workout')).toBeInTheDocument();
+      expect(screen.queryByText('Upper Body')).not.toBeInTheDocument();
+      mockUser = { id: 'user-1', activeUserId: 'user-1' };
+      view.rerender(<WorkoutPlaybackPage />);
+      expect(screen.getByText('Upper Body')).toBeInTheDocument();
+      expect(document.getElementById('set-weight-0-0')).toHaveValue(92.5);
+      expect(loadWorkoutPlaybackDraftFromStorage('2026-04-27')?.name).toBe(
+        'Upper Body'
+      );
+    }
+  );
+
+  it('rejects another identity’s route draft even on a fresh mount', () => {
+    mockLocationState = createWorkoutPlaybackRouteState(
+      presetFixture,
+      '2026-04-27',
+      storageIdentity
+    );
+    mockUser = { id: 'user-2', activeUserId: 'user-2' };
+    render(<WorkoutPlaybackPage />);
+    expect(document.getElementById('set-weight-0-0')).not.toBeInTheDocument();
+    expect(screen.queryByText('Upper Body')).not.toBeInTheDocument();
+    expect(
+      loadStoredDraft('2026-04-27', {
+        userId: 'user-2',
+        activeUserId: 'user-2',
+      })
+    ).toBeNull();
+  });
+
+  it('keeps the originating return path after removing the draft from history', () => {
+    mockLocationState = createWorkoutPlaybackRouteState(
+      presetFixture,
+      '2026-04-27',
+      storageIdentity,
+      '/training-programs?program=one'
+    );
+    const view = render(<WorkoutPlaybackPage />);
+    const scrub = mockNavigate.mock.calls.find((call) => call[1]?.replace);
+    expect(scrub?.[1].state).toEqual({
+      returnTo: '/training-programs?program=one',
+      identity: storageIdentity,
+    });
+    mockLocationState = scrub![1].state;
+    view.rerender(<WorkoutPlaybackPage />);
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(mockNavigate).toHaveBeenLastCalledWith(
+      '/training-programs?program=one'
+    );
   });
 
   it('starts the new exact Workout Session after a planned occurrence is rebound', () => {
@@ -118,7 +230,8 @@ describe('WorkoutPlaybackPage', () => {
         workout_session_id: 'new-workout-session',
         training_program: { program_id: 'program-1', session_id: 'planned-1' },
       },
-      '2026-04-27'
+      '2026-04-27',
+      { userId: 'user-1', activeUserId: 'user-1' }
     );
     render(<WorkoutPlaybackPage />);
     expect(document.getElementById('set-weight-0-0')).toHaveValue(80);
@@ -134,7 +247,8 @@ describe('WorkoutPlaybackPage', () => {
     saveWorkoutPlaybackDraftToStorage(stored);
     mockLocationState = createWorkoutPlaybackRouteState(
       { ...presetFixture, workout_session_id: 'new-workout-session' },
-      '2026-04-27'
+      '2026-04-27',
+      { userId: 'user-1', activeUserId: 'user-1' }
     );
     const view = render(<WorkoutPlaybackPage />);
     const weight = document.getElementById('set-weight-0-0')!;
@@ -190,7 +304,8 @@ describe('WorkoutPlaybackPage', () => {
             session_id: 'planned-1',
           },
         },
-        '2026-04-27'
+        '2026-04-27',
+        { userId: 'user-1', activeUserId: 'user-1' }
       );
       mockCreatePresetSession.mockResolvedValue({
         id: 'separate-1',
@@ -252,7 +367,10 @@ describe('WorkoutPlaybackPage', () => {
       workout_session_id: 'workout-session-1',
       training_program: { program_id: 'program-1', session_id: 'planned-1' },
     };
-    mockLocationState = createWorkoutPlaybackRouteState(preset, '2026-04-27');
+    mockLocationState = createWorkoutPlaybackRouteState(preset, '2026-04-27', {
+      userId: 'user-1',
+      activeUserId: 'user-1',
+    });
     const view = render(<WorkoutPlaybackPage />);
     fireEvent.change(document.getElementById('set-weight-0-0')!, {
       target: { value: '92.5' },
@@ -267,7 +385,10 @@ describe('WorkoutPlaybackPage', () => {
     expect(mockCompleteProgramSession).not.toHaveBeenCalled();
     expect(mockCreatePresetSession).not.toHaveBeenCalled();
     view.unmount();
-    mockLocationState = createWorkoutPlaybackRouteState(preset, '2026-04-27');
+    mockLocationState = createWorkoutPlaybackRouteState(preset, '2026-04-27', {
+      userId: 'user-1',
+      activeUserId: 'user-1',
+    });
     render(<WorkoutPlaybackPage />);
     fireEvent.click(screen.getByRole('button', { name: 'Finish Workout' }));
     await waitFor(() =>
@@ -292,7 +413,8 @@ describe('WorkoutPlaybackPage', () => {
         ...presetFixture,
         training_program: { program_id: 'program-1', session_id: 'planned-1' },
       },
-      '2026-04-27'
+      '2026-04-27',
+      { userId: 'user-1', activeUserId: 'user-1' }
     );
     const view = render(<WorkoutPlaybackPage />);
     const weight = document.getElementById('set-weight-0-0')!;
@@ -309,7 +431,8 @@ describe('WorkoutPlaybackPage', () => {
   it('shows a warning when local draft persistence fails', () => {
     mockLocationState = createWorkoutPlaybackRouteState(
       presetFixture,
-      '2026-04-27'
+      '2026-04-27',
+      { userId: 'user-1', activeUserId: 'user-1' }
     );
     const storage = jest
       .spyOn(Storage.prototype, 'setItem')
@@ -347,7 +470,8 @@ describe('WorkoutPlaybackPage', () => {
       saveWorkoutPlaybackDraftToStorage(stored);
       mockLocationState = createWorkoutPlaybackRouteState(
         { ...presetFixture, training_program },
-        '2026-04-27'
+        '2026-04-27',
+        { userId: 'user-1', activeUserId: 'user-1' }
       );
       render(<WorkoutPlaybackPage />);
       expect(document.getElementById('set-weight-0-0')).toHaveValue(80);
@@ -894,7 +1018,7 @@ describe('WorkoutPlaybackPage', () => {
       '2026-04-27'
     );
     window.localStorage.setItem(
-      'sparky.workoutPlaybackDraft.v1:2026-04-27',
+      'sparky.workoutPlaybackDraft.v2:user-1:user-1:2026-04-27',
       JSON.stringify(draft)
     );
     mockLocationState = { returnTo: '/?date=2026-04-27' };

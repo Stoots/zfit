@@ -1,3 +1,6 @@
+jest.mock('@/hooks/useAuth', () => ({
+  useAuth: () => ({ user: { id: 'user-1', activeUserId: 'user-1' } }),
+}));
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import WorkoutPlaybackPage from '@/pages/Diary/WorkoutPlaybackPage';
@@ -27,7 +30,14 @@ jest.mock('react-i18next', () =>
 
 jest.mock('react-router-dom', () => ({
   useNavigate: () => mockNavigate,
-  useLocation: () => ({ state: mockLocationState }),
+  useLocation: () => ({
+    state: mockLocationState
+      ? {
+          identity: { userId: 'user-1', activeUserId: 'user-1' },
+          ...mockLocationState,
+        }
+      : null,
+  }),
   useSearchParams: () => [mockSearchParams],
 }));
 

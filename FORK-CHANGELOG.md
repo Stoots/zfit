@@ -6,6 +6,8 @@ Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded her
 
 #### Bug fixes
 
+- Scope web workout drafts to the signed-in account and acting profile; reset playback on profile changes and clear account drafts on sign-out (#78). Legacy unowned drafts are discarded.
+
 - Remove untouched future weekly-prefill workouts outside a changed weekday or date window, preserving retained workout identities and edited history.
 
 - Preserve logged web Program sets and weights when reopening the same session from the Dashboard or leaving the player immediately after an edit; show a warning when local draft storage fails. Require the same exact Workout Session when resuming and offer explicit separate-save/discard recovery for incompatible saved drafts, blocking new edits and set logging until that recovery is resolved (#76).
