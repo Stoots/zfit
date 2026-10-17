@@ -500,7 +500,8 @@ async function deleteDisposablePrefillEntries(
   client: PoolClient,
   assignmentIds: readonly number[],
   userId: string,
-  today: string
+  today: string,
+  outsideScheduleOnly = false
 ): Promise<void> {
   if (assignmentIds.length === 0) return;
   // The player locks its parent before saving. A busy parent is a retryable
@@ -537,6 +538,13 @@ async function deleteDisposablePrefillEntries(
          AND entry.source = 'Workout Plan'
          AND entry.is_weekly_prefill
          AND entry.entry_date >= $3::date
+         AND (NOT $4::boolean OR NOT EXISTS (
+           SELECT 1 FROM workout_plan_sessions session
+           WHERE session.id = assignment.workout_session_id
+             AND entry.entry_date >= plan.start_date
+             AND entry.entry_date <= COALESCE(plan.end_date, plan.start_date + 365)
+             AND EXTRACT(DOW FROM entry.entry_date) = session.day_of_week
+         ))
          AND NOT EXISTS (
            SELECT 1 FROM exercise_entries sibling
            WHERE sibling.exercise_preset_entry_id = entry.exercise_preset_entry_id
@@ -586,7 +594,7 @@ async function deleteDisposablePrefillEntries(
              )
          )
        RETURNING entry.exercise_preset_entry_id`,
-    [assignmentIds, userId, today]
+    [assignmentIds, userId, today, outsideScheduleOnly]
   );
   const parentIds = [
     ...new Set(
@@ -764,6 +772,28 @@ async function updateWorkoutPlanTemplate(
         next.entry_mode,
       ]
     );
+    if (
+      previous.schedule_type === 'weekly' &&
+      previous.entry_mode === 'prefill' &&
+      scheduleType === 'weekly' &&
+      (next.start_date !== previous.start_date ||
+        next.end_date !== previous.end_date ||
+        input.sessions?.some(
+          (session) =>
+            previous.sessions.find((old) => old.id === session.id)
+              ?.day_of_week !== session.day_of_week
+        ))
+    ) {
+      await deleteDisposablePrefillEntries(
+        client,
+        previous.sessions.flatMap((session) =>
+          session.assignments.map((assignment) => assignment.id)
+        ),
+        userId,
+        today,
+        true
+      );
+    }
     // Preserve retained diary snapshots; materialize only missing assignments.
     if (
       next.is_active &&
