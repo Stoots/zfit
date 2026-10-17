@@ -170,7 +170,7 @@ describe('workoutPlanTemplateService authorization and nested validation', () =>
     }
   );
 
-  it('rejects the obsolete flat authoring body instead of silently discarding its assignments', async () => {
+  it('rejects malformed flat authoring without silently discarding its assignments', async () => {
     const legacy = {
       plan_name: 'Legacy',
       assignments: [{ exercise_id: EXERCISE, session_index: 1 }],
