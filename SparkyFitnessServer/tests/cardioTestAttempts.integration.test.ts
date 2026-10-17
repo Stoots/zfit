@@ -1,11 +1,13 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import express from 'express';
+import type { PoolClient } from 'pg';
 // @ts-expect-error supertest has no declarations in this package.
 import request from 'supertest';
 // @ts-expect-error cookie-parser has no declarations in this package.
 import cookieParser from 'cookie-parser';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
+  cardioTestTypeSchema,
   cooperRunAttemptSchema,
   trainingProgramSchema,
   type CooperRunAttemptInput,
@@ -16,6 +18,9 @@ import {
   databaseReachable,
   requireDatabaseInCI,
 } from './databaseIntegrationGuard.js';
+
+import { buildTrainingAnalysisTools } from '../ai/tools/trainingAnalysisTools.js';
+import { toolOpts } from './helpers/toolExecutionOptions.js';
 
 const skipEnvVar = 'SKIP_CARDIO_TEST_DB';
 const run = await databaseReachable(skipEnvVar);
@@ -121,6 +126,189 @@ describe.runIf(run)('persisted authenticated Cooper Test Attempts', () => {
     app.use('/api/training-programs', programRoutes);
     app.use(errorHandler);
   }, 30000);
+
+  it('reads only selected synced Health fields and canonical attempts for the requesting owner', async () => {
+    await attempt({ attempt_date: '2026-10-14', distance_meters: 2400 });
+    const db = await getSystemClient();
+    try {
+      const category = await db.query(
+        `INSERT INTO custom_categories (user_id, name, frequency, measurement_type, data_type)
+         VALUES ($1, 'RestingHeartRate', 'Hourly', 'bpm', 'numeric') RETURNING id`,
+        [ownerId]
+      );
+      await db.query(
+        `INSERT INTO custom_measurements (user_id, category_id, value, entry_date, source)
+         VALUES ($1,$2,'54','2026-10-15','HealthKit'), ($1,$2,'777','2026-10-15','manual')`,
+        [ownerId, category.rows[0].id]
+      );
+      await db.query(
+        `INSERT INTO daily_health_metrics (user_id, entry_date, source_provider, resting_heart_rate, vo2_max)
+        VALUES ($1, '2026-10-14', 'healthkit', 52, 99), ($1, '2026-10-14', 'manual', 123, 99),
+        ($2, '2026-10-14', 'healthkit', 199, 99), ($1, '2025-10-14', 'healthkit', 222, 99),
+        ($1, '2026-10-16', 'healthkit', NULL, 99)`,
+        [ownerId, otherId]
+      );
+      await db.query(
+        `INSERT INTO health_metric_samples (user_id, entry_date, source_provider, metric, samples)
+        VALUES ($1, '2026-10-14', 'healthkit', 'hrv', $2::jsonb)`,
+        [
+          ownerId,
+          JSON.stringify([
+            { t: '2026-10-14T00:00:00Z', sdnn_ms: 40 },
+            { t: '2026-10-14T01:00:00Z', sdnn_ms: 60, rmssd_ms: 30 },
+          ]),
+        ]
+      );
+    } finally {
+      db.release();
+    }
+    const scope = {
+      start_date: '2026-10-12',
+      end_date: '2026-10-18',
+      programs: false,
+      test_types: ['cooper_run' as const],
+      health_metrics: ['resting_heart_rate' as const, 'hrv' as const],
+    };
+    const tools = buildTrainingAnalysisTools(ownerId, scope);
+    const health = JSON.parse(
+      String(await tools.sparky_read_training_health!.execute!({}, toolOpts))
+    );
+    expect(health.rows).toHaveLength(4);
+    expect(health.rows).toContainEqual(
+      expect.objectContaining({
+        category: 'RestingHeartRate',
+        mean: 54,
+        unit: 'bpm',
+      })
+    );
+    expect(JSON.stringify(health.rows)).not.toContain('777');
+    expect(health.rows).toContainEqual({
+      entry_date: '2026-10-14',
+      source_provider: 'healthkit',
+      resting_heart_rate: 52,
+    });
+    expect(health.rows).toContainEqual(
+      expect.objectContaining({ method: 'sdnn_ms', mean: 50, count: 2 })
+    );
+    expect(health.rows).toContainEqual(
+      expect.objectContaining({ method: 'rmssd_ms', mean: 30, count: 1 })
+    );
+    const tests = String(
+      await tools.sparky_read_cardio_tests!.execute!({}, toolOpts)
+    );
+    expect(tests).toContain('2400');
+    const otherTools = buildTrainingAnalysisTools(otherId, scope);
+    expect(
+      JSON.parse(
+        String(
+          await otherTools.sparky_read_cardio_tests!.execute!({}, toolOpts)
+        )
+      ).attempts
+    ).toEqual([]);
+  });
+
+  it('reads selected HealthKit daily HR and SDNN statistics separately and excludes unselected metrics', async () => {
+    const summaries = [
+      { category: 'heart_rate_min', mean: 48, unit: 'bpm' },
+      { category: 'heart_rate_max', mean: 172, unit: 'bpm' },
+      { category: 'heart_rate_avg', mean: 64, unit: 'bpm' },
+      { category: 'HRV_SDNN_min', mean: 25, unit: 'ms' },
+      { category: 'HRV_SDNN_max', mean: 80, unit: 'ms' },
+      { category: 'HRV_SDNN_avg', mean: 52, unit: 'ms' },
+    ];
+    const db: PoolClient = await getSystemClient();
+    try {
+      for (const summary of summaries) {
+        const categories = await db.query<{ id: string; user_id: string }>(
+          `INSERT INTO custom_categories (user_id, name, frequency, measurement_type, data_type)
+           VALUES ($1,$3,'Daily',$4,'numeric'), ($2,$3,'Daily',$4,'numeric') RETURNING id, user_id`,
+          [ownerId, otherId, summary.category, summary.unit]
+        );
+        const ownerCategory = categories.rows.find(
+          (row) => row.user_id === ownerId
+        )!;
+        const otherCategory = categories.rows.find(
+          (row) => row.user_id === otherId
+        )!;
+        await db.query(
+          `INSERT INTO custom_measurements (user_id, category_id, value, entry_date, source)
+           VALUES ($1,$2,$3,'2026-10-15','HealthKit'), ($1,$2,'999','2026-10-15','manual'),
+             ($1,$2,'999','2026-09-15','HealthKit'), ($4,$5,'999','2026-10-15','HealthKit')`,
+          [
+            ownerId,
+            ownerCategory.id,
+            String(summary.mean),
+            otherId,
+            otherCategory.id,
+          ]
+        );
+      }
+    } finally {
+      db.release();
+    }
+    const scope = {
+      start_date: '2026-10-12',
+      end_date: '2026-10-18',
+      programs: false,
+      test_types: [],
+      health_metrics: ['heart_rate' as const, 'hrv' as const],
+    };
+    const tools = buildTrainingAnalysisTools(ownerId, scope);
+    const health = JSON.parse(
+      String(await tools.sparky_read_training_health!.execute!({}, toolOpts))
+    );
+    const aggregateRows = health.rows.filter(
+      (row: { category?: string }) =>
+        row.category && summaries.some((s) => s.category === row.category)
+    );
+    expect(aggregateRows).toHaveLength(6);
+    for (const summary of summaries)
+      expect(aggregateRows).toContainEqual({
+        ...summary,
+        entry_date: '2026-10-15',
+        source_provider: 'HealthKit',
+        count: 1,
+        min: summary.mean,
+        max: summary.mean,
+      });
+    for (const metric of ['heart_rate', 'hrv'] as const) {
+      const selectedTools = buildTrainingAnalysisTools(ownerId, {
+        ...scope,
+        health_metrics: [metric],
+      });
+      const selected = JSON.parse(
+        String(
+          await selectedTools.sparky_read_training_health!.execute!(
+            {},
+            toolOpts
+          )
+        )
+      );
+      const selectedAggregates = selected.rows.filter(
+        (row: { category?: string }) =>
+          row.category && summaries.some((s) => s.category === row.category)
+      );
+      expect(selectedAggregates).toHaveLength(3);
+      expect(
+        selectedAggregates
+          .map((row: { category: string }) => row.category)
+          .sort()
+      ).toEqual(
+        metric === 'heart_rate'
+          ? ['heart_rate_avg', 'heart_rate_max', 'heart_rate_min']
+          : ['HRV_SDNN_avg', 'HRV_SDNN_max', 'HRV_SDNN_min']
+      );
+    }
+    const unselectedTools = buildTrainingAnalysisTools(ownerId, {
+      ...scope,
+      health_metrics: ['resting_heart_rate'],
+    });
+    const unselected = String(
+      await unselectedTools.sparky_read_training_health!.execute!({}, toolOpts)
+    );
+    for (const summary of summaries)
+      expect(unselected).not.toContain(summary.category);
+  });
 
   beforeEach(async () => {
     const db = await getSystemClient();
@@ -253,6 +441,26 @@ describe.runIf(run)('persisted authenticated Cooper Test Attempts', () => {
       .send(input);
     expect(saved.status).toBe(201);
     expect(saved.body).toMatchObject(input);
+    const readScope = {
+      start_date: '2026-10-01',
+      end_date: '2026-10-01',
+      programs: false,
+      test_types: [cardioTestTypeSchema.parse(protocol)],
+      health_metrics: [],
+    };
+    const readTools = buildTrainingAnalysisTools(ownerId, readScope);
+    const analyzed = JSON.parse(
+      String(await readTools.sparky_read_cardio_tests!.execute!({}, toolOpts))
+    );
+    expect(analyzed.attempts).toEqual([expect.objectContaining(input)]);
+    const unrelatedTools = buildTrainingAnalysisTools(otherId, readScope);
+    expect(
+      JSON.parse(
+        String(
+          await unrelatedTools.sparky_read_cardio_tests!.execute!({}, toolOpts)
+        )
+      ).attempts
+    ).toEqual([]);
     const otherList = await request(app)
       .get(path)
       .set('Authorization', `Bearer ${otherToken}`);

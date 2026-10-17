@@ -49,7 +49,7 @@ Certain tables contain private user data that is **never** accessible to any fam
 
 - API Keys (`api_key` table)
 - OIDC SSO Connections (`user_oidc_links` table)
-- Personal AI Assistant Chat History (`sparky_chat_history` table)
+- Personal AI Assistant Chat History (`sparky_chat_history` table). Web Training analysis is also owner-only; it rejects switched-account requests and reads only the sources/dates selected for the current question.
 - Personal Fasting Preferences and auto-calculation configuration (`user_fasting_preferences` table)
 - Training Programs, Program Phases, weeks and Planned Sessions (`training_programs`, `training_program_phases`, `training_program_weeks`, `training_program_sessions`) — owner-only, even with **Manage Diary**, **View Reports** or exercise-library access. This includes scheduled Cardio Tests and linking their Test Attempts. Standalone Test Attempts remain available through diary permissions. Switch to your own profile to author or view Programs. Standalone Workout Plan optionality follows the existing plan-sharing rules and never grants Program access.
 - Program consolidation manifests and recovery receipts (`workout_program_consolidations`) — owner-only, with no family permission that grants read or write access. Sharing a Workout Plan does not share its consolidation journal.

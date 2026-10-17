@@ -146,6 +146,30 @@
     "translate": "Translate"
   },
   "chat": {
+    "trainingAnalysis": {
+      "title": "Training analysis (read-only)",
+      "scope": "Data for your next question",
+      "description": "Only your next question and the selected records go to your configured provider. Nothing is changed. Choose up to 366 days; health metrics must already be synced from Apple Health. Each question stands alone.",
+      "start": "From",
+      "end": "Through",
+      "programs": "Program history and prescriptions",
+      "program": "Program",
+      "allPrograms": "All Programs in this date range",
+      "tests": "Cardio Test Attempts",
+      "health": "Synced Apple Health metrics",
+      "cooper_run": "Cooper run",
+      "sprint_6s": "6-second sprint",
+      "power_30s": "30-second power",
+      "ramp": "Ramp",
+      "total_steps": "Steps",
+      "total_distance_meters": "Distance (m)",
+      "active_calories": "Active energy (kcal)",
+      "resting_heart_rate": "Resting heart rate (bpm)",
+      "vo2_max": "VO2 max (mL/kg/min)",
+      "heart_rate": "Heart rate — daily sample summary (bpm)",
+      "hrv": "HRV — daily SDNN / RMSSD summary (ms)",
+      "invalidScope": "Choose at least one data source and a valid date range of at most 366 days."
+    },
     "toolCategories": {
       "tooltip": "Choose chatbot tools",
       "title": "Chatbot tools",

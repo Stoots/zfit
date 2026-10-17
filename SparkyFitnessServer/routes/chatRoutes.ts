@@ -43,6 +43,9 @@ const router = express.Router();
  *               service_config_id:
  *                 type: string
  *                 format: uuid
+ *               trainingAnalysis:
+ *                 type: object
+ *                 description: Optional owner-only read-only disclosure scope (TrainingAnalysis.api.zod.ts); omitted by legacy clients. Requires explicit user text, ordered start_date/end_date (up to 366 days), programs, test_types and health_metrics.
  *               action:
  *                 type: string
  *                 enum: [save_ai_service_settings]
@@ -148,7 +151,8 @@ router.post('/', authenticate, async (req, res, next) => {
       req.userId,
       req.authenticatedUserId,
       isAdmin,
-      toolCategories
+      toolCategories,
+      req.body.trainingAnalysis
     );
     return res.status(200).json({ content, action: actionType, executedTools });
   } catch (error) {
@@ -210,7 +214,8 @@ router.post('/stream', authenticate, async (req, res, next) => {
       req.userId,
       req.authenticatedUserId,
       isAdmin,
-      toolCategories
+      toolCategories,
+      req.body.trainingAnalysis
     );
 
     pipeUIMessageStreamToResponse({ response: res, stream });

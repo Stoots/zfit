@@ -101,6 +101,7 @@ When searching, ignore `node_modules/`, `dist/`, and every locale except `public
 - API/error-toast issue: `src/api/api.ts`, then the domain client in `src/api/<Domain>/`, then the query/mutation `meta` in the calling hook.
 - Auth/session issue: `src/lib/auth-client.ts`, `src/hooks/useAuth.tsx`, `src/pages/Auth/`, and the server's `auth.ts` if it crosses packages.
 - Family-access/acting-user issue: `src/contexts/ActiveUserContext.tsx` and the hooks consuming it.
+- Web Training analysis: `pages/Chat/TrainingAnalysisControls.tsx` selects a per-question disclosure scope. `SparkyChatInterface.tsx` sends it through the existing streaming transport; the server enforces read-only access. `tests/components/TrainingChat.test.tsx` covers selection, sending and answer rendering.
 - Chat (Sparky) issue: `src/pages/Chat/`, `src/components/ai/`, `src/api/Chatbot/`.
 - Visual redesign or shared UI: read `DESIGN.md` and the matching `.impeccable/surfaces/` brief; reuse the metric building blocks and semantic colors before adding local styles.
 - Theme/preferences issue: `src/contexts/ThemeContext.tsx`, `src/contexts/PreferencesContext.tsx`, `src/api/Settings/preferences.ts`, `src/utils/userPreferences.ts`.

@@ -1,6 +1,6 @@
 # AGENTS.md
 
-_Last updated: 2026-10-16_
+_Last updated: 2026-10-17_
 
 `@workspace/shared` is a source-first TypeScript workspace library package for schemas, constants, and timezone/day helpers consumed by SparkyFitnessServer, SparkyFitnessFrontend, and SparkyFitnessMobile.
 
@@ -18,6 +18,7 @@ _Last updated: 2026-10-16_
 - `src/utils/` - timezone helpers (`todayInZone`, `instantToDay`, `dayToUtcRange`, `compareDays`, `addDays`, `isDayString`), cycle/menstruation helpers, and unit/calculation utilities.
 - `src/ai/`, `src/cycle/`, `src/medications/`, `src/mood/` - domain-specific helpers.
 - `src/symptoms/` - generic symptom tracking: constants and enums (scales, templates, sections, option kinds), template section resolution (`resolveSections`), built-in symptoms and pick-lists, head/body region ids for the location maps, and custom-field validation. The API contract is `src/schemas/api/Symptoms.api.zod.ts`.
+- `src/schemas/api/TrainingAnalysis.api.zod.ts` - additive web chat disclosure scope (bounded dates, Programs, selected Cardio Test protocols and Apple Health metrics); absent on legacy chat requests.
 - Training Programs: `src/schemas/api/TrainingPrograms.api.zod.ts` defines aggregate inputs and responses (ordered phases/weeks/Planned Sessions, fixed calendar dates, stable UUIDs and integer Workout Plan references). Database schemas are `TrainingPrograms.zod.ts`, `TrainingProgramPhases.zod.ts`, `TrainingProgramWeeks.zod.ts`, `TrainingProgramSessions.zod.ts`, `WorkoutPlanSessions.zod.ts`, and `WorkoutProgramConsolidations.zod.ts` (durable owner-only consolidation journal). Owner-only; independent of standalone Workout Plans. A Planned Session binds either an exact reusable Workout Plan Session by `workout_session_id` or a Cardio Test protocol by `cardio_test_type`; `CardioTestAttempts.zod.ts` holds the optional `planned_session_id` link. `src/utils/dashboardWorkoutPlans.ts` selects one next pending Program workout for mobile and up to three for web before standalone plans; `src/utils/programCardioAssessments.ts` selects scheduled protocol attempts for web and mobile.
 
 ## Naming Convention
@@ -29,7 +30,7 @@ _Last updated: 2026-10-16_
 ## Cross-Package Contract Rules
 
 - Changes to `src/schemas/api/` usually affect server routes and both frontend/mobile API clients.
-- Changes to `src/schemas/database/` require a matching migration in the server (`SparkyFitnessServer/db/migrations/`), RLS policies, and the schema backup.
+- Changes to `src/schemas/database/` require a matching migration in the server (`SparkyFitnessServer/db/migrations/`), RLS policies; CI regenerates the schema backup after merge (never edit it locally).
 - Timezone/day-string helpers prevent bugs; prefer them over `toISOString().split('T')[0]`.
 - Test any shared change from the consumer packages (`pnpm run validate` in SparkyFitnessServer, SparkyFitnessFrontend, and SparkyFitnessMobile after modifying shared).
 
