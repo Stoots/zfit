@@ -4,6 +4,29 @@ import { useState } from 'react';
 import type { UIMessage } from 'ai';
 
 const mockToast = jest.fn();
+let mockComposerType: 'thread' | 'edit' = 'thread';
+let mockRunConfig: { custom?: Record<string, unknown> } = {};
+const mockComposer = {
+  getState: () => ({ runConfig: mockRunConfig }),
+  setRunConfig: (config: typeof mockRunConfig) => {
+    mockRunConfig = config;
+  },
+};
+const mockAui = { composer: mockComposer };
+jest.mock('@assistant-ui/react', () => ({
+  useAui: () => mockAui,
+  useAuiState: (
+    selector: (state: {
+      composer: {
+        type: typeof mockComposerType;
+        runConfig: typeof mockRunConfig;
+      };
+    }) => unknown
+  ) =>
+    selector({
+      composer: { type: mockComposerType, runConfig: mockRunConfig },
+    }),
+}));
 let mockHistory: Array<{ id: string; content: string; isUser: boolean }> = [];
 let mockOnError: (error: Error) => void;
 
@@ -12,6 +35,7 @@ let mockTransport: {
     trigger: 'submit-message' | 'regenerate-message';
     messages: UIMessage[];
     body: object;
+    requestMetadata?: unknown;
   }) => Promise<{ body: Record<string, unknown> }>;
 };
 jest.mock('@assistant-ui/react-ai-sdk', () => ({
@@ -26,6 +50,7 @@ jest.mock('@assistant-ui/react-ai-sdk', () => ({
 }));
 jest.mock('@/components/thread', () => ({
   Thread: () => {
+    useChatQuestionSource();
     const [answer, setAnswer] = useState('');
     return (
       <>
@@ -42,6 +67,7 @@ jest.mock('@/components/thread', () => ({
                 },
               ],
               trigger: 'submit-message',
+              requestMetadata: mockRunConfig,
               body: {},
             });
             const response = await global.fetch('/api/chat/stream', {
@@ -100,10 +126,13 @@ jest.mock('react-i18next', () => ({
         : key,
   }),
 }));
+import { useChatQuestionSource } from '@/hooks/AI/useChatQuestionSource';
 import SparkyChatInterface from '@/pages/Chat/SparkyChatInterface';
 
 beforeEach(() => {
   mockHistory = [];
+  mockComposerType = 'thread';
+  mockRunConfig = {};
   mockToast.mockClear();
 });
 
@@ -178,6 +207,7 @@ it('retains the failed question disclosure even after the next-question controls
   const original = await mockTransport.prepareSendMessagesRequest({
     messages: [question],
     trigger: 'submit-message',
+    requestMetadata: { custom: { trainingAnalysisSource: 'thread' } },
     body: {},
   });
   expect(original.body['trainingAnalysis']).toMatchObject({
@@ -209,6 +239,7 @@ it('does not opt an ordinary failed question into Training analysis on retry', a
   await mockTransport.prepareSendMessagesRequest({
     messages: [question],
     trigger: 'submit-message',
+    requestMetadata: { custom: { trainingAnalysisSource: 'thread' } },
     body: {},
   });
   fireEvent.click(screen.getByLabelText('Training analysis (read-only)'));
@@ -221,6 +252,7 @@ it('does not opt an ordinary failed question into Training analysis on retry', a
   const next = await mockTransport.prepareSendMessagesRequest({
     messages: [question, { ...question, id: 'next-question' }],
     trigger: 'submit-message',
+    requestMetadata: { custom: { trainingAnalysisSource: 'thread' } },
     body: {},
   });
   expect(next.body['trainingAnalysis']).toMatchObject({ programs: true });
@@ -239,6 +271,7 @@ it.each([false, true])(
     await mockTransport.prepareSendMessagesRequest({
       messages: [question],
       trigger: 'submit-message',
+      requestMetadata: { custom: { trainingAnalysisSource: 'thread' } },
       body: {},
     });
     mounted.unmount();
@@ -287,6 +320,7 @@ it('evicts the oldest scope after 50 questions and retries it without analysis',
     await mockTransport.prepareSendMessagesRequest({
       messages: [{ ...question, id: `question-${index}` }],
       trigger: 'submit-message',
+      requestMetadata: { custom: { trainingAnalysisSource: 'thread' } },
       body: {},
     });
   }
@@ -315,7 +349,139 @@ it('evicts the oldest scope after 50 questions and retries it without analysis',
   const next = await mockTransport.prepareSendMessagesRequest({
     messages: [{ ...question, id: 'question-51' }],
     trigger: 'submit-message',
+    requestMetadata: { custom: { trainingAnalysisSource: 'thread' } },
     body: {},
   });
   expect(next.body['trainingAnalysis']).toMatchObject({ test_types: ['ramp'] });
+});
+
+it.each(['ordinary', 'narrow', 'restored', 'evicted'] as const)(
+  'sends an unchanged %s Edit Update and its following regenerate as ordinary chat',
+  async (source) => {
+    if (source === 'restored') {
+      mockHistory = [
+        {
+          id: question.id,
+          content: 'Summarize my training program',
+          isUser: true,
+        },
+      ];
+    }
+    const mounted = render(<SparkyChatInterface />);
+    if (source === 'narrow') {
+      fireEvent.click(screen.getByLabelText('Training analysis (read-only)'));
+      fireEvent.change(screen.getByLabelText('chat.trainingAnalysis.program'), {
+        target: { value: '11111111-1111-4111-8111-111111111111' },
+      });
+    }
+    if (source !== 'restored') {
+      await mockTransport.prepareSendMessagesRequest({
+        messages: [question],
+        trigger: 'submit-message',
+        requestMetadata: { custom: { trainingAnalysisSource: 'thread' } },
+        body: {},
+      });
+    }
+    if (source === 'evicted') {
+      for (let index = 0; index < 50; index++) {
+        await mockTransport.prepareSendMessagesRequest({
+          messages: [{ ...question, id: `new-${index}` }],
+          trigger: 'submit-message',
+          requestMetadata: { custom: { trainingAnalysisSource: 'thread' } },
+          body: {},
+        });
+      }
+    }
+    if (source !== 'narrow') {
+      fireEvent.click(screen.getByLabelText('Training analysis (read-only)'));
+    }
+    fireEvent.change(screen.getByLabelText('chat.trainingAnalysis.program'), {
+      target: { value: '' },
+    });
+    fireEvent.click(screen.getByLabelText('chat.trainingAnalysis.total_steps'));
+    // The SDK gives Edit > Update a new ID even when its text is unchanged.
+    const edited = { ...question, id: 'edit-generated-id' };
+    mockComposerType = 'edit';
+    mounted.rerender(<SparkyChatInterface />);
+    mockToast.mockClear();
+    const updated = await mockTransport.prepareSendMessagesRequest({
+      messages: [edited],
+      trigger: 'submit-message',
+      requestMetadata: mockRunConfig,
+      body: {},
+    });
+    expect(JSON.parse(JSON.stringify(updated.body))).not.toHaveProperty(
+      'trainingAnalysis'
+    );
+    expect(updated.body['messages']).toEqual([edited]);
+    expect(mockToast).toHaveBeenLastCalledWith({
+      description: 'chat.trainingAnalysis.newQuestionRequired',
+    });
+    const regenerated = await mockTransport.prepareSendMessagesRequest({
+      messages: [edited],
+      trigger: 'regenerate-message',
+      body: {},
+    });
+    expect(JSON.parse(JSON.stringify(regenerated.body))).not.toHaveProperty(
+      'trainingAnalysis'
+    );
+    expect(regenerated.body['messages']).toEqual([edited]);
+    mockComposerType = 'thread';
+    mounted.rerender(<SparkyChatInterface />);
+    const next = await mockTransport.prepareSendMessagesRequest({
+      messages: [{ ...question, id: 'fresh-composer-question' }],
+      trigger: 'submit-message',
+      requestMetadata: mockRunConfig,
+      body: {},
+    });
+    expect(next.body['trainingAnalysis']).toMatchObject({
+      programs: true,
+      health_metrics: ['total_steps'],
+    });
+  }
+);
+
+it('keeps a cached analysis question ordinary after Edit Update with analysis disabled', async () => {
+  const mounted = render(<SparkyChatInterface />);
+  fireEvent.click(screen.getByLabelText('Training analysis (read-only)'));
+  await mockTransport.prepareSendMessagesRequest({
+    messages: [question],
+    trigger: 'submit-message',
+    requestMetadata: mockRunConfig,
+    body: {},
+  });
+  fireEvent.click(screen.getByLabelText('Training analysis (read-only)'));
+  mockComposerType = 'edit';
+  mounted.rerender(<SparkyChatInterface />);
+  mockToast.mockClear();
+  // Explicit edit provenance wins even if an adapter preserves the original ID.
+  const updated = await mockTransport.prepareSendMessagesRequest({
+    messages: [question],
+    trigger: 'submit-message',
+    requestMetadata: mockRunConfig,
+    body: {},
+  });
+  expect(updated.body['trainingAnalysis']).toBeUndefined();
+  expect(mockToast).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByLabelText('Training analysis (read-only)'));
+  const regenerated = await mockTransport.prepareSendMessagesRequest({
+    messages: [question],
+    trigger: 'regenerate-message',
+    body: {},
+  });
+  expect(regenerated.body['trainingAnalysis']).toBeUndefined();
+});
+
+it('does not authorize analysis for a submit without composer provenance', async () => {
+  render(<SparkyChatInterface />);
+  fireEvent.click(screen.getByLabelText('Training analysis (read-only)'));
+  const submitted = await mockTransport.prepareSendMessagesRequest({
+    messages: [question],
+    trigger: 'submit-message',
+    body: {},
+  });
+  expect(submitted.body['trainingAnalysis']).toBeUndefined();
+  expect(mockToast).toHaveBeenLastCalledWith({
+    description: 'chat.trainingAnalysis.newQuestionRequired',
+  });
 });

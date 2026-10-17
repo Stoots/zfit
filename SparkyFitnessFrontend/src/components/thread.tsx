@@ -12,6 +12,7 @@ import { ToolFallback } from '@/components/tool-fallback';
 import { TooltipIconButton } from '@/components/tooltip-icon-button';
 import { Button } from '@/components/ui/button';
 import { useTranslation } from 'react-i18next';
+import { useChatQuestionSource } from '@/hooks/AI/useChatQuestionSource';
 import { chatErrorMessage } from '@/utils/chatError';
 import { cn } from '@/lib/utils';
 import {
@@ -176,6 +177,7 @@ const ThreadSuggestionItem: FC<{ prompt: string }> = ({ prompt }) => {
 };
 
 const Composer: FC = () => {
+  useChatQuestionSource();
   return (
     <ComposerPrimitive.Root className="aui-composer-root relative flex w-full flex-col">
       <ComposerPrimitive.AttachmentDropzone asChild>
@@ -471,6 +473,7 @@ const UserActionBar: FC = () => {
 };
 
 const EditComposer: FC = () => {
+  useChatQuestionSource();
   return (
     <MessagePrimitive.Root
       data-slot="aui_edit-composer-wrapper"

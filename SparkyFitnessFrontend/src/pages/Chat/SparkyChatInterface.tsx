@@ -17,6 +17,7 @@ import { Thread } from '@/components/thread';
 import { useToast } from '@/hooks/use-toast';
 import { useChatToolCategories } from '@/contexts/ChatToolCategoriesContext';
 import { useEffect, useState } from 'react';
+import { z } from 'zod';
 import { useTranslation } from 'react-i18next';
 import {
   todayInZone,
@@ -31,6 +32,10 @@ import { MessagePart, ImagePart } from '@/types/Chatbot_types';
 import { type UIMessage } from 'ai';
 import { chatErrorMessage } from '@/utils/chatError';
 import { resizeImageBase64 } from '@/utils/imageResize';
+
+const questionSourceSchema = z.object({
+  custom: z.object({ trainingAnalysisSource: z.enum(['thread', 'edit']) }),
+});
 
 interface SparkyChatInnerProps {
   activeAIServiceSetting: {
@@ -164,24 +169,34 @@ const SparkyChatInner = ({
           .slice()
           .reverse()
           .find((message) => message.role === 'user');
+        const source = questionSourceSchema.safeParse(options.requestMetadata)
+          .data?.custom.trainingAnalysisSource;
         // Reload reuses the question ID; later control edits belong to the next question.
         if (
           question &&
-          !questionScopes.has(question.id) &&
-          options.trigger === 'submit-message' &&
-          options.messages.at(-1)?.role === 'user' &&
-          !history.some((message) => message.id === question.id)
+          (source === 'edit' ||
+            (!questionScopes.has(question.id) &&
+              source === 'thread' &&
+              options.trigger === 'submit-message' &&
+              options.messages.at(-1)?.role === 'user' &&
+              !history.some((message) => message.id === question.id)))
         ) {
           questionScopes.set(
             question.id,
-            analysisEnabled ? structuredClone(analysisScope) : undefined
+            source === 'thread' && analysisEnabled
+              ? structuredClone(analysisScope)
+              : undefined
           );
           if (questionScopes.size > 50) {
             const oldest = questionScopes.keys().next().value;
             if (oldest !== undefined) questionScopes.delete(oldest);
           }
         }
-        if (question && !questionScopes.has(question.id) && analysisEnabled) {
+        if (
+          question &&
+          (source === 'edit' || !questionScopes.has(question.id)) &&
+          analysisEnabled
+        ) {
           toast({
             description: t('chat.trainingAnalysis.newQuestionRequired'),
           });
