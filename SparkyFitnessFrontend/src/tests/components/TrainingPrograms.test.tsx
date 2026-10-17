@@ -686,13 +686,15 @@ it('renders cumulative repeated misses beside unchanged completion history after
 });
 
 it.each([
-  { type: 'preset', omitted: false },
-  { type: 'individual', omitted: false },
-  { type: 'preset', omitted: true },
-  { type: 'individual', omitted: true },
+  { type: 'preset', omitted: false, blankSet: false },
+  { type: 'individual', omitted: false, blankSet: false },
+  { type: 'preset', omitted: true, blankSet: false },
+  { type: 'individual', omitted: true, blankSet: false },
+  { type: 'individual', omitted: false, blankSet: true },
+  { type: 'individual', omitted: true, blankSet: true },
 ] as const)(
-  'links a $type diary workout after omission=$omitted without changing required dates',
-  async ({ type, omitted }) => {
+  'links a $type diary workout after omission=$omitted with blankSet=$blankSet without changing required dates',
+  async ({ type, omitted, blankSet }) => {
     stored = scheduleFixture();
     if (omitted) {
       const session = stored.phases[0]!.weeks[0]!.sessions[0]!;
@@ -713,7 +715,37 @@ it.each([
             notes: null,
             source: 'manual',
             total_duration_minutes: 30,
-            exercises: [],
+            exercises: [
+              {
+                id: uuid(),
+                exercise_id: null,
+                duration_minutes: 0,
+                calories_burned: 0,
+                entry_date: '2026-10-26',
+                notes: null,
+                distance: null,
+                avg_heart_rate: null,
+                source: 'manual',
+                exercise_snapshot: null,
+                activity_details: [],
+                superset_group: null,
+                sets: [
+                  {
+                    id: 1,
+                    set_number: 1,
+                    set_type: null,
+                    reps: 8,
+                    weight: 50,
+                    duration: null,
+                    rest_time: null,
+                    notes: null,
+                    rpe: null,
+                    completed_at: null,
+                    is_pr: false,
+                  },
+                ],
+              },
+            ],
             activity_details: [],
           }
         : {
@@ -728,17 +760,79 @@ it.each([
             distance: null,
             avg_heart_rate: null,
             source: 'manual',
-            sets: [],
+            sets: blankSet
+              ? [
+                  {
+                    id: 1,
+                    set_number: 1,
+                    set_type: null,
+                    reps: null,
+                    weight: null,
+                    duration: null,
+                    distance: null,
+                    rest_time: null,
+                    notes: null,
+                    rpe: null,
+                    completed_at: null,
+                    is_pr: false,
+                  },
+                ]
+              : [],
             exercise_snapshot: null,
             activity_details: [],
             superset_group: null,
           };
     jest.mocked(fetchExerciseEntries).mockResolvedValue([]);
-    jest
-      .mocked(fetchExerciseEntries)
-      .mockImplementation(async (date) =>
-        date === '2026-10-26' ? [candidate] : []
-      );
+    jest.mocked(fetchExerciseEntries).mockImplementation(async (date) =>
+      date === '2026-10-26'
+        ? [
+            candidate,
+            {
+              type: 'preset',
+              id: uuid(),
+              name: 'Empty planned group',
+              entry_date: date,
+              workout_preset_id: null,
+              description: null,
+              notes: null,
+              source: 'manual',
+              total_duration_minutes: 30,
+              exercises: [],
+              activity_details: [],
+            },
+            ...(candidate.type === 'preset'
+              ? [
+                  {
+                    ...candidate,
+                    id: uuid(),
+                    name: 'Untouched prefill',
+                    exercises: candidate.exercises.map((exercise) => ({
+                      ...exercise,
+                      is_weekly_prefill: true,
+                    })),
+                  },
+                  {
+                    ...candidate,
+                    id: uuid(),
+                    name: 'Started prescription',
+                    exercises: candidate.exercises.map((exercise) => ({
+                      ...exercise,
+                      source: 'Workout Plan',
+                      is_weekly_prefill: false,
+                    })),
+                  },
+                ]
+              : [
+                  {
+                    ...candidate,
+                    id: uuid(),
+                    name: 'Empty individual',
+                    duration_minutes: 0,
+                  },
+                ]),
+          ]
+        : []
+    );
     const response = trainingProgramSchema.parse(
       JSON.parse(JSON.stringify(stored))
     );
@@ -791,6 +885,14 @@ it.each([
     ).toBeDisabled();
     fill('Diary workout date', '2026-10-26');
     await screen.findByLabelText('Completed diary workout');
+    expect(
+      screen.queryByRole('option', { name: /Empty planned group/ })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('option', {
+        name: /Untouched prefill|Started prescription|Empty individual/,
+      })
+    ).not.toBeInTheDocument();
     fill('Completed diary workout', `${type}:${workoutId}`);
     fireEvent.click(screen.getByRole('button', { name: 'Confirm completion' }));
     await waitFor(() =>

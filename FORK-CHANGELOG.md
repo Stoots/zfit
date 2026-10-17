@@ -6,6 +6,8 @@ Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded her
 
 #### Bug fixes
 
+- Prevent empty or untouched prescribed diary workouts (including explicitly started Workout Sessions and weekly prefill) from completing a Program session through linking; keep partial workouts and duration-only individual entries linkable, including historical entries with blank backing sets (#77).
+
 - Restore upstream App Store Workout Plan reads and flat create/edit requests, preserving session identities, optionality and frozen prescriptions; reject ambiguous edits and protected-history removal, including HTTP 409 for flat saves of unscheduled weekly sessions or detached frozen assignments that the App Store form drops (#74).
 - Remove untouched future weekly-prefill workouts outside a changed weekday or date window, preserving retained workout identities and edited history.
 

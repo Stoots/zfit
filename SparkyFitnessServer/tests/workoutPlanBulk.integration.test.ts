@@ -145,6 +145,18 @@ describe.runIf(run)('persisted authenticated bulk prescription APIs', () => {
       { entry_date: '2099-10-12' }
     );
     expect(started.status, JSON.stringify(started.body)).toBe(201);
+    const db = await getSystemClient();
+    try {
+      await db.query(
+        `UPDATE exercise_entry_sets SET completed_at = now()
+         WHERE set_number = 1 AND exercise_entry_id IN (
+           SELECT id FROM exercise_entries WHERE exercise_preset_entry_id = $1 AND user_id = $2
+         )`,
+        [started.body.session.id, owner]
+      );
+    } finally {
+      db.release();
+    }
     const result = await call(
       `/api/training-programs/${program.id}/sessions/${planned()[index]!.id}/outcome`,
       {
@@ -757,6 +769,14 @@ describe.runIf(run)('persisted authenticated bulk prescription APIs', () => {
       const diary = await db.query(
         "INSERT INTO exercise_preset_entries(user_id,name,entry_date,source) VALUES ($1,'Separate actual workout','2099-10-13','manual') RETURNING id",
         [owner]
+      );
+      const entry = await db.query(
+        "INSERT INTO exercise_entries(user_id,exercise_name,entry_date,duration_minutes,calories_burned,exercise_preset_entry_id) VALUES ($1,'Performed lift','2099-10-13',0,0,$2) RETURNING id",
+        [owner, diary.rows[0].id]
+      );
+      await db.query(
+        'INSERT INTO exercise_entry_sets(exercise_entry_id,set_number,reps,weight) VALUES ($1,1,8,50)',
+        [entry.rows[0].id]
       );
       await db.query('BEGIN');
       await db.query(

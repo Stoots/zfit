@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
 import {
   compareDays,
+  canLinkDiaryWorkout,
   trainingProgramSchema,
   isValidTimeZone,
   instantToDay,
@@ -498,6 +499,36 @@ async function lookupDiaryWorkout(
         );
   if (!result.rowCount)
     throw new HttpError('Diary workout not found or not owned by you.', 404);
+  const entries = await client.query<{
+    duration_minutes: number;
+    is_weekly_prefill: boolean;
+    source: string | null;
+    sets: {
+      completed_at: string | null;
+      reps: number | null;
+      duration: number | null;
+      distance: number | null;
+    }[];
+  }>(
+    `SELECT ee.duration_minutes, ee.is_weekly_prefill, ee.source,
+       COALESCE((SELECT json_agg(json_build_object('completed_at', s.completed_at,
+         'reps', s.reps, 'duration', s.duration, 'distance', s.distance))
+         FROM exercise_entry_sets s WHERE s.exercise_entry_id = ee.id), '[]') AS sets
+     FROM exercise_entries ee
+     WHERE ee.user_id = $2 AND ${workout.type === 'preset' ? 'ee.exercise_preset_entry_id' : 'ee.id'} = $1
+     FOR SHARE`,
+    [workout.id, userId]
+  );
+  const eligible =
+    workout.type === 'preset'
+      ? canLinkDiaryWorkout({ type: 'preset', exercises: entries.rows })
+      : entries.rows[0] &&
+        canLinkDiaryWorkout({ type: 'individual', ...entries.rows[0] });
+  if (!eligible)
+    throw new HttpError(
+      'Link a workout with at least one performed set, or a duration-only individual entry with a positive duration.',
+      400
+    );
   return { ...result.rows[0], type: workout.type };
 }
 

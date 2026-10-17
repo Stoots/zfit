@@ -194,7 +194,11 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
       .put(`/api/training-programs/${id}`)
       .set('Authorization', `Bearer ${ownerToken}`)
       .send(input);
-  async function diaryWorkout(type: 'preset' | 'individual', userId = owner) {
+  async function diaryWorkout(
+    type: 'preset' | 'individual',
+    userId = owner,
+    performed = true
+  ) {
     const db = await getSystemClient();
     try {
       const result =
@@ -207,7 +211,28 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
               "INSERT INTO exercise_entries(user_id,exercise_name,entry_date,duration_minutes,calories_burned,source) VALUES ($1,'Completed run','2026-10-26',30,200,'manual') RETURNING id",
               [userId]
             );
+      if (type === 'preset' && performed) {
+        const child = await db.query(
+          "INSERT INTO exercise_entries(user_id,exercise_name,entry_date,duration_minutes,calories_burned,exercise_preset_entry_id) VALUES ($1,'Partial lift','2026-10-26',0,0,$2) RETURNING id",
+          [userId, result.rows[0].id]
+        );
+        await db.query(
+          'INSERT INTO exercise_entry_sets(exercise_entry_id,set_number,reps,weight) VALUES ($1,1,10,50)',
+          [child.rows[0].id]
+        );
+      }
       return { type, id: result.rows[0].id };
+    } finally {
+      db.release();
+    }
+  }
+  async function seedLoggedSet(entryId: string) {
+    const db = await getSystemClient();
+    try {
+      await db.query(
+        'UPDATE exercise_entry_sets SET completed_at = $2 WHERE exercise_entry_id = $1 AND set_number = 1',
+        [entryId, '2026-10-25T12:00:00Z']
+      );
     } finally {
       db.release();
     }
@@ -1334,6 +1359,138 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
     expect(sessions(saved)[2]!.effective_date).toBe('2026-11-03');
   });
 
+  it('rejects start session then link without performing', async () => {
+    const { session } = await completableSession();
+    const started = await startSession(
+      session.workout_session_id!,
+      '2026-10-25'
+    );
+    expect(started.status).toBe(201);
+    const workout = presetSessionResponseSchema.parse(started.body.session);
+    expect(workout.exercises[0]!.sets[0]!.reps).toBeGreaterThan(0);
+    expect(workout.exercises[0]!.sets[0]!.completed_at).toBeNull();
+    const response = await outcome(session.id, {
+      status: 'completed',
+      workout: { type: 'preset', id: workout.id },
+    });
+    expect(response.status).toBe(400);
+    expect(sessions(await reload())[0]!.status).toBe('planned');
+
+    const saved = await request(app)
+      .put(`/api/exercise-preset-entries/${workout.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        exercises: workout.exercises.map((exercise) => ({
+          id: exercise.id,
+          exercise_id: exercise.exercise_id,
+          workout_plan_assignment_id: exercise.workout_plan_assignment_id,
+          sets: exercise.sets.map((set, index) => ({
+            set_number: set.set_number,
+            reps: set.reps,
+            weight: set.weight,
+            completed_at: index === 0 ? '2026-10-25T12:00:00Z' : null,
+          })),
+        })),
+      });
+    expect(saved.status).toBe(200);
+    expect(
+      (
+        await outcome(session.id, {
+          status: 'completed',
+          workout: { type: 'preset', id: workout.id },
+        })
+      ).status
+    ).toBe(200);
+  });
+
+  it.each(['empty group', 'empty individual', 'blank set', 'prefill'] as const)(
+    'rejects linking an unperformed workout: %s',
+    async (kind) => {
+      const type =
+        kind === 'empty individual' || kind === 'blank set'
+          ? 'individual'
+          : 'preset';
+      const workout = await diaryWorkout(type, owner, false);
+      const db = await getSystemClient();
+      try {
+        if (type === 'individual') {
+          await db.query(
+            'UPDATE exercise_entries SET duration_minutes = 0 WHERE id = $1',
+            [workout.id]
+          );
+          if (kind === 'blank set')
+            await db.query(
+              'INSERT INTO exercise_entry_sets(exercise_entry_id,set_number) VALUES ($1,1)',
+              [workout.id]
+            );
+        } else if (kind === 'prefill') {
+          const child = await db.query(
+            "INSERT INTO exercise_entries(user_id,exercise_name,entry_date,duration_minutes,calories_burned,exercise_preset_entry_id,is_weekly_prefill) VALUES ($1,'Planned lift','2026-10-26',30,0,$2,true) RETURNING id",
+            [owner, workout.id]
+          );
+          await db.query(
+            'INSERT INTO exercise_entry_sets(exercise_entry_id,set_number,reps,weight) VALUES ($1,1,10,50)',
+            [child.rows[0].id]
+          );
+        }
+      } finally {
+        db.release();
+      }
+      const response = await outcome(sessions(program)[0]!.id, {
+        status: 'completed',
+        workout,
+      });
+      expect(response.status).toBe(400);
+      expect(response.body.error).toMatch(/performed set|duration/i);
+      expect(sessions(await reload())[0]!.status).toBe('planned');
+    }
+  );
+
+  it.each([
+    'partial individual',
+    'duration with blank set',
+    'logged prefill',
+    'timed set',
+    'distance set',
+  ])('links performed work: %s', async (kind) => {
+    const workout = await diaryWorkout('individual');
+    const db = await getSystemClient();
+    try {
+      await db.query(
+        'UPDATE exercise_entries SET duration_minutes = $2 WHERE id = $1',
+        [workout.id, kind === 'duration with blank set' ? 30 : 0]
+      );
+      await db.query(
+        `INSERT INTO exercise_entry_sets(exercise_entry_id,set_number,reps,duration,distance,completed_at)
+          VALUES ($1,1,$2,$3,$4,$5)`,
+        [
+          workout.id,
+          kind === 'partial individual' ? 8 : null,
+          kind === 'timed set' ? 30 : null,
+          kind === 'distance set' ? 0.1 : null,
+          kind === 'logged prefill' ? '2026-10-26T12:00:00Z' : null,
+        ]
+      );
+      if (kind === 'logged prefill') {
+        // Insert as prefill after values are set: ordinary entry edits clear the marker.
+        await db.query(
+          'UPDATE exercise_entries SET is_weekly_prefill = true WHERE id = $1',
+          [workout.id]
+        );
+      }
+    } finally {
+      db.release();
+    }
+    expect(
+      (
+        await outcome(sessions(program)[0]!.id, {
+          status: 'completed',
+          workout,
+        })
+      ).status
+    ).toBe(200);
+  });
+
   it.each(['preset', 'individual'] as const)(
     'links an owner %s workout with durable completion history and idempotent retries',
     async (type) => {
@@ -2454,6 +2611,7 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
         },
       ],
     });
+    await seedLoggedSet(firstWorkout.exercises[0]!.id);
     const a2Diary = await diaryPrescription(
       a2!.assignments[0]!.id,
       first.effective_date
@@ -4586,7 +4744,7 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
       expect(diary).toHaveLength(1);
       expect(diary[0].entry.workout_plan_assignment_id).toBe(assignment.id);
       expect(diary[0].sets).toMatchObject(prescribedSets(2));
-      if (status === 'completed') {
+      if (status === 'completed' || status === 'program') {
         const db = await getSystemClient();
         try {
           await db.query(
@@ -6104,6 +6262,7 @@ describe.runIf(run)('persisted authenticated Training Program APIs', () => {
       );
       expect(started.status).toBe(201);
       const diary = presetSessionResponseSchema.parse(started.body.session);
+      await seedLoggedSet(diary.exercises[0]!.id);
       const historical = await diaryPrescription(
         plan.sessions[0]!.assignments[0]!.id,
         first.effective_date
