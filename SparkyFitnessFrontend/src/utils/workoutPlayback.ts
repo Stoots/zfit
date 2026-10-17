@@ -1,3 +1,6 @@
+import { z } from 'zod';
+import { error as logError } from '@/utils/logging';
+import { getUserLoggingLevel } from '@/utils/userPreferences';
 import {
   adaptiveWeightStepKg,
   applyAdaptiveLoadFactorKg,
@@ -204,15 +207,13 @@ export function clearWorkoutPlaybackDraftsForUser(userId: string): void {
   try {
     const prefix = workoutPlaybackAccountPrefix(userId);
     for (const key of Object.keys(window.localStorage)) {
-      if (
-        key.startsWith(prefix) ||
-        key.startsWith(LEGACY_WORKOUT_PLAYBACK_STORAGE_PREFIX)
-      ) {
+      if (key.startsWith(prefix)) {
         window.localStorage.removeItem(key);
       }
     }
   } catch (error) {
-    console.error(
+    logError(
+      getUserLoggingLevel(),
       'Failed to clear workout playback drafts from storage',
       error
     );
@@ -236,7 +237,8 @@ function isWorkoutPlaybackDraft(value: unknown): value is WorkoutPlaybackDraft {
 
 export function loadWorkoutPlaybackDraftFromStorage(
   entryDate: string,
-  identity: WorkoutPlaybackIdentity
+  identity: WorkoutPlaybackIdentity,
+  ownedProgramIds: readonly string[] = []
 ): WorkoutPlaybackDraft | null {
   if (typeof window === 'undefined') {
     return null;
@@ -245,13 +247,32 @@ export function loadWorkoutPlaybackDraftFromStorage(
   const storageKey = getWorkoutPlaybackDraftStorageKey(entryDate, identity);
 
   try {
-    // Legacy drafts have no verifiable owner; never adopt them into an account.
-    window.localStorage.removeItem(
-      `${LEGACY_WORKOUT_PLAYBACK_STORAGE_PREFIX}${entryDate}`
-    );
     const raw = window.localStorage.getItem(storageKey);
     if (!raw) {
-      return null;
+      if (
+        identity.userId !== identity.activeUserId ||
+        !ownedProgramIds.length ||
+        !z.iso.date().safeParse(entryDate).success
+      )
+        return null;
+
+      const legacyKey = `${LEGACY_WORKOUT_PLAYBACK_STORAGE_PREFIX}${entryDate}`;
+      const legacyRaw = window.localStorage.getItem(legacyKey);
+      if (!legacyRaw) return null;
+      const legacy: unknown = JSON.parse(legacyRaw);
+      if (
+        !isWorkoutPlaybackDraft(legacy) ||
+        legacy.entry_date !== entryDate ||
+        !legacy.training_program ||
+        !ownedProgramIds.includes(legacy.training_program.program_id)
+      )
+        return null;
+
+      // Preserve the only saved copy until the account-scoped write succeeds.
+      if (saveWorkoutPlaybackDraftToStorage(legacy, identity)) {
+        window.localStorage.removeItem(legacyKey);
+      }
+      return legacy;
     }
 
     const parsed: unknown = JSON.parse(raw);
@@ -262,7 +283,11 @@ export function loadWorkoutPlaybackDraftFromStorage(
 
     return parsed;
   } catch (error) {
-    console.error('Failed to load workout playback draft from storage', error);
+    logError(
+      getUserLoggingLevel(),
+      'Failed to load workout playback draft from storage',
+      error
+    );
     return null;
   }
 }
@@ -284,7 +309,11 @@ export function saveWorkoutPlaybackDraftToStorage(
     window.localStorage.setItem(storageKey, JSON.stringify(draft));
     return true;
   } catch (error) {
-    console.error('Failed to save workout playback draft to storage', error);
+    logError(
+      getUserLoggingLevel(),
+      'Failed to save workout playback draft to storage',
+      error
+    );
     return false;
   }
 }
@@ -302,7 +331,11 @@ export function clearWorkoutPlaybackDraftFromStorage(
       getWorkoutPlaybackDraftStorageKey(entryDate, identity)
     );
   } catch (error) {
-    console.error('Failed to clear workout playback draft from storage', error);
+    logError(
+      getUserLoggingLevel(),
+      'Failed to clear workout playback draft from storage',
+      error
+    );
   }
 }
 

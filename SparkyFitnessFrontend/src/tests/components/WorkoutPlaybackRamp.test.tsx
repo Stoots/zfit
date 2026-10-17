@@ -10,6 +10,7 @@ import { createWorkoutPlaybackDraftFromPreset } from '@/utils/workoutPlayback';
 let mockLocationState: { returnTo?: string; draft?: unknown } | null = null;
 
 jest.mock('@/hooks/TrainingPrograms/useTrainingPrograms', () => ({
+  useTrainingProgramsList: () => ({ data: [], isPending: false }),
   useTrainingPrograms: () => ({
     complete: { mutateAsync: jest.fn(), isPending: false },
   }),

@@ -18,6 +18,7 @@ let mockLocationState: { returnTo?: string; draft?: unknown } | null = null;
 const mockFetchSignals = jest.fn();
 
 jest.mock('@/hooks/TrainingPrograms/useTrainingPrograms', () => ({
+  useTrainingProgramsList: () => ({ data: [], isPending: false }),
   useTrainingPrograms: () => ({
     complete: { mutateAsync: jest.fn(), isPending: false },
   }),

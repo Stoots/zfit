@@ -19,6 +19,7 @@ const mockSearchParams = new URLSearchParams('date=2026-09-25');
 let mockLocationState: { returnTo?: string; draft?: unknown } | null = null;
 
 jest.mock('@/hooks/TrainingPrograms/useTrainingPrograms', () => ({
+  useTrainingProgramsList: () => ({ data: [], isPending: false }),
   useTrainingPrograms: () => ({
     complete: { mutateAsync: jest.fn(), isPending: false },
   }),

@@ -6,7 +6,7 @@ Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded her
 
 #### Bug fixes
 
-- Scope web workout drafts to the signed-in account and acting profile; reset playback on profile changes and clear account drafts on sign-out (#78). Legacy unowned drafts are discarded.
+- Scope web workout drafts to the signed-in account and acting profile; reset playback on profile changes and clear account drafts on sign-out (#78). Legacy Program drafts migrate only after verifying the signed-in owner's Program list, preserving completed sets and edited weights; unverifiable drafts remain untouched, including on sign-out. Stale session-expiry probes cannot clear drafts after recovery.
 
 - Remove untouched future weekly-prefill workouts outside a changed weekday or date window, preserving retained workout identities and edited history.
 

@@ -15,7 +15,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardDescription, CardHeader } from '@/components/ui/card';
 import { useCreatePresetSessionMutation } from '@/hooks/Exercises/useExerciseEntries';
 import { getGroupedWorkoutSession } from '@/hooks/Exercises/useExerciseEntries';
-import { useTrainingPrograms } from '@/hooks/TrainingPrograms/useTrainingPrograms';
+import {
+  useTrainingPrograms,
+  useTrainingProgramsList,
+} from '@/hooks/TrainingPrograms/useTrainingPrograms';
 import { usePreferences } from '@/contexts/PreferencesContext';
 import {
   distributeProgressionReps,
@@ -117,7 +120,8 @@ function clampRestSeconds(seconds: number): number {
 function getInitialDraft(
   requestedDate: string | null,
   routeState: WorkoutPlaybackRouteState | null,
-  identity: WorkoutPlaybackIdentity
+  identity: WorkoutPlaybackIdentity,
+  ownedProgramIds: readonly string[]
 ): {
   draft: WorkoutPlaybackDraft | null;
   recoveryDraft: WorkoutPlaybackDraft | null;
@@ -130,7 +134,8 @@ function getInitialDraft(
 
     const stored = loadWorkoutPlaybackDraftFromStorage(
       existingDraft.entry_date,
-      identity
+      identity,
+      ownedProgramIds
     );
     // Starting the same Planned Session again must resume the lifter's edits.
     if (
@@ -154,7 +159,11 @@ function getInitialDraft(
   }
 
   return {
-    draft: loadWorkoutPlaybackDraftFromStorage(requestedDate, identity),
+    draft: loadWorkoutPlaybackDraftFromStorage(
+      requestedDate,
+      identity,
+      ownedProgramIds
+    ),
     recoveryDraft: null,
   };
 }
@@ -204,16 +213,22 @@ function startRestTimer(
 const WorkoutPlaybackPage = () => {
   const { user } = useAuth();
   const location = useLocation();
+  const ownScope =
+    !!user && (!user.activeUserId || user.activeUserId === user.id);
+  const programs = useTrainingProgramsList(user?.id, ownScope);
   const identityKey = JSON.stringify([
     user?.id,
     user?.activeUserId || user?.id,
   ]);
   const routeIdentity = (location.state as WorkoutPlaybackRouteState | null)
     ?.identity;
-  if (!user) return null;
+  if (!user || (ownScope && programs.isPending)) return null;
   return (
     <WorkoutPlaybackSession
       key={identityKey}
+      ownedProgramIds={
+        ownScope ? (programs.data ?? []).map((program) => program.id) : []
+      }
       identity={{ userId: user.id, activeUserId: user.activeUserId || user.id }}
       routeState={
         routeIdentity?.userId === user.id &&
@@ -228,9 +243,11 @@ const WorkoutPlaybackPage = () => {
 const WorkoutPlaybackSession = ({
   identity,
   routeState,
+  ownedProgramIds,
 }: {
   identity: WorkoutPlaybackIdentity;
   routeState: WorkoutPlaybackRouteState | null;
+  ownedProgramIds: readonly string[];
 }) => {
   const { t } = useTranslation();
   const { weightUnit, timezone } = usePreferences();
@@ -243,7 +260,7 @@ const WorkoutPlaybackSession = ({
   const scrubbedRouteStateRef = useRef(false);
   const persistedDraftDateRef = useRef<string | null>(null);
   const [initialDraft] = useState(() =>
-    getInitialDraft(requestedDate, routeState, identity)
+    getInitialDraft(requestedDate, routeState, identity, ownedProgramIds)
   );
   const [draft, setDraft] = useState(initialDraft.draft);
   const [recoveryDraft, setRecoveryDraft] = useState(

@@ -1,3 +1,4 @@
+import * as logging from '@/utils/logging';
 import type { WorkoutPreset } from '@/types/workout';
 import type { Exercise } from '@/types/exercises';
 import {
@@ -7,6 +8,7 @@ import {
   applyWeightRampToDraftExercise,
   addWorkoutSetToExercise,
   clearWorkoutPlaybackDraftFromStorage,
+  clearWorkoutPlaybackDraftsForUser,
   buildPresetSessionCreateRequestFromDraft,
   completeCurrentWorkoutSet,
   createWorkoutPlaybackDraftFromExercise,
@@ -50,6 +52,7 @@ const createPresetFixture = (): WorkoutPreset =>
   }) as unknown as WorkoutPreset;
 
 describe('workoutPlayback utils', () => {
+  beforeEach(() => window.localStorage.clear());
   it('creates a local draft from a workout preset', () => {
     const draft = createWorkoutPlaybackDraftFromPreset(
       createPresetFixture(),
@@ -207,6 +210,34 @@ describe('workoutPlayback utils', () => {
     expect(routeState.draft?.exercises[0]?.exercise_id).toBe('ex-123');
   });
 
+  it('reports account cleanup failures through the configured logger', () => {
+    const identity = { userId: 'alice', activeUserId: 'alice' };
+    saveWorkoutPlaybackDraftToStorage(
+      createWorkoutPlaybackDraftFromPreset(createPresetFixture(), '2026-04-27'),
+      identity
+    );
+    const failure = new Error('storage blocked');
+    const remove = jest
+      .spyOn(Storage.prototype, 'removeItem')
+      .mockImplementation(() => {
+        throw failure;
+      });
+    const reportError = jest
+      .spyOn(logging, 'error')
+      .mockImplementation(() => {});
+    try {
+      clearWorkoutPlaybackDraftsForUser('alice');
+      expect(reportError).toHaveBeenCalledWith(
+        'ERROR',
+        'Failed to clear workout playback drafts from storage',
+        failure
+      );
+    } finally {
+      remove.mockRestore();
+      reportError.mockRestore();
+    }
+  });
+
   it('isolates drafts by signed-in account and acting profile, including deletion', () => {
     const alice = { userId: 'alice', activeUserId: 'alice' };
     const family = { userId: 'alice', activeUserId: 'family' };
@@ -237,7 +268,7 @@ describe('workoutPlayback utils', () => {
     );
   });
 
-  it('drops legacy drafts instead of guessing their owner', () => {
+  it('preserves legacy drafts without guessing their owner', () => {
     const draft = createWorkoutPlaybackDraftFromPreset(
       createPresetFixture(),
       '2026-04-27'
@@ -254,7 +285,118 @@ describe('workoutPlayback utils', () => {
     ).toBeNull();
     expect(
       window.localStorage.getItem('sparky.workoutPlaybackDraft.v1:2026-04-27')
-    ).toBeNull();
+    ).toBe(JSON.stringify(draft));
+  });
+
+  it.each([
+    [
+      'standalone',
+      undefined,
+      '2026-04-27',
+      { userId: 'alice', activeUserId: 'alice' },
+    ],
+    [
+      'foreign Program',
+      { program_id: 'foreign', session_id: 'planned-1' },
+      '2026-04-27',
+      { userId: 'alice', activeUserId: 'alice' },
+    ],
+    [
+      'acting profile',
+      { program_id: 'program-1', session_id: 'planned-1' },
+      '2026-04-27',
+      { userId: 'alice', activeUserId: 'family' },
+    ],
+    [
+      'invalid date',
+      { program_id: 'program-1', session_id: 'planned-1' },
+      '2026-02-30',
+      { userId: 'alice', activeUserId: 'alice' },
+    ],
+    [
+      'different date',
+      { program_id: 'program-1', session_id: 'planned-1' },
+      '2026-04-28',
+      { userId: 'alice', activeUserId: 'alice' },
+    ],
+  ] as const)(
+    'leaves unverifiable legacy bytes untouched: %s',
+    (_label, training_program, date, identity) => {
+      const draft = {
+        ...createWorkoutPlaybackDraftFromPreset(createPresetFixture(), date),
+        training_program,
+      };
+      const key = `sparky.workoutPlaybackDraft.v1:${date === '2026-04-28' ? '2026-04-27' : date}`;
+      const raw = JSON.stringify(draft);
+      window.localStorage.setItem(key, raw);
+      expect(
+        loadWorkoutPlaybackDraftFromStorage(
+          date === '2026-04-28' ? '2026-04-27' : date,
+          identity,
+          ['program-1']
+        )
+      ).toBeNull();
+      expect(window.localStorage.getItem(key)).toBe(raw);
+    }
+  );
+
+  it('never overwrites an existing v2 draft with a legacy draft', () => {
+    const identity = { userId: 'alice', activeUserId: 'alice' };
+    const draft = createWorkoutPlaybackDraftFromPreset(
+      createPresetFixture(),
+      '2026-04-27'
+    );
+    const raw = JSON.stringify({
+      ...draft,
+      training_program: { program_id: 'program-1', session_id: 'planned-1' },
+    });
+    const key = 'sparky.workoutPlaybackDraft.v1:2026-04-27';
+    window.localStorage.setItem(key, raw);
+    saveWorkoutPlaybackDraftToStorage(
+      { ...draft, name: 'Newer workout' },
+      identity
+    );
+    expect(
+      loadWorkoutPlaybackDraftFromStorage('2026-04-27', identity, ['program-1'])
+        ?.name
+    ).toBe('Newer workout');
+    expect(window.localStorage.getItem(key)).toBe(raw);
+  });
+
+  it('keeps legacy completed sets after a failed migration write', () => {
+    const identity = { userId: 'alice', activeUserId: 'alice' };
+    const draft = {
+      ...createWorkoutPlaybackDraftFromPreset(
+        createPresetFixture(),
+        '2026-04-27'
+      ),
+      training_program: { program_id: 'program-1', session_id: 'planned-1' },
+    };
+    draft.exercises[0]!.sets[0]!.weight = 92.5;
+    draft.exercises[0]!.sets[0]!.completed = true;
+    const raw = JSON.stringify(draft);
+    const key = 'sparky.workoutPlaybackDraft.v1:2026-04-27';
+    window.localStorage.setItem(key, raw);
+    const write = jest
+      .spyOn(Storage.prototype, 'setItem')
+      .mockImplementation(() => {
+        throw new Error('quota');
+      });
+    try {
+      expect(
+        loadWorkoutPlaybackDraftFromStorage('2026-04-27', identity, [
+          'program-1',
+        ])?.exercises[0]?.sets[0]
+      ).toMatchObject({ weight: 92.5, completed: true });
+      expect(window.localStorage.getItem(key)).toBe(raw);
+      expect(
+        window.localStorage.getItem(
+          getWorkoutPlaybackDraftStorageKey('2026-04-27', identity)
+        )
+      ).toBeNull();
+    } finally {
+      write.mockRestore();
+    }
   });
 
   it('saves, loads, and clears a persisted draft by date', () => {

@@ -213,6 +213,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
 
   // 2. Cleanup Effect: Handles Logout / Session expiry
   useEffect(() => {
+    let cancelled = false;
     if (!session && !sessionLoading) {
       const now = Date.now();
       const isSticky = now - lastManualSignIn < 2000;
@@ -233,6 +234,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
         apiCall('/ping')
           .then(() => {
             if (
+              cancelled ||
               currentUserRef.current?.id !== probedUserId ||
               Date.now() - lastManualSignInRef.current < 2000
             ) {
@@ -257,6 +259,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({
       }
       setIsSyncing(false);
     }
+    return () => {
+      cancelled = true;
+    };
   }, [session, sessionLoading, user, lastManualSignIn, queryClient]);
 
   const refreshUser = useCallback(async () => {

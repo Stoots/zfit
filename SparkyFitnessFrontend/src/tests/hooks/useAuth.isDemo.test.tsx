@@ -66,10 +66,14 @@ describe('AuthProvider demo status resolution', () => {
     const own = { userId: 'u1', activeUserId: 'u1' };
     const family = { userId: 'u1', activeUserId: 'family' };
     const other = { userId: 'u2', activeUserId: 'u2' };
+    const legacyKey = 'sparky.workoutPlaybackDraft.v1:2026-04-27';
+    const legacyRaw = JSON.stringify(draft);
+    window.localStorage.setItem(legacyKey, legacyRaw);
     saveWorkoutPlaybackDraftToStorage(draft, own);
     saveWorkoutPlaybackDraftToStorage(draft, family);
     saveWorkoutPlaybackDraftToStorage(draft, other);
     await act(() => result.current.signOut());
+    expect(window.localStorage.getItem(legacyKey)).toBe(legacyRaw);
     expect(loadWorkoutPlaybackDraftFromStorage('2026-04-27', own)).toBeNull();
     expect(
       loadWorkoutPlaybackDraftFromStorage('2026-04-27', family)
@@ -156,6 +160,7 @@ describe('AuthProvider demo status resolution', () => {
 describe('AuthProvider session cleanup probe', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    window.localStorage.clear();
     jest.useFakeTimers();
     sessionState = { data: null, isPending: false };
     mockFetchIdentityUser.mockResolvedValue({
@@ -170,6 +175,69 @@ describe('AuthProvider session cleanup probe', () => {
   afterEach(() => {
     jest.useRealTimers();
   });
+
+  it.each(['expired', 'failed', 'recovered', 'other-account'] as const)(
+    'preserves drafts unless expiry is still authoritative: %s',
+    async (outcome) => {
+      let resolveProbe: (() => void) | undefined;
+      let rejectProbe: (() => void) | undefined;
+      mockApiCall.mockImplementation(
+        () =>
+          new Promise((resolve, reject) => {
+            resolveProbe = () => resolve({});
+            rejectProbe = () => reject(new Error('gateway/offline'));
+          })
+      );
+      const { result, rerender } = renderProvider();
+      act(() => {
+        result.current.signIn('u1', 'u1', 'a@example.com', 'user', false);
+      });
+      const draft = createWorkoutPlaybackDraftFromExercise(
+        { id: 'ex1', name: 'Walk' } as Exercise,
+        '2026-04-27'
+      );
+      const own = { userId: 'u1', activeUserId: 'u1' };
+      const family = { userId: 'u1', activeUserId: 'family' };
+      const other = { userId: 'u2', activeUserId: 'u2' };
+      for (const identity of [own, family, other])
+        saveWorkoutPlaybackDraftToStorage(draft, identity);
+      await act(async () => {
+        jest.advanceTimersByTime(3000);
+      });
+      rerender();
+      await waitFor(() => expect(resolveProbe).toBeDefined());
+      if (outcome === 'recovered' || outcome === 'other-account') {
+        sessionState = {
+          data: {
+            user: {
+              id: outcome === 'recovered' ? 'u1' : 'u2',
+              email: 'a@example.com',
+              name: 'A',
+            },
+          },
+          isPending: false,
+        };
+        await act(async () => {
+          rerender();
+        });
+      }
+      await act(async () => {
+        if (outcome === 'failed') rejectProbe!();
+        else resolveProbe!();
+      });
+      for (const identity of [own, family]) {
+        expect(
+          loadWorkoutPlaybackDraftFromStorage('2026-04-27', identity) === null
+        ).toBe(outcome === 'expired');
+      }
+      expect(
+        loadWorkoutPlaybackDraftFromStorage('2026-04-27', other)
+      ).not.toBeNull();
+      expect(result.current.user?.id ?? null).toBe(
+        outcome === 'expired' ? null : outcome === 'other-account' ? 'u2' : 'u1'
+      );
+    }
+  );
 
   // The probe confirms a vanished session is a real logout rather than a
   // gateway swallowing the session fetch. It can outlive the account it was
