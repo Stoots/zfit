@@ -40,6 +40,7 @@ git merge upstream/main    # in small steps (merge intermediate upstream commits
 - Do not hand-resolve `pnpm-lock.yaml`: take either side, then regenerate it with `pnpm install`.
 - Never hand-edit or regenerate `db_schema_backup.sql` locally.
 - Run each package's `pnpm run validate` and its CI test script (see `.github/workflows/ci-tests.yml`) before merging the branch.
+- `.husky/post-merge` reruns `pnpm install --frozen-lockfile` when a pull or merge changes `pnpm-lock.yaml`; stale `node_modules` otherwise break server boot.
 
 ## GitHub Actions policy
 
@@ -66,4 +67,4 @@ Kept enabled: `ci-tests.yml`, `pr-validation-tests.yml`, `docs-test.yml`, `helm-
 
 ## Fork changelog
 
-User-facing fork changes are recorded in `FORK-CHANGELOG.md` (upstream `CHANGELOG.md` is release-please managed).
+User-facing fork changes are recorded in `FORK-CHANGELOG.md` (upstream `CHANGELOG.md` is release-please managed). The `merge=union` driver only applies to local merges: GitHub still marks a second PR that touches the changelog as conflicting, so run `git merge origin/main` on that branch, push, and let CI rerun.
