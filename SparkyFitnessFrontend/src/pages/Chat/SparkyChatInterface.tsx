@@ -29,6 +29,7 @@ import { TrainingAnalysisControls } from './TrainingAnalysisControls';
 
 import { MessagePart, ImagePart } from '@/types/Chatbot_types';
 import { type UIMessage } from 'ai';
+import { chatErrorMessage } from '@/utils/chatError';
 import { resizeImageBase64 } from '@/utils/imageResize';
 
 interface SparkyChatInnerProps {
@@ -62,6 +63,9 @@ const SparkyChatInner = ({
         health_metrics: [],
       };
     }
+  );
+  const [questionScopes] = useState(
+    () => new Map<string, TrainingAnalysisScope | undefined>()
   );
   const invalidateDiary = useDiaryInvalidation();
   const invalidateChat = useChatInvalidation();
@@ -155,7 +159,18 @@ const SparkyChatInner = ({
           })
         );
 
-        const analysis = analysisEnabled ? analysisScope : undefined;
+        const question = options.messages
+          .slice()
+          .reverse()
+          .find((message) => message.role === 'user');
+        // Reload reuses the question ID; later control edits belong to the next question.
+        if (question && !questionScopes.has(question.id)) {
+          questionScopes.set(
+            question.id,
+            analysisEnabled ? structuredClone(analysisScope) : undefined
+          );
+        }
+        const analysis = question ? questionScopes.get(question.id) : undefined;
         if (
           analysis &&
           !trainingAnalysisScopeSchema.safeParse(analysis).success
@@ -183,10 +198,8 @@ const SparkyChatInner = ({
     },
     onError: (error) => {
       toast({
-        title: 'Chat Error',
-        description:
-          error.message ||
-          'Failed to process message. Please check your AI service settings.',
+        title: t('chat.errorTitle'),
+        description: chatErrorMessage(error, t('chat.transportError')),
         variant: 'destructive',
       });
     },

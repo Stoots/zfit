@@ -3,6 +3,9 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
 import type { UIMessage } from 'ai';
 
+const mockToast = jest.fn();
+let mockOnError: (error: Error) => void;
+
 let mockTransport: {
   prepareSendMessagesRequest: (options: {
     messages: UIMessage[];
@@ -14,7 +17,10 @@ jest.mock('@assistant-ui/react-ai-sdk', () => ({
     mockTransport = options;
     return options;
   }),
-  useChatRuntime: () => ({}),
+  useChatRuntime: (options: { onError: (error: Error) => void }) => {
+    mockOnError = options.onError;
+    return {};
+  },
 }));
 jest.mock('@/components/thread', () => ({
   Thread: () => {
@@ -64,7 +70,7 @@ jest.mock('@/hooks/useInvalidateKeys', () => ({
   useChatInvalidation: () => jest.fn(),
 }));
 jest.mock('@/hooks/use-toast', () => ({
-  useToast: () => ({ toast: jest.fn() }),
+  useToast: () => ({ toast: mockToast }),
 }));
 jest.mock('@/contexts/ChatToolCategoriesContext', () => ({
   useChatToolCategories: () => ({
@@ -77,7 +83,11 @@ jest.mock('@/contexts/PreferencesContext', () => ({
   usePreferences: () => ({ timezone: 'UTC' }),
 }));
 jest.mock('@/hooks/TrainingPrograms/useTrainingPrograms', () => ({
-  useTrainingProgramsList: () => ({ data: [] }),
+  useTrainingProgramsList: () => ({
+    data: [
+      { id: '11111111-1111-4111-8111-111111111111', name: 'Synthetic Program' },
+    ],
+  }),
 }));
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -113,4 +123,92 @@ it('asks in read-only training mode and displays the answer with explicitly sele
   });
   expect(body.messages[0].parts[0].text).toBe('Summarize my training program');
   delete (global as { fetch?: unknown }).fetch;
+});
+
+it.each([
+  [
+    '{"error":"Training analysis is temporarily unavailable."}',
+    'Training analysis is temporarily unavailable.',
+  ],
+  [
+    '{"error":{"message":"Service busy. Try again."}}',
+    'Service busy. Try again.',
+  ],
+  ['{"message":"Service busy."}', 'Service busy.'],
+  ['<html>Bad gateway</html>', 'chat.transportError'],
+  ['{"error":', 'chat.transportError'],
+  ['null', 'chat.transportError'],
+  ['[]', 'chat.transportError'],
+  ['503', 'chat.transportError'],
+  ['The service is busy. Try again.', 'The service is busy. Try again.'],
+  ['Failed to fetch', 'chat.transportError'],
+  ['', 'chat.transportError'],
+])('shows readable feedback for %s', (raw, expected) => {
+  render(<SparkyChatInterface />);
+  mockOnError(new Error(raw));
+  expect(mockToast).toHaveBeenLastCalledWith({
+    title: 'chat.errorTitle',
+    description: expected,
+    variant: 'destructive',
+  });
+});
+
+const question: UIMessage = {
+  id: 'retry-question',
+  role: 'user',
+  parts: [{ type: 'text', text: 'Summarize my training program' }],
+};
+
+it('retains the failed question disclosure even after the next-question controls change', async () => {
+  render(<SparkyChatInterface />);
+  fireEvent.click(screen.getByLabelText('Training analysis (read-only)'));
+  fireEvent.click(screen.getByLabelText('chat.trainingAnalysis.ramp'));
+  fireEvent.click(screen.getByLabelText('chat.trainingAnalysis.total_steps'));
+  fireEvent.change(screen.getByLabelText('chat.trainingAnalysis.program'), {
+    target: { value: '11111111-1111-4111-8111-111111111111' },
+  });
+  const original = await mockTransport.prepareSendMessagesRequest({
+    messages: [question],
+    body: {},
+  });
+  expect(original.body['trainingAnalysis']).toMatchObject({
+    program_id: '11111111-1111-4111-8111-111111111111',
+    test_types: ['ramp'],
+    health_metrics: ['total_steps'],
+  });
+  fireEvent.change(screen.getByLabelText('chat.trainingAnalysis.program'), {
+    target: { value: '' },
+  });
+  fireEvent.click(screen.getByLabelText('chat.trainingAnalysis.cooper_run'));
+  fireEvent.change(screen.getByLabelText('chat.trainingAnalysis.start'), {
+    target: { value: '2026-01-01' },
+  });
+  fireEvent.click(screen.getByLabelText('Training analysis (read-only)'));
+  const retried = await mockTransport.prepareSendMessagesRequest({
+    messages: [question],
+    body: {},
+  });
+  expect(retried.body['trainingAnalysis']).toEqual(
+    original.body['trainingAnalysis']
+  );
+  expect(retried.body['messages']).toEqual([question]);
+});
+
+it('does not opt an ordinary failed question into Training analysis on retry', async () => {
+  render(<SparkyChatInterface />);
+  await mockTransport.prepareSendMessagesRequest({
+    messages: [question],
+    body: {},
+  });
+  fireEvent.click(screen.getByLabelText('Training analysis (read-only)'));
+  const retried = await mockTransport.prepareSendMessagesRequest({
+    messages: [question],
+    body: {},
+  });
+  expect(retried.body['trainingAnalysis']).toBeUndefined();
+  const next = await mockTransport.prepareSendMessagesRequest({
+    messages: [question, { ...question, id: 'next-question' }],
+    body: {},
+  });
+  expect(next.body['trainingAnalysis']).toMatchObject({ programs: true });
 });

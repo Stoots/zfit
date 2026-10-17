@@ -146,6 +146,9 @@
     "translate": "Translate"
   },
   "chat": {
+    "errorTitle": "Chat unavailable",
+    "transportError": "Couldn't get a reply. Check your connection and try again.",
+    "retry": "Retry",
     "trainingAnalysis": {
       "title": "Training analysis (read-only)",
       "scope": "Data for your next question",
