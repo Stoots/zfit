@@ -19,6 +19,8 @@ export function useWorkoutSessionPreview(
       'workoutPlanTemplates',
       'preview',
       workout?.userId,
+      workout?.plan.id,
+      workout?.plan.updated_at,
       workout?.session.id,
       workout?.session.assignments,
     ],

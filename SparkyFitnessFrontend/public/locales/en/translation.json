@@ -8,6 +8,8 @@
     "empty": "No exercises are prescribed in this Workout Session.",
     "noSets": "No sets prescribed.",
     "reps": "{{count}} reps",
+    "reps_one": "{{count}} rep",
+    "reps_other": "{{count}} reps",
     "seconds": "{{count}}s",
     "rest": "{{count}}s rest",
     "cooper": "Run as far as possible in 12 minutes and record the distance in metres.",

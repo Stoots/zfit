@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -19,9 +20,24 @@ jest.mock('react-router-dom', () => ({
   ...jest.requireActual('react-router-dom'),
   useNavigate: () => mockNavigate,
 }));
-jest.mock('react-i18next', () =>
-  jest.requireActual('@/tests/mocks/reactI18next')
-);
+jest.mock('react-i18next', () => {
+  const { createInstance } =
+    jest.requireActual<typeof import('i18next')>('i18next');
+  const en = jest.requireActual<
+    typeof import('../../../public/locales/en/translation.json')
+  >('../../../public/locales/en/translation.json');
+  const i18n = createInstance();
+  void i18n.init({
+    lng: 'en',
+    initAsync: false,
+    resources: {
+      en: {
+        translation: { dashboardWorkoutPreview: en.dashboardWorkoutPreview },
+      },
+    },
+  });
+  return { useTranslation: () => ({ t: i18n.t.bind(i18n), i18n }) };
+});
 jest.mock('@/hooks/useAuth', () => ({
   useAuth: () => ({ user: { id: 'athlete' } }),
 }));
@@ -170,9 +186,9 @@ const programLinkedTo = (planId: string): TrainingProgram =>
     ],
   }) as unknown as TrainingProgram;
 
-const renderCard = (selectedDate = '2026-10-12') =>
+const renderCard = (selectedDate = '2026-10-12', client = new QueryClient()) =>
   render(
-    <QueryClientProvider client={new QueryClient()}>
+    <QueryClientProvider client={client}>
       <MemoryRouter>
         <ExerciseCard
           selectedDate={selectedDate}
@@ -353,6 +369,73 @@ describe('ExerciseCard dashboard plans', () => {
       });
     }
   );
+
+  it('does not show a cached prescription after the plan changes and the preview reopens', async () => {
+    const plan = makePlan('7', 'Program plan', ['Push']);
+    plan.description = 'Old instructions';
+    plan.updated_at = '2026-10-16T00:00:00Z';
+    mockState.plans = [plan];
+    mockState.programs = { data: [programLinkedTo('7')], isError: false };
+    const client = new QueryClient();
+    const view = renderCard(undefined, client);
+    fireEvent.click(screen.getByRole('button', { name: /Preview workout:/ }));
+    expect(await screen.findByText('Old instructions')).toBeVisible();
+    fireEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', { name: 'Close' })
+    );
+    mockState.plans = [
+      {
+        ...plan,
+        description: 'New instructions',
+        updated_at: '2026-10-17T00:00:00Z',
+      },
+    ];
+    view.rerender(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          <ExerciseCard
+            selectedDate="2026-10-12"
+            onExercisesLogged={jest.fn()}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>
+    );
+    let finishLoad!: () => void;
+    mockExerciseFetch.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishLoad = () => resolve({ id: 'exercise-7', name: 'Push' });
+        })
+    );
+    fireEvent.click(screen.getByRole('button', { name: /Preview workout:/ }));
+    expect(screen.queryByText('Old instructions')).not.toBeInTheDocument();
+    await act(async () => finishLoad());
+    expect(await screen.findByText('New instructions')).toBeVisible();
+    fireEvent.click(
+      within(screen.getByRole('dialog')).getByRole('button', {
+        name: 'Start Workout',
+      })
+    );
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledTimes(1));
+    expect(mockNavigate.mock.calls[0]![1].state.draft.description).toBe(
+      'New instructions'
+    );
+  });
+
+  it('uses singular and plural rep labels in the preview', async () => {
+    const plan = makePlan('7', 'Program plan', ['Push']);
+    plan.sessions[0]!.assignments[0]!.sets = [
+      { set_number: 1, reps: 1 },
+      { set_number: 2, reps: 2 },
+    ];
+    mockState.plans = [plan];
+    mockState.programs = { data: [programLinkedTo('7')], isError: false };
+    renderCard();
+    fireEvent.click(screen.getByRole('button', { name: /Preview workout:/ }));
+    expect(await screen.findByText('1 rep')).toBeVisible();
+    expect(screen.getByText('2 reps')).toBeVisible();
+    expect(screen.queryByText('1 reps')).not.toBeInTheDocument();
+  });
 
   it('previews the exact strength occurrence without starting or completing it', async () => {
     const plan = makePlan('7', 'Program plan', ['Push', 'Pull']);
