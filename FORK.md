@@ -74,6 +74,11 @@ Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded her
 
 - Bring populated Cardio Test editors into view with a dated heading and return focus to history after Save or Cancel for all four web protocols (#60).
 
+- Keep web food-entry quantity, unit, time and notes after a failed save; allow retry and block duplicate submissions while saving (#58).
+
+- Make food picker nutrient labels, values and serving captions readable in both themes, retaining nutrient colors as marks (#59).
+
+- Put daily weight entry and Save before the trend chart on web Check-In, keeping the selected date, preferred units and complete measurement form (#63).
 - Show four pending Program workouts on the web dashboard and refresh the queue immediately after completing or linking any occurrence, preserving earlier unfinished sessions and completed outcomes when mutation responses arrive out of order (#49).
 - Restore hidden CSV exercises in place on re-import, counting them as updated while preserving separate-copy imports for hidden manual exercises (#21).
 
