@@ -11,29 +11,53 @@ run and use the same frontend origin for Vite preview,
 `SPARKY_FITNESS_FRONTEND_URL`, and `BETTER_AUTH_URL`. Disable scheduled jobs and
 suppress repo `.env` loading in the disposable server. Never use a live database.
 
-1. Install locked dependencies. Build with `vite build`, then `vite preview
-   --host localhost --port <port> --strictPort`, proxying to the disposable server.
-   Register a synthetic owner, complete onboarding, and sign in through the browser
-   origin. Use Chromium touch emulation: width **390**, height **844**, scale **3**.
+1. Install locked dependencies with `pnpm install --frozen-lockfile` from the
+   repo root. Choose free ports; the example below uses backend **3396** and
+   frontend **8096**. In the isolated server startup described above, set
+   `SPARKY_FITNESS_SERVER_PORT=3396`, `SPARKY_FITNESS_FRONTEND_URL=http://localhost:8096`
+   and `BETTER_AUTH_URL=http://localhost:8096`. Keep those values in sync with
+   `server_port`, `frontend_port` and `origin` below if choosing different ports.
+   Then run this block **from the repo root in a second terminal**. It builds and
+   serves the frontend using package-local Vite and explicitly proxies to the
+   disposable backend, rather than the default port 3010:
+
+   ```bash
+   server_port=3396
+   frontend_port=8096
+   origin="http://localhost:$frontend_port"
+   export SPARKY_FITNESS_SERVER_PORT="$server_port"
+   export SPARKY_FITNESS_FRONTEND_URL="$origin"
+   export BETTER_AUTH_URL="$origin"
+   cd SparkyFitnessFrontend
+   VITE_BACKEND_HOST=127.0.0.1 VITE_BACKEND_PORT="$server_port" pnpm exec vite build
+   VITE_BACKEND_HOST=127.0.0.1 VITE_BACKEND_PORT="$server_port" pnpm exec vite preview --host localhost --port "$frontend_port" --strictPort
+   ```
+
+   The preview stays in the foreground; open `http://localhost:8096` (or your
+   chosen `origin`) in the browser. Register a synthetic owner, complete
+   onboarding, and sign in through that origin. Use Chromium touch emulation:
+   width **390**, height **844**, scale **3**.
+
 2. Configure an active OpenAI-compatible service pointing at a local synthetic
    HTTP provider. Allow private-network AI only in this isolated server process.
    Capture every JSON request at the provider HTTP boundary. Ordinary chat may
    make a non-streaming classification call; respond with a Chat Completions JSON
    response. For streaming calls, use Chat Completions SSE chunks followed by
    `data: [DONE]`.
-3. Seed a Program named `Selected Build`, October 1–7, 2026, with a `Selected
-   Ramp` assessment on October 2. Seed another Program with a unique exclusion
+3. Seed a Program named `Selected Build` for October 1–7, 2026, with an assessment
+   named `Selected Ramp` on October 2. Seed another Program with a unique exclusion
    marker. Seed these standalone Test Attempts through the API:
 
-   | Protocol | Date | Results |
-   | --- | --- | --- |
-   | Ramp | 2026-10-02 | 321 W, peak HR 181, one-minute HR 145 |
-   | Ramp | 2026-09-01 | 987 W, peak HR 180, one-minute HR 150 |
-   | Cooper | 2026-10-02 | 2999 m |
+   | Protocol | Date       | Results                               |
+   | -------- | ---------- | ------------------------------------- |
+   | Ramp     | 2026-10-02 | 321 W, peak HR 181, one-minute HR 145 |
+   | Ramp     | 2026-09-01 | 987 W, peak HR 180, one-minute HR 150 |
+   | Cooper   | 2026-10-02 | 2999 m                                |
 
    In disposable `daily_health_metrics`, seed an October 2 `healthkit` row with
    6543 steps and resting HR 73; a September 1 `healthkit` row with 998877 steps;
    and an October 3 `manual` row with 887766 steps.
+
 4. Open chat and send `UNRELATED_CONVERSATION_SECRET` in ordinary mode. Reply
    `Ordinary synthetic reply.`. Retain this conversation in the actual UI.
 5. Enable **Training analysis (read-only)**. Select October 1–7, `Selected Build`,
