@@ -15,12 +15,43 @@ phone layout or actual Recharts rendering.
    server `index.ts` boot path/migrations/RLS, scheduled jobs disabled, an isolated
    uploads directory, and dotenv suppressed in that child process. Never use a
    live database or load the repository `.env`.
-3. Choose free, dedicated ports for PostgreSQL, the server and preview. Set both
-   `SPARKY_FITNESS_FRONTEND_URL` and `BETTER_AUTH_URL` to the preview origin.
-   Pass `VITE_BACKEND_HOST=127.0.0.1` and `VITE_BACKEND_PORT=<server port>` to
-   **both** `vite build` and `vite preview` from `SparkyFitnessFrontend`.
-   Start preview with `--host localhost --port <port> --strictPort`. Do not use the development server.
-   The player script reserves 8080; use another origin when workers run together.
+3. Choose free, dedicated ports for PostgreSQL, the server and preview. For
+   example, run these assignments in the shell that launches the isolated server,
+   alongside its disposable credentials and other settings from step 2. Start
+   that server only after exporting these values:
+
+   ```bash
+   export db_port=55495
+   export server_port=3395
+   export preview_port=8095
+   export preview_origin="http://localhost:${preview_port}"
+   export SPARKY_FITNESS_DB_PORT="$db_port"
+   export SPARKY_FITNESS_SERVER_PORT="$server_port"
+   export SPARKY_FITNESS_FRONTEND_URL="$preview_origin"
+   export BETTER_AUTH_URL="$preview_origin"
+   ```
+
+   From the repository root, build the production web app in the same configured
+   shell (or repeat those exports in the frontend shell):
+
+   ```bash
+   cd SparkyFitnessFrontend
+   VITE_BACKEND_HOST=127.0.0.1 VITE_BACKEND_PORT="$server_port" pnpm exec vite build
+   ```
+
+   Then, still in `SparkyFitnessFrontend`, run preview in the foreground and leave
+   it running while using another shell/browser for the acceptance checks:
+
+   ```bash
+   VITE_BACKEND_HOST=127.0.0.1 VITE_BACKEND_PORT="$server_port" pnpm exec vite preview --host localhost --port "$preview_port" --strictPort
+   ```
+
+   Open `$preview_origin`. Both Vite invocations need the backend variables:
+   preview's API proxy must target the isolated server. Do not use the development
+   server. The player script reserves 8080; use another origin when workers run
+   together. Changing a port means updating its export and the corresponding
+   disposable container/server configuration before starting either process.
+
 4. Create a synthetic ordinary user through `/api/auth/sign-up/email`, mark only
    that user's disposable `onboarding_status` complete, then sign in through the
    preview origin. Use a fresh Chromium profile and the viewport above.
