@@ -5,10 +5,10 @@ import { requestLogger } from '../middleware/requestLogger.js';
 
 vi.mock('../config/logging', () => ({ log: vi.fn() }));
 
-function run(originalUrl: string, path = originalUrl) {
+function run(originalUrl: string, path = originalUrl, method = 'GET') {
   const next = vi.fn() as NextFunction;
   requestLogger()(
-    { method: 'GET', originalUrl, path } as Request,
+    { method, originalUrl, path } as Request,
     {} as Response,
     next
   );
@@ -28,6 +28,15 @@ describe('requestLogger', () => {
     expect(log).toHaveBeenCalledWith(
       'info',
       'Incoming request: GET /api/exercise-entries/history?x=1 (Path: /api/exercise-entries/history)'
+    );
+  });
+
+  it('still logs non-GET requests to the health path', () => {
+    vi.mocked(log).mockClear();
+    run('/api/health', '/api/health', 'POST');
+    expect(log).toHaveBeenCalledWith(
+      'info',
+      'Incoming request: POST /api/health (Path: /api/health)'
     );
   });
 });
