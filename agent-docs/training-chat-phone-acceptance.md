@@ -43,7 +43,7 @@ cleanup() {
     kill -KILL -- "-$pid" 2>/dev/null || true
     wait "$pid" 2>/dev/null || true
   done
-  if "$container_started"; then docker rm -f -v "$container"; fi
+  if "$container_started"; then docker rm -f -v "$container" || true; fi
   rm -rf -- "$run_dir/uploads" "$run_dir/no-dotenv.mjs"
   printf 'Cleaned disposable services; retained evidence: %s\n' "$run_dir"
 }
