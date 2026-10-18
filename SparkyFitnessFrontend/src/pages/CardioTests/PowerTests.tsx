@@ -25,6 +25,7 @@ import { useTrainingProgramsList } from '@/hooks/TrainingPrograms/useTrainingPro
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { trendChartTheme } from '@/components/ui/trend-chart';
 import { parseWattsInput } from './wattsInput';
 
 type Protocol = 'sprint_6s' | 'power_30s';
@@ -365,7 +366,7 @@ function PowerProtocol({
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="attempt_date" />
                 <YAxis />
-                <Tooltip />
+                <Tooltip contentStyle={trendChartTheme.tooltip} />
                 <Legend />
                 {labels.map((label, index) => (
                   <Line
