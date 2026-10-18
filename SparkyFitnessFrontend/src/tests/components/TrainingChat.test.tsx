@@ -144,6 +144,17 @@ it('asks in read-only training mode and displays the answer with explicitly sele
   global.fetch = fetchMock;
   render(<SparkyChatInterface />);
   fireEvent.click(screen.getByLabelText('Training analysis (read-only)'));
+  fireEvent.change(screen.getByLabelText('chat.trainingAnalysis.start'), {
+    target: { value: '2026-10-01' },
+  });
+  fireEvent.change(screen.getByLabelText('chat.trainingAnalysis.end'), {
+    target: { value: '2026-10-07' },
+  });
+  fireEvent.change(screen.getByLabelText('chat.trainingAnalysis.program'), {
+    target: { value: '11111111-1111-4111-8111-111111111111' },
+  });
+  fireEvent.click(screen.getByLabelText('chat.trainingAnalysis.ramp'));
+  fireEvent.click(screen.getByLabelText('chat.trainingAnalysis.total_steps'));
   fireEvent.click(
     screen.getByRole('button', { name: 'Ask training question' })
   );
@@ -154,10 +165,13 @@ it('asks in read-only training mode and displays the answer with explicitly sele
   ).toBeInTheDocument();
   await waitFor(() => expect(fetchMock).toHaveBeenCalled());
   const body = JSON.parse(String(fetchMock.mock.calls[0]![1]!.body));
-  expect(body.trainingAnalysis).toMatchObject({
+  expect(body.trainingAnalysis).toEqual({
+    start_date: '2026-10-01',
+    end_date: '2026-10-07',
     programs: true,
-    test_types: [],
-    health_metrics: [],
+    program_id: '11111111-1111-4111-8111-111111111111',
+    test_types: ['ramp'],
+    health_metrics: ['total_steps'],
   });
   expect(body.messages[0].parts[0].text).toBe('Summarize my training program');
   delete (global as { fetch?: unknown }).fetch;

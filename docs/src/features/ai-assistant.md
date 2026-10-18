@@ -32,6 +32,9 @@ For example, select your Program and Cooper attempts, then ask “Summarize my c
 - If a reply fails, chat shows a readable error and **Retry**. Retry keeps the same question and its original dates, Program, Test and Apple Health selections, even if you change the next-question controls. It does not add another question to the conversation. Scope is remembered for the last 50 questions while chat stays open. If the original scope is unavailable after reopening chat or eviction, Retry/Refresh uses ordinary chat without Training analysis. Edit → Update always uses ordinary chat, including when the text is unchanged; its retries stay ordinary too. Chat explains this fallback when analysis is enabled. Send a new question from the main composer to use your current analysis selections.
 - Training analysis is owner-only; switched-account requests are rejected. It is available in the web app, including the iPhone Home Screen app.
 
+The repeatable phone-web acceptance procedure is in
+[`agent-docs/training-chat-phone-acceptance.md`](https://github.com/Stoots/zfit/blob/main/agent-docs/training-chat-phone-acceptance.md).
+
 ### Voice input on web and mobile
 
 In **Ask Sparky** on the web, Android, or iOS, tap the microphone, dictate a message, then stop recording. Review or edit the recognized text and tap **Send**. Dictation does not automatically send messages or add food to your diary; the existing chat handles your request after you send it.
