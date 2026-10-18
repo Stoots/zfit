@@ -376,6 +376,164 @@ it('blocks an out-of-week date and preserves the draft after server refusal', as
   expect(screen.getByLabelText('Session date')).toHaveValue('2026-10-31');
 });
 
+it.each(['create', 'update'] as const)(
+  'retains an unbound Planned Session on %s rejection and saves it once after choosing a binding',
+  async (mode) => {
+    if (mode === 'update') {
+      stored = serverResponse({
+        name: 'Autumn 10K',
+        goal: 'Run 10K comfortably',
+        start_date: '2026-10-25',
+        end_date: '2026-11-07',
+        phases: [],
+      });
+    }
+    const programId = stored?.id;
+    mount();
+    if (mode === 'create') {
+      await startProgram();
+    } else {
+      fireEvent.click(
+        await screen.findByRole('link', { name: 'View Autumn 10K' })
+      );
+      fireEvent.click(
+        await screen.findByRole('button', { name: 'Edit Training Program' })
+      );
+    }
+    fireEvent.click(screen.getByLabelText('Auto-shift after a miss'));
+    fireEvent.click(screen.getByRole('button', { name: 'Add phase' }));
+    const emptyPhase = within(screen.getByRole('group', { name: 'Phase 1' }));
+    fill('Phase name', 'Preparation', emptyPhase);
+    fill('Phase goal', 'Rest first', emptyPhase);
+    fireEvent.click(screen.getByRole('button', { name: 'Add phase' }));
+    const phase = within(screen.getByRole('group', { name: 'Phase 2' }));
+    fill('Phase name', 'Base', phase);
+    fill('Phase goal', 'Build endurance', phase);
+    fireEvent.click(phase.getByRole('button', { name: 'Add week' }));
+    fireEvent.click(phase.getByRole('button', { name: 'Add week' }));
+    const week = within(phase.getByRole('group', { name: 'Week 2' }));
+    fireEvent.click(week.getByRole('button', { name: 'Add Planned Session' }));
+    const first = within(
+      week.getByRole('group', { name: 'Planned Session 1' })
+    );
+    fill('Session name', 'Keep this workout', first);
+    fill('Workout Session', workoutSessionId, first);
+    fireEvent.click(week.getByRole('button', { name: 'Add Planned Session' }));
+    const session = within(
+      week.getByRole('group', { name: 'Planned Session 2' })
+    );
+    fill('Session name', 'Do not drop this session', session);
+    fill('Session date', '2026-11-06', session);
+    fireEvent.click(session.getByRole('checkbox', { name: 'Optional' }));
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Save Training Program' })
+    );
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Phase 2, week 2, session 2: choose a Workout Session or Cardio Test.'
+    );
+    expect(screen.getByRole('alert')).toHaveFocus();
+    expect(api.saveTrainingProgram).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Program name')).toHaveValue('Autumn 10K');
+    expect(screen.getByLabelText('Program goal')).toHaveValue(
+      'Run 10K comfortably'
+    );
+    expect(screen.getByLabelText('Program start date')).toHaveValue(
+      '2026-10-25'
+    );
+    expect(screen.getByLabelText('Program end date')).toHaveValue('2026-11-07');
+    expect(screen.getByLabelText('Auto-shift after a miss')).toBeChecked();
+    expect(emptyPhase.getByLabelText('Phase name')).toHaveValue('Preparation');
+    expect(emptyPhase.getByLabelText('Phase goal')).toHaveValue('Rest first');
+    expect(phase.getByLabelText('Phase name')).toHaveValue('Base');
+    expect(phase.getByLabelText('Phase goal')).toHaveValue('Build endurance');
+    expect(
+      phase
+        .getAllByLabelText('Week start date')
+        .map((input) => (input as HTMLInputElement).value)
+    ).toEqual(['2026-10-25', '2026-11-01']);
+    expect(
+      phase
+        .getAllByLabelText('Week end date')
+        .map((input) => (input as HTMLInputElement).value)
+    ).toEqual(['2026-10-31', '2026-11-07']);
+    expect(first.getByLabelText('Session name')).toHaveValue(
+      'Keep this workout'
+    );
+    expect(first.getByLabelText('Session date')).toHaveValue('2026-11-01');
+    expect(first.getByLabelText('Workout Session')).toHaveValue(
+      workoutSessionId
+    );
+    expect(first.getByRole('checkbox', { name: 'Optional' })).not.toBeChecked();
+    expect(session.getByLabelText('Session name')).toHaveValue(
+      'Do not drop this session'
+    );
+    expect(session.getByLabelText('Session date')).toHaveValue('2026-11-06');
+    expect(session.getByLabelText('Session type')).toHaveValue('workout');
+    expect(session.getByLabelText('Workout Session')).toHaveValue('');
+    expect(session.getByRole('checkbox', { name: 'Optional' })).toBeChecked();
+
+    if (mode === 'create') {
+      fill('Workout Session', laterWorkoutSessionId, session);
+    } else {
+      fill('Session type', 'cardio', session);
+      fill('Cardio Test protocol', 'ramp', session);
+    }
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Save Training Program' })
+    );
+    await screen.findByRole('heading', { name: 'Autumn 10K' });
+    expect(api.saveTrainingProgram).toHaveBeenCalledTimes(1);
+    expect(api.saveTrainingProgram).toHaveBeenCalledWith(
+      {
+        name: 'Autumn 10K',
+        goal: 'Run 10K comfortably',
+        start_date: '2026-10-25',
+        end_date: '2026-11-07',
+        schedule_type: 'fixed',
+        auto_shift: true,
+        phases: [
+          { name: 'Preparation', goal: 'Rest first', weeks: [] },
+          {
+            name: 'Base',
+            goal: 'Build endurance',
+            weeks: [
+              {
+                start_date: '2026-10-25',
+                end_date: '2026-10-31',
+                sessions: [],
+              },
+              {
+                start_date: '2026-11-01',
+                end_date: '2026-11-07',
+                sessions: [
+                  {
+                    name: 'Keep this workout',
+                    scheduled_date: '2026-11-01',
+                    is_optional: false,
+                    workout_session_id: workoutSessionId,
+                  },
+                  {
+                    name: 'Do not drop this session',
+                    scheduled_date: '2026-11-06',
+                    is_optional: false,
+                    workout_session_id:
+                      mode === 'create' ? laterWorkoutSessionId : null,
+                    ...(mode === 'update' ? { cardio_test_type: 'ramp' } : {}),
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      },
+      programId
+    );
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByText('Do not drop this session')).toBeInTheDocument();
+  }
+);
+
 it('supports authoring structure without Workout Plans and explicit session ordering', async () => {
   jest.mocked(getWorkoutPlanTemplates).mockResolvedValueOnce([]);
   const first = mount();
