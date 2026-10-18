@@ -5,7 +5,7 @@
 - `FORK.md` (this file), `FORK-CHANGELOG.md`, and `.gitattributes` (`FORK-CHANGELOG.md merge=union`, so concurrent changelog entries merge without conflicts)
 - `agent-docs/` (fork additions: `HANDOVER.md`, `deployment-smoke.md`, `fork-review-rules.md`)
 - `docs/adr/`, `docs/agents/`
-- `scripts/deployment-smoke*`, `scripts/fork-check-commits*`, `scripts/fork-player-e2e*`, `scripts/fork-check-pr-body*`, `.github/scripts/assert-acceptance-report*`, `.github/workflows/deployment-smoke-checks.yml`, `.github/workflows/fork-*.yml`
+- `scripts/deployment-smoke*`, `scripts/fork-deploy*`, `scripts/fork-check-commits*`, `scripts/fork-player-e2e*`, `scripts/fork-check-pr-body*`, `.github/scripts/assert-acceptance-report*`, `.github/workflows/deployment-smoke-checks.yml`, `.github/workflows/fork-*.yml`
 
 The native app (`SparkyFitnessMobile/`) stays at upstream behaviour: the owner's iPhone runs the upstream App Store app plus the fork's web app from the Home Screen, so fork features ship to web. `fork-check-commits` warns on native-app changes.
 
@@ -80,3 +80,40 @@ reload, restart, verify the draft, finish, and verify the saved diary set.
 It uses synthetic data and isolated inline server settings, ignores repo `.env`,
 disables scheduled jobs, and removes its processes and database on exit.
 Logs and failure screenshots stay under `$TMPDIR` (default `tmp-work/`).
+
+## Scripted live deployment
+
+`pnpm deploy:live --dry-run` prints the full deployment plan and target defaults
+without running commands or reading/writing target files. `pnpm deploy:live`
+performs the full backend and frontend deployment from a clean `main` checkout.
+Run `pnpm deploy:live --help` for source, Compose, project, URL, browser, container,
+evidence-directory and PR-reference overrides. The installation's private runbook
+beside its Compose file remains the source of truth for its target settings.
+
+Start the authenticated dedicated smoke browser described in
+[`agent-docs/deployment-smoke.md`](agent-docs/deployment-smoke.md) first. The script
+saves the original Compose file, a custom-format database dump with its verified
+TOC and SHA256, image identities, diff, and result under the owner's private
+`~/.local/share/zfit/private/deploy-<timestamp>/` directory. It uses `docker exec`
+for the dump/TOC; no stored database password is needed. It warms the browser,
+builds both local images, pins their immutable local image IDs by changing only
+the two application `image:` lines, validates Compose, and recreates the server
+then frontend with `--no-deps --pull never --wait`. It records migration log lines
+and requires the backend identity/start time to stay fixed while deploying the
+frontend and verifying the warm browser. PR references come from HEAD's subject;
+use `--prs '#90 #91'` when more references are needed.
+
+Any failure stops the remaining steps and prints the evidence and rollback paths.
+`pnpm deploy:live --rollback /path/to/deploy-directory` uses the saved target
+settings (explicit flags override them), saves new evidence, restores only the
+original two image lines, and repeats application startup and smoke verification.
+Unrelated current Compose settings remain intact. A rollback dry-run prints the
+plan and supplied/default targets without reading saved target settings. Rollback requires clean `main`
+and the smoke browser too. **Image rollback does not undo database migrations.**
+Review schema compatibility before rollback; retain the dump and previous images
+for separately managed database recovery. The script never removes volumes,
+recreates the database, prunes images, or starts other services. Evidence contains
+private configuration and workout data; keep it out of Git and public CI artifacts.
+
+`pnpm deployment:check` and `.github/workflows/deployment-smoke-checks.yml` cover
+both the deployment runner and smoke gate without accessing production.
