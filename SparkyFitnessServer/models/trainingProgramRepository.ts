@@ -21,7 +21,11 @@ import {
   TrainingProgramCompletionConflict,
 } from '../utils/errors.js';
 import { getGroupedExerciseSessionByIdWithClient } from '../services/exerciseEntryHistoryService.js';
-import { isOptionalProgramSessionOmitted } from '../utils/trainingProgramOptionality.js';
+import {
+  hasSessionOutcome,
+  isOptionalProgramSessionOmitted,
+  omittedSessionSql,
+} from './plannedSessionOutcome.js';
 import { logWorkoutPlanSession } from '../services/exerciseService.js';
 
 type ProgramRow = Omit<
@@ -228,7 +232,7 @@ function validateRecordedSessions(
   for (const phase of existing?.phases ?? []) {
     for (const week of phase.weeks) {
       for (const session of week.sessions) {
-        if (session.status === 'planned') continue;
+        if (!hasSessionOutcome(session)) continue;
         const edited = retained.get(session.id);
         if (
           !edited ||
@@ -543,10 +547,7 @@ async function shiftLaterSessions(
   missedEffectiveDate: string,
   today: string
 ): Promise<void> {
-  // Match isOptionalProgramSessionOmitted: omission is derived for a planned
-  // optional session whose effective date is before the athlete's calendar day.
-  const movable =
-    "status = 'planned' AND effective_date > $3::date AND NOT (is_optional AND effective_date < $4::date)";
+  const movable = `status = 'planned' AND effective_date > $3::date AND NOT (${omittedSessionSql('$4::date')})`;
   const overflow = await client.query(
     `SELECT id FROM training_program_sessions WHERE program_id = $1 AND user_id = $2 AND ${movable} AND effective_date = DATE '9999-12-31'`,
     [programId, userId, missedEffectiveDate, today]
