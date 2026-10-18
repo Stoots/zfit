@@ -98,8 +98,10 @@ TOC and SHA256, image identities, diff, and result under the owner's private
 for the dump/TOC; no stored database password is needed. It warms the browser,
 builds both local images, pins their immutable local image IDs by changing only
 the two application `image:` lines, validates Compose, and recreates the server
-then frontend with `--no-deps --pull never --wait`. It records migration log lines
-and requires the backend identity/start time to stay fixed while deploying the
+then frontend with `--no-deps --pull never --wait`. It records only
+`Applying migration: <file>` lines from the current server ID since its `StartedAt`,
+or `(none applied)` when no migrations ran this boot. It requires the backend
+identity/start time to stay fixed while deploying the
 frontend and verifying the warm browser. PR references come from HEAD's subject;
 use `--prs '#90 #91'` when more references are needed.
 
