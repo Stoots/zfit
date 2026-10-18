@@ -34,4 +34,16 @@ Compare the loaded `script[type="module"]` URL with the deployed `index.html`. U
 
 ## CI and local runbooks
 
-`pnpm deployment:check` runs the smoke acceptance regressions; `.github/workflows/deployment-smoke-checks.yml` runs them in CI without production credentials. Deployment target, source checkout, image pinning, and rollback belong in the installation's local runbook beside its live Compose file (keep it out of this public repo); locate the target with `docker compose ls` rather than assuming the repository's production helper manages it.
+`pnpm deployment:check` runs the smoke acceptance regressions and the fixture-based deployment runner tests; `.github/workflows/deployment-smoke-checks.yml` runs them in CI without production credentials. For a full backend/frontend deployment, [`pnpm deploy:live`](../FORK.md#scripted-live-deployment)
+wraps backup, warm, build, exact image pinning, server/frontend startup, and verify.
+Use `pnpm deploy:live --dry-run` to inspect the plan without any commands or file
+reads/writes; `--help` lists target overrides and image rollback usage. It requires
+a clean `main` checkout and this same authenticated browser prerequisite. An image
+rollback does not undo database migrations. Failed steps stop deployment and print
+rollback information; no automatic database restore is attempted. Rollback restores
+images and starts server then frontend before warming and verifying the browser.
+
+Deployment target settings belong in the installation's private local runbook
+beside its live Compose file; locate the target with `docker compose ls` rather
+than assuming the repository's production helper manages it. Keep deployment
+evidence (saved Compose, database dump, smoke reports) private.

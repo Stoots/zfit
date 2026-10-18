@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'scripts/deployment-smoke*'
+      - 'scripts/fork-deploy*'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - '.github/workflows/deployment-smoke-checks.yml'
@@ -12,6 +13,7 @@ on:
     branches: [main]
     paths:
       - 'scripts/deployment-smoke*'
+      - 'scripts/fork-deploy*'
       - 'package.json'
       - 'pnpm-lock.yaml'
       - '.github/workflows/deployment-smoke-checks.yml'
@@ -31,5 +33,5 @@ jobs:
         with:
           node-version: '24'
       - run: pnpm install --filter . --frozen-lockfile --ignore-scripts
-      - run: pnpm exec prettier scripts/deployment-smoke*.mjs --check
+      - run: pnpm exec prettier scripts/deployment-smoke*.mjs scripts/fork-deploy*.mjs --check
       - run: pnpm deployment:check
