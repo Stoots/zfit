@@ -1,3 +1,8 @@
 #!/bin/sh
 export PATH="$PWD/node_modules/.bin:$PATH"
+# A cherry-pick or merge concluded with `commit -a` can carry unresolved markers.
+if git diff --cached -U0 | grep -qE '^\+(<{7,}|>{7,})( |$)'; then
+  echo "pre-commit: staged changes contain conflict markers" >&2
+  exit 1
+fi
 ./node_modules/.bin/lint-staged

@@ -29,6 +29,9 @@ function rpcContext(body: unknown): string {
 // global log volume down.
 export function requestLogger(options: { logCompletion?: boolean } = {}) {
   return function (req: Request, res: Response, next: NextFunction): void {
+    // The container health check polls every few seconds and would bury real requests at INFO.
+    if (req.method === 'GET' && req.originalUrl === '/api/health')
+      return next();
     log(
       'info',
       `Incoming request: ${req.method} ${req.originalUrl} (Path: ${req.path})`
