@@ -10,6 +10,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { test } from "node:test";
 import { deploy, pinImages, writeCompose } from "./fork-deploy.mjs";
@@ -237,7 +238,7 @@ test("rollback restores an unavailable app before warming and verifying the brow
 });
 
 test("failed compose writes preserve the original file and leave rollback usable", () => {
-  const directory = mkdtempSync(resolve(process.env.TMPDIR, "deploy-write-"));
+  const directory = mkdtempSync(resolve(tmpdir(), "deploy-write-"));
   const path = resolve(directory, "compose.yml");
   try {
     writeFileSync(path, compose);
@@ -364,9 +365,7 @@ test("pinning matches whole lines even when a comment contains the old image tex
 });
 
 test("CLI dry-run with fixture targets and no executable PATH writes nothing, including rollback", () => {
-  const directory = mkdtempSync(
-    resolve(process.env.TMPDIR ?? "tmp-work", "deploy-dry-run-"),
-  );
+  const directory = mkdtempSync(resolve(tmpdir(), "deploy-dry-run-"));
   try {
     const path = resolve(directory, "compose.yml");
     writeFileSync(path, compose);
