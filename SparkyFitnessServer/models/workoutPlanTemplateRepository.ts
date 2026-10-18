@@ -38,7 +38,7 @@ import {
 } from '@workspace/shared';
 import { createExerciseEntriesFromTemplate } from './exerciseTemplate.js';
 import { computeSequentialPlanProgression } from '../services/workoutPlanProgression.js';
-import { isOptionalProgramSessionOmitted } from '../utils/trainingProgramOptionality.js';
+import { isOptionalProgramSessionOmitted } from './plannedSessionOutcome.js';
 
 export type {
   WorkoutPlanAssignmentInput,
