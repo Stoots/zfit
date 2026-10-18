@@ -225,6 +225,53 @@ describe('ExerciseCard dashboard plans', () => {
       .mockImplementation(() => Promise.resolve({ data: mockState.entries }));
   });
 
+  it('hides diary playback when a Program workout card is shown', () => {
+    mockState.plans = [makePlan('7', 'Program plan', ['Push'])];
+    mockState.programs = { data: [programLinkedTo('7')], isError: false };
+    renderCard();
+
+    expect(
+      screen.queryByRole('button', { name: 'Start Workout' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /^Start Workout: Push/ })
+    ).toBeVisible();
+  });
+
+  it('hides diary playback when a standalone Workout Plan card is shown', () => {
+    mockState.plans = [makePlan('9', 'Solo plan', ['Upper'])];
+    renderCard();
+
+    expect(
+      screen.queryByRole('button', { name: 'Start Workout' })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByRole('button', { name: /^Start Workout: Upper/ })
+    ).toBeVisible();
+  });
+
+  it.each(['no plans', 'loading programs', 'Cardio Test only'])(
+    'keeps diary playback available with %s and no workout session card',
+    (scenario) => {
+      if (scenario === 'loading programs') {
+        mockState.plans = [makePlan('7', 'Program plan', ['Push'])];
+        mockState.programs = { data: undefined, isError: false };
+      } else if (scenario === 'Cardio Test only') {
+        const program = programLinkedTo('7');
+        const session = program.phases[0]!.weeks[0]!.sessions[0]!;
+        session.workout_plan_id = null;
+        session.workout_session_id = null;
+        session.cardio_test_type = 'ramp';
+        mockState.programs = { data: [program], isError: false };
+      }
+      renderCard();
+
+      expect(
+        screen.getByRole('button', { name: 'Start Workout' })
+      ).toBeVisible();
+    }
+  );
+
   it.each([
     { unit: 'km' as const, carry: '4 m', run: '0.004 km' },
     { unit: 'miles' as const, carry: '4.37445 yd', run: '0.00248548 miles' },

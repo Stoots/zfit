@@ -10,6 +10,8 @@ Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded her
 
 #### Bug fixes
 
+- Hide the web Dashboard header playback icon while a Program or Workout Plan session card is shown, leaving the session’s Start Workout action (#86).
+
 - Keep web-authored preset RIR when legacy clients edit other set fields; preserve cardio effort in previews and multi-set editors, and derive legacy strength RIR in bulk copies and appended workout sets without changing cardio effort during RIR-only copies (#82).
 
 - Scope web workout drafts to the signed-in account and acting profile; reset playback on profile changes and clear account drafts on sign-out (#78). Legacy Program drafts migrate only after verifying the signed-in owner's Program list, preserving completed sets and edited weights; unverifiable drafts remain untouched, including on sign-out. Stale session-expiry probes cannot clear drafts after recovery.

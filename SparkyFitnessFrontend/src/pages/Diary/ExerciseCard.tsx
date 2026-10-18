@@ -760,26 +760,31 @@ const ExerciseCard = ({
               : t('exerciseCard.title', 'Exercise')}
           </CardTitle>
           <div className="flex items-center gap-2">
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    size="icon"
-                    aria-label={t(
-                      'exerciseCard.startWorkoutButton',
-                      'Start Workout'
-                    )}
-                    variant="ghost"
-                    onClick={handleStartWorkoutPlayback}
-                  >
-                    <Play className="w-4 h-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p>{t('exerciseCard.startWorkoutButton', 'Start Workout')}</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            {!programCards.some((card) => card.plan) &&
+              standalonePlans.length === 0 && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        size="icon"
+                        aria-label={t(
+                          'exerciseCard.startWorkoutButton',
+                          'Start Workout'
+                        )}
+                        variant="ghost"
+                        onClick={handleStartWorkoutPlayback}
+                      >
+                        <Play className="w-4 h-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>
+                        {t('exerciseCard.startWorkoutButton', 'Start Workout')}
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
