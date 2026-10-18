@@ -1,6 +1,6 @@
 # AGENTS.md
 
-_Last updated: 2026-10-17_
+_Last updated: 2026-10-18_
 
 SparkyFitness Server is the backend API package for the SparkyFitness monorepo. Use this file as the primary guide for work inside `SparkyFitnessServer/`.
 
@@ -64,6 +64,7 @@ pnpm exec eslint routes/v2/foodRoutes.ts services/foodCoreService.ts
 - `routes/trainingProgramRoutes.ts` - owner-only `/api/training-programs` CRUD for the full phase/week/Planned Session structure; each Planned Session binds either an exact reusable `workout_plan_sessions` row through `workout_session_id` (schema: `../shared/src/schemas/database/WorkoutPlanSessions.zod.ts`) or a Cardio Test protocol through `cardio_test_type`. The `/sessions/:sessionId/complete` route atomically logs an exact bound Workout Session and records its outcome; the existing `/outcome` route links diary workouts or records misses, with future-dated misses rejected as HTTP 409. Persisted real-auth coverage: `tests/trainingPrograms.integration.test.ts` needs Postgres via `SPARKY_FITNESS_DB_*` / `SPARKY_FITNESS_APP_DB_*`; it skips locally when unreachable but fails in CI unless `SKIP_TRAINING_PROGRAM_DB` is set.
 - `routes/workoutPlanTemplateRoutes.ts` - owner-only bulk-prescription candidates (`GET /api/workout-plan-templates/:id/bulk-prescriptions/candidates`), preview (`POST /api/workout-plan-templates/bulk-prescriptions/preview`), and apply (`POST /api/workout-plan-templates/bulk-prescriptions/apply`); orchestration in `services/workoutPlanTemplateService.ts`, persistence in `models/workoutPlanTemplateRepository.ts`, DB coverage in `tests/workoutPlanBulk.integration.test.ts`
 - `db/migrations/20261011140000_workout_program_consolidation.sql` and `../shared/src/schemas/database/WorkoutProgramConsolidations.zod.ts` retain the owner-only historical consolidation journal; RLS coverage remains in `tests/rlsPermissionMatrix.integration.test.ts`. The one-off operator tool was retired after cutover (#50).
+- `models/plannedSessionOutcome.ts` - owns workout outcome recording/atomic completion, Test Attempt claim/release/move, and derived omission. Outcome transactions lock Training Programs in ID order, then affected Planned Sessions, then Test Attempt/diary rows. Program reads remain in `trainingProgramRepository.ts`; Cardio Test measurements remain in `cardioTestAttemptRepository.ts`. ADR 0005 defines reversibility.
 - `routes/cardioTestRoutes.ts` - authenticated Cooper run Test Attempts at `/api/cardio-tests/cooper-run/attempts` and protocol attempts at `/api/cardio-tests/:protocol/attempts`, implemented by `services/cardioTestAttemptService.ts` and `models/cardioTestAttemptRepository.ts`; persisted coverage is in `tests/cardioTestAttempts.integration.test.ts`
 - `routes/v2/` - newer typed route surface; pair these changes with `schemas/`
 - `routes/v2/openFoodFactsContributionRoutes.ts` - owner-only single-food preview and explicit photo-backed publication; background contributions are disabled for this release
