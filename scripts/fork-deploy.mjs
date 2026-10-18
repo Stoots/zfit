@@ -295,14 +295,15 @@ export function deploy(options, io = systemIO) {
         "{{.Id}} {{.State.StartedAt}}",
       );
     const identity = serverIdentity();
-    const logs = docker("logs", o.serverContainer);
+    const [serverId, startedAt] = identity.trim().split(/\s+/);
+    const logs = docker("logs", "--since", startedAt, serverId);
     const migrations = logs
       .split("\n")
-      .filter((line) => /migrat/i.test(line))
+      .filter((line) => /Applying migration: \S+\.sql\s*$/.test(line))
       .join("\n");
-    io.log(`Migration log lines:\n${migrations || "(none)"}`);
+    io.log(`Migration log lines:\n${migrations || "(none applied)"}`);
     evidence.push(
-      `Migrations (server log lines):\n\n${migrations || "(none)"}`,
+      `Migrations (server log lines):\n\n${migrations || "(none applied)"}`,
     );
     stage = "frontend up";
     up("frontend");

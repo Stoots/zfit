@@ -96,7 +96,6 @@ function fixture(overrides = {}) {
       if (args[0] === "image") return "sha256:" + "a".repeat(64);
       if (args[0] === "inspect") return "server-id started-at";
       if (args.includes("pg_restore")) return "TABLE DATA public fixture";
-      if (args[0] === "logs") return "Migration applied: example.sql";
       return "";
     },
     ...overrides,
@@ -159,6 +158,54 @@ test("deploy backs up and verifies the dump before building and recreates only a
     f.writes.get(options.compose),
     /sha256:a{64} # commit abc123 #90/,
   );
+});
+
+test("deploy reports no migrations applied from a real repeat boot", () => {
+  const logs = readFileSync(
+    new URL("./fork-deploy-fixtures/zero-applied.txt", import.meta.url),
+    "utf8",
+  );
+  const f = fixture();
+  const run = f.io.run;
+  f.io.run = (command, args, opts) =>
+    command === "docker" && args[0] === "logs"
+      ? logs
+      : run(command, args, opts);
+  deploy(options, f.io);
+  const report = f.writes.get("/fixture/evidence/DEPLOY-LOG.md");
+  assert.match(report, /Migrations \(server log lines\):\n\n\(none applied\)/);
+  assert.doesNotMatch(report, /Applied migrations:|20251127194108/);
+  assert.ok(f.messages.includes("Migration log lines:\n(none applied)"));
+});
+
+test("deploy and rollback report only the newly applied migration from the current server boot", () => {
+  const logs = readFileSync(
+    new URL("./fork-deploy-fixtures/one-applied.txt", import.meta.url),
+    "utf8",
+  );
+  const applied =
+    "[2026-10-18T04:34:49.127Z] [INFO] Applying migration: 20261018100000_strength_rir.sql";
+  for (const extra of [{}, { rollback: "/fixture/prior-deploy" }]) {
+    const f = fixture();
+    const run = f.io.run;
+    f.io.run = (command, args, opts) => {
+      if (command === "docker" && args[0] === "logs") {
+        assert.deepEqual(args, ["logs", "--since", "started-at", "server-id"]);
+        return logs;
+      }
+      return run(command, args, opts);
+    };
+    deploy({ ...options, ...extra }, f.io);
+    const report = f.writes.get("/fixture/evidence/DEPLOY-LOG.md");
+    assert.ok(
+      report.includes(`Migrations (server log lines):\n\n${applied}\n\n`),
+    );
+    assert.doesNotMatch(
+      report,
+      /Applied migrations:|Successfully applied migration:|20251127194108/,
+    );
+    assert.ok(f.messages.includes(`Migration log lines:\n${applied}`));
+  }
 });
 
 test("every failed command stops subsequent commands and prints rollback information", () => {

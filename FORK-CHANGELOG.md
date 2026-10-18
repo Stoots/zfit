@@ -13,6 +13,7 @@ Upstream `CHANGELOG.md` is release-please managed; fork changes are recorded her
 #### Bug fixes
 
 - Keep sprint and 30-second power chart tooltip dates readable in both web themes; verify all four Cardio Test entry, edit and graph flows at the phone viewport (#95).
+- Report only migrations run during the current server boot in `deploy:live` evidence, showing `(none applied)` when there are none (#94).
 
 - Hide the web Dashboard header playback icon while a Program or Workout Plan session card is shown, leaving the session’s Start Workout action (#86).
 
