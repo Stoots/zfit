@@ -50,7 +50,7 @@ cleanup() {
   server_pid=
   preview_pid=
   if [ "$container_started" = true ]; then
-    docker rm -f -v "$container_name"
+    docker rm -f -v "$container_name" || true
     container_started=false
   fi
   rm -rf -- "${run_dir:?}/uploads"
