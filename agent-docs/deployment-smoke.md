@@ -40,7 +40,8 @@ Use `pnpm deploy:live --dry-run` to inspect the plan without any commands or fil
 reads/writes; `--help` lists target overrides and image rollback usage. It requires
 a clean `main` checkout and this same authenticated browser prerequisite. An image
 rollback does not undo database migrations. Failed steps stop deployment and print
-rollback information; no automatic database restore is attempted.
+rollback information; no automatic database restore is attempted. Rollback restores
+images and starts server then frontend before warming and verifying the browser.
 
 Deployment target settings belong in the installation's private local runbook
 beside its live Compose file; locate the target with `docker compose ls` rather

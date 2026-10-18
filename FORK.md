@@ -107,6 +107,9 @@ Any failure stops the remaining steps and prints the evidence and rollback paths
 `pnpm deploy:live --rollback /path/to/deploy-directory` uses the saved target
 settings (explicit flags override them), saves new evidence, restores only the
 original two image lines, and repeats application startup and smoke verification.
+Rollback starts the server and frontend before warming and verifying the browser,
+so recovery does not depend on the failed application responding. Compose updates
+use an atomic sibling-file replacement and retain the existing permissions.
 Unrelated current Compose settings remain intact. A rollback dry-run prints the
 plan and supplied/default targets without reading saved target settings. Rollback requires clean `main`
 and the smoke browser too. **Image rollback does not undo database migrations.**

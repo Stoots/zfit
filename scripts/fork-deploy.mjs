@@ -1,12 +1,16 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
+  chmodSync,
   closeSync,
   mkdirSync,
   openSync,
   readFileSync,
   readSync,
+  renameSync,
+  rmSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
@@ -101,11 +105,10 @@ export function deploy(options, io = systemIO) {
     ? [
         "Require clean main; record commit",
         "Save current compose and identities in private rollback evidence directory",
-        "Smoke warm (authenticated public-origin browser)",
         "Restore only the two image lines from saved compose; show diff; docker compose config -q",
         "Recreate server only (--no-deps --pull never --wait); record migrations and identity",
         "Recreate frontend only (--no-deps --pull never --wait); check server identity",
-        "Smoke verify; write DEPLOY-LOG.md with images, migrations and rollback paths",
+        "Smoke warm then verify; write DEPLOY-LOG.md with images, migrations and rollback paths",
       ]
     : [
         "Require clean main; record commit and PRs",
@@ -222,8 +225,10 @@ export function deploy(options, io = systemIO) {
       write("dump-toc.txt", toc);
       evidence.push(`Dump: ${dump}`, `SHA256: ${io.hash(dump)}`);
     }
-    stage = "smoke warm";
-    smoke("warm");
+    if (!o.rollback) {
+      stage = "smoke warm";
+      smoke("warm");
+    }
     let next = restored;
     if (!o.rollback) {
       stage = "build";
@@ -257,12 +262,9 @@ export function deploy(options, io = systemIO) {
     }
     stage = "pin images";
     // Do not overwrite concurrent operator changes made during backup/build/warm.
-    assert.equal(
-      io.read(o.compose),
-      before,
-      "Compose changed during deploy; refusing to overwrite",
-    );
-    io.write(o.compose, next);
+    if (io.read(o.compose) !== before)
+      throw new Error("Compose changed during deploy; refusing to overwrite");
+    io.writeCompose(o.compose, next);
     const diff = run(
       "diff",
       ["-u", resolve(output, "compose-before.yml"), o.compose],
@@ -309,6 +311,10 @@ export function deploy(options, io = systemIO) {
       identity,
       "Server identity/start time changed during frontend deployment",
     );
+    if (o.rollback) {
+      stage = "smoke warm";
+      smoke("warm");
+    }
     stage = "smoke verify";
     smoke("verify");
     assert.equal(
@@ -345,8 +351,25 @@ export function deploy(options, io = systemIO) {
   }
 }
 
+export function writeCompose(
+  path,
+  content,
+  fs = { statSync, writeFileSync, chmodSync, renameSync, rmSync },
+) {
+  const temporary = `${path}.${randomUUID()}.tmp`;
+  const mode = fs.statSync(path).mode & 0o7777;
+  try {
+    fs.writeFileSync(temporary, content, { flag: "wx", mode });
+    fs.chmodSync(temporary, mode);
+    fs.renameSync(temporary, path);
+  } finally {
+    fs.rmSync(temporary, { force: true });
+  }
+}
+
 const systemIO = {
   log: console.log,
+  writeCompose,
   read: (path) => readFileSync(path, "utf8"),
   mkdir: (path) => {
     mkdirSync(resolve(path, ".."), { recursive: true, mode: 0o700 });

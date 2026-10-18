@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
+  chmodSync,
   mkdtempSync,
+  renameSync,
+  statSync,
   readFileSync,
   readdirSync,
   rmSync,
@@ -9,7 +12,7 @@ import {
 } from "node:fs";
 import { resolve } from "node:path";
 import { test } from "node:test";
-import { deploy, pinImages } from "./fork-deploy.mjs";
+import { deploy, pinImages, writeCompose } from "./fork-deploy.mjs";
 
 const compose = `services:
   sparkyfitness-db:
@@ -79,6 +82,7 @@ function fixture(overrides = {}) {
     },
     mkdir: (path) => writes.set(path, "directory"),
     write: (path, value) => writes.set(path, value),
+    writeCompose: (path, value) => writes.set(path, value),
     hash: () => "dump-sha256",
     run: (command, args, options) => {
       commands.push({ command, args, options });
@@ -214,6 +218,72 @@ test("rollback restores saved image lines while retaining current unrelated comp
   assert.equal(f.commands.filter(({ args }) => args.includes("up")).length, 2);
 });
 
+test("rollback restores an unavailable app before warming and verifying the browser", () => {
+  const f = fixture();
+  const run = f.io.run;
+  const phases = [];
+  f.io.run = (command, args, opts) => {
+    if (command === "pnpm") {
+      if (f.commands.filter(({ args }) => args.includes("up")).length !== 2)
+        throw new Error("HTTP 502: current app unavailable");
+      assert.equal(f.writes.get(options.compose), compose);
+      phases.push(args[args.indexOf("--phase") + 1]);
+    }
+    return run(command, args, opts);
+  };
+  deploy({ ...options, rollback: "/fixture/prior-deploy" }, f.io);
+  assert.deepEqual(phases, ["warm", "verify"]);
+  assert.match(f.writes.get("/fixture/evidence/DEPLOY-LOG.md"), /Smoke: PASS/);
+});
+
+test("failed compose writes preserve the original file and leave rollback usable", () => {
+  const directory = mkdtempSync(resolve(process.env.TMPDIR, "deploy-write-"));
+  const path = resolve(directory, "compose.yml");
+  try {
+    writeFileSync(path, compose);
+    chmodSync(path, 0o640);
+    const f = fixture();
+    f.io.read = (file) =>
+      file === path ? readFileSync(path, "utf8") : compose;
+    f.io.write = (file, content) => {
+      if (file === path) {
+        writeFileSync(file, content.slice(0, 30));
+        throw new Error("ENOSPC injected");
+      }
+      f.writes.set(file, content);
+    };
+    f.io.writeCompose = (file, content) =>
+      writeCompose(file, content, {
+        statSync,
+        chmodSync,
+        renameSync,
+        rmSync,
+        writeFileSync: (temporary, value, opts) => {
+          writeFileSync(temporary, value.slice(0, 30), opts);
+          throw new Error("ENOSPC injected");
+        },
+      });
+    assert.throws(() => deploy({ ...options, compose: path }, f.io), /ENOSPC/);
+    assert.equal(readFileSync(path, "utf8"), compose);
+    assert.deepEqual(readdirSync(directory), ["compose.yml"]);
+    assert.ok(f.commands.every(({ args }) => !args.includes("up")));
+    f.io.writeCompose = writeCompose;
+    deploy(
+      { ...options, compose: path, rollback: "/fixture/prior-deploy" },
+      f.io,
+    );
+    assert.equal(readFileSync(path, "utf8"), compose);
+    assert.equal(statSync(path).mode & 0o777, 0o640);
+    assert.deepEqual(readdirSync(directory), ["compose.yml"]);
+    assert.match(
+      f.writes.get("/fixture/evidence/DEPLOY-LOG.md"),
+      /Smoke: PASS/,
+    );
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("rejects unusable dumps before warming or building", () => {
   const f = fixture();
   const run = f.io.run;
@@ -245,6 +315,30 @@ test("concurrent compose edits are preserved and stop deployment before up", () 
   let reads = 0;
   f.io.read = () => (++reads === 1 ? compose : compose + "# operator edit\n");
   assert.throws(() => deploy(options, f.io), /Compose changed/);
+  assert.equal(f.writes.has(options.compose), false);
+  assert.ok(f.commands.every(({ args }) => !args.includes("up")));
+});
+
+test("concurrent-edit errors never expose either version of private compose values", () => {
+  const f = fixture();
+  let reads = 0;
+  f.io.read = () =>
+    compose +
+    `    API_SECRET: ${++reads === 1 ? "old-private-token" : "new-private-token"}\n`;
+  let message;
+  try {
+    deploy(options, f.io);
+    assert.fail("concurrent edit must abort");
+  } catch (error) {
+    message = error.message;
+  }
+  const output = [
+    message,
+    ...f.messages,
+    f.writes.get("/fixture/evidence/DEPLOY-LOG.md"),
+  ].join("\n");
+  assert.equal(message, "Compose changed during deploy; refusing to overwrite");
+  assert.doesNotMatch(output, /old-private-token|new-private-token/);
   assert.equal(f.writes.has(options.compose), false);
   assert.ok(f.commands.every(({ args }) => !args.includes("up")));
 });
