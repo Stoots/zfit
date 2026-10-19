@@ -526,6 +526,75 @@ describe.runIf(run)('persisted authenticated Cooper Test Attempts', () => {
     }
   });
 
+  it('rejects a measurement edit when its linked Program is deleted while the edit waits', async () => {
+    const program = await createCooperProgram('Delete during measurement edit');
+    const linked = await attempt({
+      attempt_date: '2026-10-14',
+      distance_meters: 2500,
+      planned_session_id: program.phases[0]!.weeks[0]!.sessions[0]!.id,
+    });
+    expect(linked.status).toBe(201);
+    const saved = cooperRunAttemptSchema.parse(linked.body);
+    const blocker: PoolClient = await getSystemClient();
+    const observer: PoolClient = await getSystemClient();
+    let edit: Promise<{ status: number }> | undefined;
+    try {
+      await blocker.query('BEGIN');
+      const locked = await blocker.query<{ pid: number }>(
+        'SELECT pg_backend_pid() AS pid FROM training_programs WHERE id = $1 FOR UPDATE',
+        [program.id]
+      );
+      let finished = false;
+      edit = Promise.resolve(
+        request(app)
+          .put(`/api/cardio-tests/cooper-run/attempts/${saved.id}`)
+          .set('Authorization', `Bearer ${ownerToken}`)
+          .send({ attempt_date: '2026-10-15', distance_meters: 2800 })
+      ).then((response: { status: number }) => {
+        finished = true;
+        return response;
+      });
+      // Only this PUT can wait on our fixture's Program lock; T1 finishes early.
+      const deadline = Date.now() + 5000;
+      while (!finished) {
+        const waiting = await observer.query(
+          `SELECT pid FROM pg_stat_activity
+           WHERE datname = current_database() AND wait_event_type = 'Lock'
+             AND $1 = ANY(pg_blocking_pids(pid))
+             AND query LIKE 'SELECT id FROM training_programs%'
+             AND query LIKE '%training_program_sessions%'`,
+          [locked.rows[0]!.pid]
+        );
+        if (waiting.rowCount) break;
+        if (Date.now() > deadline)
+          throw new Error(
+            'Measurement PUT neither finished nor waited on its Program'
+          );
+      }
+      await blocker.query('DELETE FROM training_programs WHERE id = $1', [
+        program.id,
+      ]);
+      await blocker.query('COMMIT');
+      expect((await edit).status).toBe(409);
+      const retained = await request(app)
+        .get('/api/cardio-tests/cooper-run/attempts')
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(retained.status).toBe(200);
+      expect(retained.body).toHaveLength(1);
+      expect(cooperRunAttemptSchema.parse(retained.body[0])).toMatchObject({
+        id: saved.id,
+        attempt_date: '2026-10-14',
+        distance_meters: 2500,
+        planned_session_id: null,
+      });
+    } finally {
+      await blocker.query('ROLLBACK').catch(() => {});
+      blocker.release();
+      observer.release();
+      await edit;
+    }
+  }, 10000);
+
   it.each(['unlink first', 'Program first'] as const)(
     'preserves the standalone Test Attempt when removing its Program link: %s',
     async (order) => {
