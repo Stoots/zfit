@@ -6,6 +6,10 @@ import type {
 import type { PoolClient } from 'pg';
 import { getClient } from '../db/poolManager.js';
 import { HttpError } from '../utils/errors.js';
+import {
+  claimPlannedSession,
+  updatePlannedSessionLink,
+} from './plannedSessionOutcome.js';
 
 function fromRow(row: {
   id: string;
@@ -253,121 +257,5 @@ function isDuplicateLink(error: unknown): boolean {
     typeof error === 'object' &&
     'constraint' in error &&
     error.constraint === 'cardio_test_attempts_planned_session_key'
-  );
-}
-
-async function updatePlannedSessionLink(
-  client: PoolClient,
-  userId: string,
-  authenticatedUserId: string,
-  attemptId: string,
-  testType: CardioTestAttempts['test_type'],
-  requestedLink: string | null | undefined
-): Promise<string | null | undefined> {
-  const observed = await client.query<{ planned_session_id: string | null }>(
-    'SELECT planned_session_id FROM cardio_test_attempts WHERE id = $1 AND user_id = $2 AND test_type = $3',
-    [attemptId, userId, testType]
-  );
-  if (!observed.rowCount) return undefined;
-  const observedLink = observed.rows[0]!.planned_session_id;
-  const newLink = requestedLink === undefined ? observedLink : requestedLink;
-  if (observedLink && userId !== authenticatedUserId) return undefined;
-  if (newLink && userId !== authenticatedUserId)
-    throw new HttpError('Training Programs are owner-only.', 403);
-  if (newLink !== observedLink) {
-    await client.query(
-      `SELECT id FROM training_programs
-       WHERE user_id = $1 AND id IN (
-         SELECT program_id FROM training_program_sessions
-         WHERE user_id = $1 AND id = ANY($2::uuid[])
-       )
-       ORDER BY id FOR UPDATE`,
-      [userId, [observedLink, newLink].filter(Boolean)]
-    );
-  }
-  const existing = await client.query<{ planned_session_id: string | null }>(
-    'SELECT planned_session_id FROM cardio_test_attempts WHERE id = $1 AND user_id = $2 AND test_type = $3 FOR UPDATE',
-    [attemptId, userId, testType]
-  );
-  if (!existing.rowCount) return undefined;
-  const oldLink = existing.rows[0]!.planned_session_id;
-  if (oldLink && userId !== authenticatedUserId) return undefined;
-  if (newLink && userId !== authenticatedUserId)
-    throw new HttpError('Training Programs are owner-only.', 403);
-  if (oldLink !== observedLink)
-    throw new HttpError(
-      'This Test Attempt changed. Reload and try again.',
-      409
-    );
-  if (newLink !== oldLink) {
-    if (oldLink) {
-      const released = await client.query<{ program_id: string }>(
-        "UPDATE training_program_sessions SET status = 'planned', outcome_at = NULL, updated_at = now() WHERE id = $1 AND user_id = $2 RETURNING program_id",
-        [oldLink, userId]
-      );
-      if (released.rowCount)
-        await client.query(
-          'UPDATE training_programs SET updated_at = now() WHERE id = $1 AND user_id = $2',
-          [released.rows[0]!.program_id, userId]
-        );
-    }
-    if (newLink)
-      await claimPlannedSession(
-        client,
-        userId,
-        authenticatedUserId,
-        newLink,
-        testType
-      );
-  }
-  return newLink;
-}
-
-async function claimPlannedSession(
-  client: PoolClient,
-  userId: string,
-  authenticatedUserId: string,
-  sessionId: string,
-  testType: CardioTestAttempts['test_type']
-): Promise<void> {
-  if (userId !== authenticatedUserId)
-    throw new HttpError('Training Programs are owner-only.', 403);
-  const program = await client.query<{ program_id: string }>(
-    'SELECT program_id FROM training_program_sessions WHERE id = $1 AND user_id = $2',
-    [sessionId, userId]
-  );
-  if (!program.rowCount)
-    throw new HttpError('Planned assessment not found.', 404);
-  await client.query(
-    'SELECT id FROM training_programs WHERE id = $1 AND user_id = $2 FOR UPDATE',
-    [program.rows[0]!.program_id, userId]
-  );
-  const session = await client.query<{
-    status: string;
-    cardio_test_type: string | null;
-    is_optional: boolean;
-  }>(
-    'SELECT status, cardio_test_type, is_optional FROM training_program_sessions WHERE id = $1 AND user_id = $2 FOR UPDATE',
-    [sessionId, userId]
-  );
-  if (!session.rowCount)
-    throw new HttpError('Planned assessment not found.', 404);
-  if (session.rows[0]!.cardio_test_type !== testType)
-    throw new HttpError(
-      'This Planned Session uses a different Cardio Test protocol.',
-      400
-    );
-  if (
-    session.rows[0]!.status !== 'planned' &&
-    !(session.rows[0]!.status === 'omitted' && session.rows[0]!.is_optional)
-  )
-    throw new HttpError('This Planned Session already has an outcome.', 409);
-  await client.query(
-    "UPDATE training_program_sessions SET status = 'completed', outcome_at = now(), updated_at = now() WHERE id = $1 AND user_id = $2",
-    [sessionId, userId]
-  );
-  await client.query(
-    'UPDATE training_programs SET updated_at = now() WHERE id = $1 AND user_id = $2',
-    [program.rows[0]!.program_id, userId]
   );
 }

@@ -10,7 +10,9 @@ import {
   cardioTestTypeSchema,
   cooperRunAttemptSchema,
   trainingProgramSchema,
+  trainingProgramInputSchema,
   type CooperRunAttemptInput,
+  type TrainingProgram,
 } from '@workspace/shared';
 import { getSystemClient, endPool } from '../db/poolManager.js';
 import errorHandler from '../middleware/errorHandler.js';
@@ -70,6 +72,34 @@ describe.runIf(run)('persisted authenticated Cooper Test Attempts', () => {
       });
     expect(response.status).toBe(201);
     return trainingProgramSchema.parse(response.body);
+  }
+
+  function programDraft(program: TrainingProgram) {
+    return trainingProgramInputSchema.parse({
+      name: program.name,
+      goal: program.goal,
+      start_date: program.start_date,
+      end_date: program.end_date,
+      schedule_type: program.schedule_type,
+      auto_shift: program.auto_shift,
+      phases: program.phases.map((phase) => ({
+        id: phase.id,
+        name: phase.name,
+        goal: phase.goal,
+        weeks: phase.weeks.map((week) => ({
+          id: week.id,
+          start_date: week.start_date,
+          end_date: week.end_date,
+          sessions: week.sessions.map((session) => ({
+            id: session.id,
+            name: session.name,
+            scheduled_date: session.scheduled_date,
+            cardio_test_type: session.cardio_test_type,
+            is_optional: session.is_optional,
+          })),
+        })),
+      })),
+    });
   }
 
   async function waitForBlockedQuery(fragment: string) {
@@ -415,6 +445,295 @@ describe.runIf(run)('persisted authenticated Cooper Test Attempts', () => {
       .set('Authorization', `Bearer ${ownerToken}`)
       .send({ attempt_date: '2026-10-01', distance_meters: 0 });
     expect(invalidDistance.status).toBe(400);
+  });
+
+  it('moves a Test Attempt while editing the same Program without losing either change', async () => {
+    const original = await createCooperProgram('Same Program race');
+    const draft = programDraft(original);
+    draft.phases[0]!.weeks[0]!.sessions.push({
+      name: 'Cooper follow-up',
+      scheduled_date: '2026-10-15',
+      cardio_test_type: 'cooper_run',
+    });
+    const expanded = await request(app)
+      .put(`/api/training-programs/${original.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send(draft);
+    expect(expanded.status).toBe(200);
+    const program = trainingProgramSchema.parse(expanded.body);
+    const [source, target] = program.phases[0]!.weeks[0]!.sessions;
+    const linked = await attempt({
+      attempt_date: '2026-10-14',
+      distance_meters: 2500,
+      planned_session_id: source!.id,
+    });
+    expect(linked.status).toBe(201);
+    const blocker = await getSystemClient();
+    let move: Promise<{ status: number }> | undefined;
+    let edit: Promise<{ status: number }> | undefined;
+    try {
+      await blocker.query('BEGIN');
+      await blocker.query(
+        'SELECT id FROM training_program_sessions WHERE id = $1 FOR UPDATE',
+        [source!.id]
+      );
+      move = Promise.resolve(
+        request(app)
+          .put(`/api/cardio-tests/cooper-run/attempts/${linked.body.id}`)
+          .set('Authorization', `Bearer ${ownerToken}`)
+          .send({
+            attempt_date: '2026-10-14',
+            distance_meters: 2500,
+            planned_session_id: target!.id,
+          })
+      ) as Promise<{ status: number }>;
+      await waitForBlockedQuery('training_program_sessions');
+      edit = Promise.resolve(
+        request(app)
+          .put(`/api/training-programs/${program.id}`)
+          .set('Authorization', `Bearer ${ownerToken}`)
+          .send({ ...programDraft(program), name: 'Edited during move' })
+      ) as Promise<{ status: number }>;
+      await waitForBlockedQuery('training_programs');
+      await blocker.query('COMMIT');
+      const [moved, edited] = await Promise.all([move, edit]);
+      expect(moved.status).toBe(200);
+      expect(edited.status).toBe(200);
+      const current = await request(app)
+        .get(`/api/training-programs/${program.id}`)
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(current.status).toBe(200);
+      expect(current.body.name).toBe('Edited during move');
+      expect(current.body.phases[0].weeks[0].sessions).toMatchObject([
+        { id: source!.id, status: 'planned', completed_test_attempt: null },
+        {
+          id: target!.id,
+          status: 'completed',
+          completed_test_attempt: { id: linked.body.id },
+        },
+      ]);
+      const listed = await request(app)
+        .get('/api/cardio-tests/cooper-run/attempts')
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(listed.status).toBe(200);
+      expect(listed.body).toMatchObject([
+        { id: linked.body.id, planned_session_id: target!.id },
+      ]);
+    } finally {
+      await blocker.query('ROLLBACK').catch(() => {});
+      blocker.release();
+      await Promise.all([move, edit]);
+    }
+  });
+
+  it('rejects a measurement edit when its linked Program is deleted while the edit waits', async () => {
+    const program = await createCooperProgram('Delete during measurement edit');
+    const linked = await attempt({
+      attempt_date: '2026-10-14',
+      distance_meters: 2500,
+      planned_session_id: program.phases[0]!.weeks[0]!.sessions[0]!.id,
+    });
+    expect(linked.status).toBe(201);
+    const saved = cooperRunAttemptSchema.parse(linked.body);
+    const blocker: PoolClient = await getSystemClient();
+    const observer: PoolClient = await getSystemClient();
+    let edit: Promise<{ status: number }> | undefined;
+    try {
+      await blocker.query('BEGIN');
+      const locked = await blocker.query<{ pid: number }>(
+        'SELECT pg_backend_pid() AS pid FROM training_programs WHERE id = $1 FOR UPDATE',
+        [program.id]
+      );
+      let finished = false;
+      edit = Promise.resolve(
+        request(app)
+          .put(`/api/cardio-tests/cooper-run/attempts/${saved.id}`)
+          .set('Authorization', `Bearer ${ownerToken}`)
+          .send({ attempt_date: '2026-10-15', distance_meters: 2800 })
+      ).then((response: { status: number }) => {
+        finished = true;
+        return response;
+      });
+      // Only this PUT can wait on our fixture's Program lock; T1 finishes early.
+      const deadline = Date.now() + 5000;
+      while (!finished) {
+        const waiting = await observer.query(
+          `SELECT pid FROM pg_stat_activity
+           WHERE datname = current_database() AND wait_event_type = 'Lock'
+             AND $1 = ANY(pg_blocking_pids(pid))
+             AND query LIKE 'SELECT id FROM training_programs%'
+             AND query LIKE '%training_program_sessions%'`,
+          [locked.rows[0]!.pid]
+        );
+        if (waiting.rowCount) break;
+        if (Date.now() > deadline)
+          throw new Error(
+            'Measurement PUT neither finished nor waited on its Program'
+          );
+      }
+      await blocker.query('DELETE FROM training_programs WHERE id = $1', [
+        program.id,
+      ]);
+      await blocker.query('COMMIT');
+      expect((await edit).status).toBe(409);
+      const retained = await request(app)
+        .get('/api/cardio-tests/cooper-run/attempts')
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(retained.status).toBe(200);
+      expect(retained.body).toHaveLength(1);
+      expect(cooperRunAttemptSchema.parse(retained.body[0])).toMatchObject({
+        id: saved.id,
+        attempt_date: '2026-10-14',
+        distance_meters: 2500,
+        planned_session_id: null,
+      });
+    } finally {
+      await blocker.query('ROLLBACK').catch(() => {});
+      blocker.release();
+      observer.release();
+      await edit;
+    }
+  }, 10000);
+
+  it.each(['unlink first', 'Program first'] as const)(
+    'preserves the standalone Test Attempt when removing its Program link: %s',
+    async (order) => {
+      const program = await createCooperProgram(`Removal order: ${order}`);
+      const planned = program.phases[0]!.weeks[0]!.sessions[0]!;
+      const linked = await attempt({
+        attempt_date: '2026-10-14',
+        distance_meters: 2500,
+        planned_session_id: planned.id,
+      });
+      expect(linked.status).toBe(201);
+      const unlink = () =>
+        request(app)
+          .put(`/api/cardio-tests/cooper-run/attempts/${linked.body.id}`)
+          .set('Authorization', `Bearer ${ownerToken}`)
+          .send({
+            attempt_date: '2026-10-14',
+            distance_meters: 2500,
+            planned_session_id: null,
+          });
+      const removeProgram = () =>
+        request(app)
+          .delete(`/api/training-programs/${program.id}`)
+          .set('Authorization', `Bearer ${ownerToken}`);
+      if (order === 'unlink first') {
+        expect((await unlink()).status).toBe(200);
+        const pending = await request(app)
+          .get(`/api/training-programs/${program.id}`)
+          .set('Authorization', `Bearer ${ownerToken}`);
+        expect(pending.status).toBe(200);
+        expect(pending.body.phases[0].weeks[0].sessions[0]).toMatchObject({
+          id: planned.id,
+          status: 'planned',
+          outcome_at: null,
+          completed_test_attempt: null,
+        });
+        expect((await removeProgram()).status).toBe(204);
+      } else {
+        expect((await removeProgram()).status).toBe(204);
+        expect((await unlink()).status).toBe(200);
+      }
+      const gone = await request(app)
+        .get(`/api/training-programs/${program.id}`)
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(gone.status).toBe(404);
+      const retained = await request(app)
+        .get('/api/cardio-tests/cooper-run/attempts')
+        .set('Authorization', `Bearer ${ownerToken}`);
+      expect(retained.status).toBe(200);
+      expect(retained.body).toMatchObject([
+        {
+          id: linked.body.id,
+          distance_meters: 2500,
+          planned_session_id: null,
+        },
+      ]);
+    }
+  );
+
+  it('releases a past-due required Cardio Test without a miss, shift or reversal of earlier shifts', async () => {
+    const created = await request(app)
+      .post('/api/training-programs')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        name: 'Release past assessment',
+        goal: 'Measure progress',
+        start_date: '2020-01-01',
+        end_date: '2020-01-07',
+        auto_shift: true,
+        phases: [
+          {
+            name: 'Base',
+            goal: 'Aerobic base',
+            weeks: [
+              {
+                start_date: '2020-01-01',
+                end_date: '2020-01-07',
+                sessions: [
+                  {
+                    name: 'Earlier miss',
+                    scheduled_date: '2020-01-01',
+                    cardio_test_type: 'cooper_run',
+                  },
+                  {
+                    name: 'Release me',
+                    scheduled_date: '2020-01-02',
+                    cardio_test_type: 'cooper_run',
+                  },
+                  {
+                    name: 'Later assessment',
+                    scheduled_date: '2020-01-03',
+                    cardio_test_type: 'cooper_run',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+    expect(created.status).toBe(201);
+    const sessions = trainingProgramSchema.parse(created.body).phases[0]!
+      .weeks[0]!.sessions;
+    const missed = await request(app)
+      .post(
+        `/api/training-programs/${created.body.id}/sessions/${sessions[0]!.id}/outcome`
+      )
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ status: 'missed' });
+    expect(missed.status).toBe(200);
+    const linked = await attempt({
+      attempt_date: '2020-01-03',
+      distance_meters: 2500,
+      planned_session_id: sessions[1]!.id,
+    });
+    expect(linked.status).toBe(201);
+    const released = await request(app)
+      .put(`/api/cardio-tests/cooper-run/attempts/${linked.body.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        attempt_date: '2020-01-03',
+        distance_meters: 2500,
+        planned_session_id: null,
+      });
+    expect(released.status).toBe(200);
+    const current = await request(app)
+      .get(`/api/training-programs/${created.body.id}`)
+      .set('Authorization', `Bearer ${ownerToken}`);
+    expect(current.status).toBe(200);
+    expect(current.body.phases[0].weeks[0].sessions).toMatchObject([
+      { id: sessions[0]!.id, status: 'missed', effective_date: '2020-01-01' },
+      {
+        id: sessions[1]!.id,
+        status: 'planned',
+        effective_date: '2020-01-03',
+        outcome_at: null,
+        completed_test_attempt: null,
+      },
+      { id: sessions[2]!.id, status: 'planned', effective_date: '2020-01-04' },
+    ]);
   });
 
   it.each([

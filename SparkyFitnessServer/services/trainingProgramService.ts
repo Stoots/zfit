@@ -9,9 +9,11 @@ import {
   getTrainingPrograms,
   saveTrainingProgram,
   deleteTrainingProgram,
+} from '../models/trainingProgramRepository.js';
+import {
   recordTrainingProgramOutcome,
   completeTrainingProgramSession,
-} from '../models/trainingProgramRepository.js';
+} from '../models/plannedSessionOutcome.js';
 import { HttpError } from '../utils/errors.js';
 import { loadUserTimezone } from '../utils/timezoneLoader.js';
 
